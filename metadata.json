@@ -1,0 +1,6 @@
+{
+  "name": "Scinsmedia — Scientific Conference Platform",
+  "description": "Enterprise scientific conference and research management ecosystem for global conferences, abstract submissions, sessions, speakers, registrations, and admin operations.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
