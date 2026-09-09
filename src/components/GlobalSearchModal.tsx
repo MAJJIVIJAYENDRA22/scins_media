@@ -114,7 +114,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
           <input
             id={searchInputId}
             type="text"
-            placeholder="Search conferences, speakers, 20 scientific sessions, DOIs..."
+            placeholder="Search conferences, speakers, scientific sessions, tracks, DOIs..."
             value={query}
             onChange={e => setQuery(e.target.value)}
             autoFocus

@@ -15,6 +15,9 @@ export interface Conference {
   tagline?: string;
   description: string;
   detailed_about?: string;
+  about_heading?: string;
+  about_highlights?: string[];
+  gallery_images?: string[];
   domain: string;
   city: string;
   country: string;
@@ -31,16 +34,53 @@ export interface Conference {
   hero_image: string;
   flyer_url?: string;
   featured_badge?: string;
+  display_order?: number;
+
+  // Welcome Address (Carousel Slide 1)
+  welcome_heading?: string;
   welcome_message?: string;
   welcome_speaker_name?: string;
+  welcome_speaker_role?: string;
   welcome_speaker_title?: string;
   welcome_speaker_image?: string;
+  welcome_footer_text?: string;
+
+  // Industry Exhibitors (Carousel Slide 2)
+  exhibitor_heading?: string;
+  exhibitor_message?: string;
+  exhibitor_speaker_name?: string;
+  exhibitor_speaker_role?: string;
+  exhibitor_speaker_title?: string;
+  exhibitor_image?: string;
+  exhibitor_footer_text?: string;
+
+  // Program Flow Visual
+  program_image?: string;
+
   meta_title?: string;
   meta_description?: string;
   keywords?: string;
+  accept_late_breaking?: boolean;
+  cme_credits_eligible?: boolean;
+  primary_language?: string;
+  max_attendees?: number;
+  accent_color?: string;
+  objectives?: string[];
+  target_audience?: string[];
+  indexing_partners?: string[];
+  journal_name?: string;
+  journal_issn?: string;
   created_at?: string;
   settings?: ConferenceSettings;
   gallery?: ConferenceGalleryImage[];
+  committee?: CommitteeMember[];
+  sponsors?: Sponsor[];
+  media_partners?: MediaPartner[];
+  schedule?: ScheduleItem[];
+  categories?: RegistrationCategory[];
+  speakers?: Speaker[];
+  sessions?: Session[];
+  testimonials?: Testimonial[];
 }
 
 export interface ConferenceGalleryImage {
@@ -134,8 +174,11 @@ export interface Session {
   session_type: 'Keynote Session' | 'Oral Presentation' | 'Poster Session' | 'Workshop' | 'Panel Discussion' | 'Networking & Gala' | 'Special Symposium' | string;
   speakers?: Speaker[];
   display_order?: number;
-  status?: 'scheduled' | 'live' | 'completed' | 'cancelled' | 'draft';
+  status?: 'published' | 'scheduled' | 'live' | 'completed' | 'cancelled' | 'draft' | 'unpublished' | 'archived' | string;
+  is_published?: boolean;
   is_active?: boolean;
+  image_url?: string;
+  icon?: string;
   speaker_name?: string;
   speaker_id?: number;
   chairperson?: string;
@@ -148,18 +191,21 @@ export interface Session {
 export interface ScheduleItem {
   id: number;
   conference_id: number;
-  day_number: number;
+  day_number?: number;
   day_label?: string;
-  schedule_date: string;
-  start_time: string;
-  end_time: string;
+  schedule_date?: string;
+  start_time?: string;
+  end_time?: string;
+  time?: string;
   title: string;
   description?: string;
-  room: string;
+  room?: string;
   track?: string;
+  speaker?: string;
   speaker_name?: string;
   speaker_affiliation?: string;
-  item_type: 'session' | 'keynote' | 'plenary' | 'break' | 'ceremony' | 'networking' | 'poster';
+  type?: string;
+  item_type?: 'session' | 'keynote' | 'plenary' | 'break' | 'ceremony' | 'networking' | 'poster' | string;
   display_order?: number;
 }
 
@@ -169,14 +215,19 @@ export interface RegistrationCategory {
   name: string;
   code?: string;
   description?: string;
-  price: number;
-  currency: string;
-  early_bird_price: number;
+  price?: number;
+  currency?: string;
+  early_bird_price?: number;
   early_bird_fee?: number;
   standard_fee?: number;
+  academic_price?: number;
+  industry_price?: number;
+  student_price?: number;
+  features?: string[];
   deadline?: string;
-  benefits: string[];
+  benefits?: string[];
   is_popular?: boolean;
+  is_active?: boolean;
   display_order?: number;
 }
 
@@ -343,7 +394,15 @@ export interface ContactEnquiry {
   subject: string;
   message: string;
   conference_id?: number;
-  status: 'new' | 'in_progress' | 'responded' | 'closed';
+  conference_code?: string;
+  status: 'new' | 'in_progress' | 'responded' | 'closed' | 'archived';
+  created_at: string;
+}
+
+export interface NewsletterSubscriber {
+  id: number;
+  email: string;
+  status: 'active' | 'unsubscribed' | 'archived';
   created_at: string;
 }
 

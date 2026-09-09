@@ -78,14 +78,14 @@ export const ConferenceCard: React.FC<ConferenceCardProps> = ({
         </div>
 
         {/* Deadlines Bar */}
-        <div className="pt-3 border-t border-slate-100 grid grid-cols-2 gap-2 text-[11px] text-slate-500">
+        <div className="pt-3 border-t border-slate-100 grid grid-cols-2 gap-2 text-[11px]">
           <div>
-            <span className="text-slate-400 block text-[10px] uppercase font-bold">Abstract Due</span>
+            <span className="text-slate-500 block text-[10px] uppercase font-bold tracking-wider">Abstract Due</span>
             <span className="font-semibold text-slate-800">{conference.abstract_deadline}</span>
           </div>
           <div>
-            <span className="text-slate-400 block text-[10px] uppercase font-bold">Early Bird</span>
-            <span className="font-semibold text-teal-700">{conference.early_bird_deadline}</span>
+            <span className="text-slate-500 block text-[10px] uppercase font-bold tracking-wider">Early Bird</span>
+            <span className="font-bold text-[#0E7490]">{conference.early_bird_deadline}</span>
           </div>
         </div>
 
@@ -93,10 +93,10 @@ export const ConferenceCard: React.FC<ConferenceCardProps> = ({
         <div className="pt-2 flex items-center space-x-2">
           <button
             onClick={() => onSelect(conference.slug)}
-            className="flex-1 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-semibold flex items-center justify-center space-x-1.5 transition-colors group-hover:shadow"
+            className="flex-1 py-2.5 bg-[#0A2540] hover:bg-[#0E7490] text-white rounded-xl text-xs font-semibold flex items-center justify-center space-x-1.5 transition-all shadow-xs cursor-pointer"
           >
             <span>Explore Congress</span>
-            <ArrowRight className="w-3.5 h-3.5 text-teal-400" />
+            <ArrowRight className="w-3.5 h-3.5 text-teal-300" />
           </button>
         </div>
       </div>

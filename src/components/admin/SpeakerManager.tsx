@@ -36,6 +36,7 @@ export const SpeakerManager: React.FC<SpeakerManagerProps> = ({
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState('All');
   const [statusFilter, setStatusFilter] = useState('All');
+  const [conferenceFilter, setConferenceFilter] = useState<string>('All');
   const [sortBy, setSortBy] = useState<'order' | 'name' | 'hindex' | 'type'>('order');
 
   // Modal
@@ -77,13 +78,14 @@ export const SpeakerManager: React.FC<SpeakerManagerProps> = ({
         (s.research_domain && s.research_domain.toLowerCase().includes(q));
 
       const matchesType = typeFilter === 'All' || s.speaker_type === typeFilter;
+      const matchesConf = conferenceFilter === 'All' || s.conference_id === Number(conferenceFilter);
       const isActive = s.is_active ?? true;
       const matchesStatus =
         statusFilter === 'All' ||
         (statusFilter === 'active' && isActive) ||
         (statusFilter === 'inactive' && !isActive);
 
-      return matchesSearch && matchesType && matchesStatus;
+      return matchesSearch && matchesType && matchesConf && matchesStatus;
     });
 
     list.sort((a, b) => {
@@ -94,7 +96,7 @@ export const SpeakerManager: React.FC<SpeakerManagerProps> = ({
     });
 
     return list;
-  }, [speakers, search, typeFilter, statusFilter, sortBy]);
+  }, [speakers, search, typeFilter, statusFilter, conferenceFilter, sortBy]);
 
   const handleToggleStatus = async (speaker: Speaker) => {
     const currentActive = speaker.is_active ?? true;
@@ -233,9 +235,9 @@ export const SpeakerManager: React.FC<SpeakerManagerProps> = ({
             <Mic className="w-5 h-5" />
           </span>
           <div>
-            <h2 className="text-lg font-bold text-slate-900 font-display">Keynote & Faculty Speakers</h2>
+            <h2 className="text-lg font-bold text-slate-900 font-display">Speakers Management</h2>
             <p className="text-xs text-slate-500">
-              Manage plenary speakers, invited faculty, keynote lectures, talk abstracts, and metrics
+              Manage conference speakers, presentations, bios, and academic affiliations
             </p>
           </div>
         </div>
@@ -298,6 +300,19 @@ export const SpeakerManager: React.FC<SpeakerManagerProps> = ({
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
+            <select
+              value={conferenceFilter}
+              onChange={e => setConferenceFilter(e.target.value)}
+              className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-700 font-medium focus:outline-none focus:border-teal-500"
+            >
+              <option value="All">All Conferences</option>
+              {conferences.map(c => (
+                <option key={c.id} value={c.id}>
+                  {c.short_title || c.title}
+                </option>
+              ))}
+            </select>
+
             <select
               value={typeFilter}
               onChange={e => setTypeFilter(e.target.value)}
@@ -485,6 +500,24 @@ export const SpeakerManager: React.FC<SpeakerManagerProps> = ({
             </div>
 
             <form onSubmit={handleSave} className="p-6 overflow-y-auto space-y-4 flex-1">
+              {/* Assigned Conference */}
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-slate-700">
+                  Assigned Conference <span className="text-red-500">*</span>
+                </label>
+                <select
+                  value={editingSpeaker.conference_id || (conferences[0]?.id || 1)}
+                  onChange={e => setEditingSpeaker({ ...editingSpeaker, conference_id: Number(e.target.value) })}
+                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:bg-white focus:outline-none focus:border-teal-500"
+                >
+                  {conferences.map(c => (
+                    <option key={c.id} value={c.id}>
+                      {c.short_title || c.title} ({c.conference_code})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {/* Prefix & Name */}
                 <div className="space-y-1">

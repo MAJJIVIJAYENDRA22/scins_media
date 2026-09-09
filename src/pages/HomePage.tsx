@@ -6,7 +6,6 @@ import {
   CheckCircle2
 } from 'lucide-react';
 import { HeroVisual } from '../components/HeroVisual';
-import { WorldMapInteractive } from '../components/WorldMapInteractive';
 import { ConferenceCard } from '../components/ConferenceCard';
 import { Conference, Speaker, Testimonial } from '../types';
 import {
@@ -27,7 +26,7 @@ interface HomePageProps {
 export const HomePage: React.FC<HomePageProps> = ({
   conferences = INITIAL_CONFERENCES,
   speakers = SPEAKERS,
-  testimonials = TESTIMONIALS,
+  testimonials: _testimonials = TESTIMONIALS,
   onSelectConference = (_slug: string) => {},
   onNavigate = (_path: string) => {},
   onOpenSearch = () => {}
@@ -38,24 +37,32 @@ export const HomePage: React.FC<HomePageProps> = ({
   const [selectedMode, setSelectedMode] = useState<string>('All');
   const [searchQuery, setSearchQuery] = useState<string>('');
 
-  // Filter conferences to show only upcoming ones (start date is today or in the future)
-  const filteredConferences = conferences.filter(c => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const confDate = c.start_date ? new Date(`${c.start_date}T00:00:00`) : null;
-    const isUpcoming = !confDate || confDate >= today;
+  // Filter conferences to show only upcoming, published ones sorted by display_order
+  const filteredConferences = conferences
+    .filter(c => {
+      const isPublished = c.status === 'published' || !c.status;
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const confDate = c.start_date ? new Date(`${c.start_date}T00:00:00`) : null;
+      const isUpcoming = !confDate || confDate >= today;
 
-    if (!isUpcoming) return false;
+      if (!isPublished || !isUpcoming) return false;
 
-    const matchDomain = selectedDomain === 'All' || c.domain.toLowerCase().includes(selectedDomain.toLowerCase());
-    const matchCountry = selectedCountry === 'All' || c.country.toLowerCase().includes(selectedCountry.toLowerCase());
-    const matchMode = selectedMode === 'All' || c.mode.toLowerCase() === selectedMode.toLowerCase();
-    const matchQuery = !searchQuery ||
-      c.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      c.theme.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      c.city.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchDomain && matchCountry && matchMode && matchQuery;
-  });
+      const matchDomain = selectedDomain === 'All' || c.domain.toLowerCase().includes(selectedDomain.toLowerCase());
+      const matchCountry = selectedCountry === 'All' || c.country.toLowerCase().includes(selectedCountry.toLowerCase());
+      const matchMode = selectedMode === 'All' || c.mode.toLowerCase() === selectedMode.toLowerCase();
+      const matchQuery = !searchQuery ||
+        c.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        c.theme.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        c.city.toLowerCase().includes(searchQuery.toLowerCase());
+      return matchDomain && matchCountry && matchMode && matchQuery;
+    })
+    .sort((a, b) => {
+      const orderA = a.display_order ?? 999;
+      const orderB = b.display_order ?? 999;
+      if (orderA !== orderB) return orderA - orderB;
+      return new Date(a.start_date || '').getTime() - new Date(b.start_date || '').getTime();
+    });
 
   return (
     <div id="scinsmedia-home-page" className="min-h-screen bg-[#F8FAFC] text-slate-900 overflow-x-hidden pt-20">
@@ -87,17 +94,17 @@ export const HomePage: React.FC<HomePageProps> = ({
           <div className="pt-4 flex flex-col sm:flex-row items-center justify-center gap-3.5 max-w-md mx-auto">
             <button
               onClick={() => onSelectConference('biopolymers-bioplastics-2026')}
-              className="w-full sm:w-auto px-7 py-3.5 bg-slate-900 hover:bg-slate-800 text-white rounded-2xl text-sm font-semibold shadow-lg shadow-slate-900/10 flex items-center justify-center space-x-2 transition-all hover:scale-[1.02]"
+              className="w-full sm:w-auto px-7 py-3.5 bg-[#0A2540] hover:bg-[#0E7490] text-white rounded-2xl text-sm font-semibold shadow-lg shadow-slate-900/10 flex items-center justify-center space-x-2 transition-all hover:scale-[1.02] cursor-pointer"
             >
               <span>Explore Paris 2026 Flagship</span>
-              <ArrowRight className="w-4 h-4 text-teal-400" />
+              <ArrowRight className="w-4 h-4 text-teal-300" />
             </button>
             <button
               onClick={() => {
                 const el = document.getElementById('conference-discovery-section');
                 el?.scrollIntoView({ behavior: 'smooth' });
               }}
-              className="w-full sm:w-auto px-7 py-3.5 bg-white hover:bg-slate-100 text-slate-800 border border-slate-200 rounded-2xl text-sm font-semibold shadow-sm transition-all"
+              className="w-full sm:w-auto px-7 py-3.5 bg-white hover:bg-slate-50 text-slate-800 border border-slate-200 hover:border-slate-300 rounded-2xl text-sm font-semibold shadow-xs transition-all cursor-pointer"
             >
               Discover 500+ Conferences
             </button>
@@ -124,35 +131,35 @@ export const HomePage: React.FC<HomePageProps> = ({
       </section>
 
       {/* 2. GLOBAL IMPACT STATS */}
-      <section className="bg-slate-900 text-white py-12 border-y border-slate-800">
+      <section className="bg-[#0A2540] text-white py-14 border-y border-slate-800">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-8 divide-y lg:divide-y-0 lg:divide-x divide-slate-800">
             <div className="text-center pt-4 lg:pt-0">
-              <div className="text-3xl sm:text-4xl font-extrabold text-teal-400 font-display">170+</div>
-              <div className="text-xs sm:text-sm text-slate-300 font-medium mt-1">Participating Countries</div>
-              <div className="text-[11px] text-slate-500 mt-0.5">International delegations</div>
+              <div className="text-3xl sm:text-4xl font-extrabold text-[#14B8A6] font-display">170+</div>
+              <div className="text-xs sm:text-sm text-slate-200 font-medium mt-1">Participating Countries</div>
+              <div className="text-[11px] text-slate-400 mt-0.5">International delegations</div>
             </div>
             <div className="text-center pt-4 lg:pt-0">
-              <div className="text-3xl sm:text-4xl font-extrabold text-teal-400 font-display">2,500+</div>
-              <div className="text-xs sm:text-sm text-slate-300 font-medium mt-1">Academic & Research Partners</div>
-              <div className="text-[11px] text-slate-500 mt-0.5">Top-tier universities & institutes</div>
+              <div className="text-3xl sm:text-4xl font-extrabold text-[#14B8A6] font-display">2,500+</div>
+              <div className="text-xs sm:text-sm text-slate-200 font-medium mt-1">Academic & Research Partners</div>
+              <div className="text-[11px] text-slate-400 mt-0.5">Top-tier universities & institutes</div>
             </div>
             <div className="text-center pt-4 lg:pt-0">
-              <div className="text-3xl sm:text-4xl font-extrabold text-teal-400 font-display">100,000+</div>
-              <div className="text-xs sm:text-sm text-slate-300 font-medium mt-1">Scientists & Researchers</div>
-              <div className="text-[11px] text-slate-500 mt-0.5">Active scholarly network</div>
+              <div className="text-3xl sm:text-4xl font-extrabold text-[#14B8A6] font-display">100,000+</div>
+              <div className="text-xs sm:text-sm text-slate-200 font-medium mt-1">Scientists & Researchers</div>
+              <div className="text-[11px] text-slate-400 mt-0.5">Active scholarly network</div>
             </div>
             <div className="text-center pt-4 lg:pt-0">
-              <div className="text-3xl sm:text-4xl font-extrabold text-teal-400 font-display">500+</div>
-              <div className="text-xs sm:text-sm text-slate-300 font-medium mt-1">Conferences & Proceedings</div>
-              <div className="text-[11px] text-slate-500 mt-0.5">Scopus & SCI indexed</div>
+              <div className="text-3xl sm:text-4xl font-extrabold text-[#14B8A6] font-display">500+</div>
+              <div className="text-xs sm:text-sm text-slate-200 font-medium mt-1">Conferences & Proceedings</div>
+              <div className="text-[11px] text-slate-400 mt-0.5">Scopus & SCI indexed</div>
             </div>
           </div>
         </div>
       </section>
 
       {/* 3. EDITORIAL ABOUT SCINSMEDIA */}
-      <section className="py-20 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <section className="pt-16 pb-6 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
           <div className="lg:col-span-6 space-y-6">
             <div className="inline-flex items-center space-x-2 text-xs font-bold uppercase tracking-wider text-teal-700 bg-teal-50 px-3 py-1 rounded-md">
@@ -204,22 +211,25 @@ export const HomePage: React.FC<HomePageProps> = ({
       </section>
 
       {/* 5. MULTI-FACETED CONFERENCE DISCOVERY INTERFACE */}
-      <section id="conference-discovery-section" className="scroll-mt-[90px] lg:scroll-mt-[110px] py-20 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <section id="conference-discovery-section" className="scroll-mt-[90px] lg:scroll-mt-[110px] pt-6 pb-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="space-y-8">
           <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
             <div>
-              <span className="text-xs font-bold uppercase tracking-wider text-teal-700">
+              <h2 className="text-3xl sm:text-4xl font-bold text-[#0A2540] font-display tracking-tight mb-2.5">
+                Conference
+              </h2>
+              <span className="block text-xs font-bold uppercase tracking-wider text-[#0E7490]">
                 Conference Directory
               </span>
-              <h2 className="text-3xl font-bold text-slate-900 font-display mt-1">
+              <h3 className="text-2xl sm:text-3xl font-bold text-slate-900 font-display mt-1">
                 Upcoming International Congresses
-              </h2>
-              <p className="text-sm text-slate-500 mt-1">
+              </h3>
+              <p className="text-sm text-slate-600 mt-1">
                 Filter by academic domain, hosting country, format, or search keywords.
               </p>
             </div>
 
-            <div className="text-xs text-slate-500 font-medium">
+            <div className="text-xs text-slate-600 font-medium">
               Showing <b>{filteredConferences.length}</b> verified scientific congresses
             </div>
           </div>
@@ -228,7 +238,7 @@ export const HomePage: React.FC<HomePageProps> = ({
           <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-sm grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
             {/* Search */}
             <div className="relative">
-              <label className="block text-[10px] font-bold uppercase text-slate-400 mb-1">Search Keywords</label>
+              <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">Search Keywords</label>
               <div className="relative">
                 <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
                 <input
@@ -243,7 +253,7 @@ export const HomePage: React.FC<HomePageProps> = ({
 
             {/* Domain */}
             <div>
-              <label className="block text-[10px] font-bold uppercase text-slate-400 mb-1">Academic Domain</label>
+              <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">Academic Domain</label>
               <select
                 value={selectedDomain}
                 onChange={e => setSelectedDomain(e.target.value)}
@@ -260,7 +270,7 @@ export const HomePage: React.FC<HomePageProps> = ({
 
             {/* Country */}
             <div>
-              <label className="block text-[10px] font-bold uppercase text-slate-400 mb-1">Host Country</label>
+              <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">Host Country</label>
               <select
                 value={selectedCountry}
                 onChange={e => setSelectedCountry(e.target.value)}
@@ -277,7 +287,7 @@ export const HomePage: React.FC<HomePageProps> = ({
 
             {/* Mode */}
             <div>
-              <label className="block text-[10px] font-bold uppercase text-slate-400 mb-1">Delivery Format</label>
+              <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">Delivery Format</label>
               <select
                 value={selectedMode}
                 onChange={e => setSelectedMode(e.target.value)}
@@ -312,35 +322,25 @@ export const HomePage: React.FC<HomePageProps> = ({
         </div>
       </section>
 
-      {/* 6. INTERACTIVE GLOBAL FOOTPRINT MAP */}
-      <section className="py-16 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <WorldMapInteractive
-          onSelectCity={city => {
-            setSelectedCountry(city);
-            const el = document.getElementById('conference-discovery-section');
-            el?.scrollIntoView({ behavior: 'smooth' });
-          }}
-          onSelectConference={onSelectConference}
-        />
-      </section>
-
-
-      {/* 8. KEYNOTE SPEAKERS SHOWCASE */}
-      <section className="py-20 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      {/* KEYNOTE SPEAKERS SHOWCASE */}
+      <section className="pt-6 pb-16 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex flex-col sm:flex-row sm:items-end justify-between mb-10">
           <div>
-            <span className="text-xs font-bold uppercase tracking-wider text-teal-700">
+            <h2 className="text-3xl sm:text-4xl font-bold text-[#0A2540] font-display tracking-tight mb-2.5">
+              Speakers
+            </h2>
+            <span className="block text-xs font-bold uppercase tracking-wider text-[#0E7490]">
               Distinguished Faculty
             </span>
-            <h2 className="text-3xl font-bold text-slate-900 font-display mt-1">
-              Global Keynote Speakers
-            </h2>
+            <h3 className="text-2xl sm:text-3xl font-bold text-slate-900 font-display mt-1">
+              Distinguished Speakers
+            </h3>
           </div>
           <button
             onClick={() => onNavigate('/speakers')}
-            className="mt-3 sm:mt-0 text-xs font-semibold text-teal-700 hover:text-teal-900 flex items-center space-x-1"
+            className="mt-3 sm:mt-0 text-xs font-semibold text-[#0E7490] hover:text-[#0A2540] flex items-center space-x-1 cursor-pointer transition-colors"
           >
-            <span>View All Keynote Academics</span>
+            <span>View All Speakers</span>
             <ArrowRight className="w-3.5 h-3.5" />
           </button>
         </div>
@@ -379,40 +379,6 @@ export const HomePage: React.FC<HomePageProps> = ({
         </div>
       </section>
 
-
-
-      {/* 10. TESTIMONIALS */}
-      <section className="py-20 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="text-center max-w-2xl mx-auto mb-12">
-          <span className="text-xs font-bold uppercase tracking-wider text-teal-700">
-            Academic Endorsements
-          </span>
-          <h2 className="text-3xl font-bold text-slate-900 font-display mt-1">
-            Perspectives from Conference Chairs & Delegates
-          </h2>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {testimonials.map(t => (
-            <div key={t.id} className="bg-white p-7 rounded-3xl border border-slate-200 shadow-sm flex flex-col justify-between space-y-4">
-              <p className="text-sm text-slate-700 italic leading-relaxed">
-                "{t.quote}"
-              </p>
-              <div className="flex items-center space-x-3 pt-3 border-t border-slate-100">
-                <img
-                  src={t.avatar_url || t.photo_url}
-                  alt={t.author_name || t.name}
-                  className="w-11 h-11 rounded-full object-cover border border-slate-200"
-                />
-                <div>
-                  <h4 className="text-xs font-bold text-slate-900">{t.author_name || t.name}</h4>
-                  <p className="text-[11px] text-slate-500">{t.designation} • {t.institution}</p>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </section>
     </div>
   );
 };

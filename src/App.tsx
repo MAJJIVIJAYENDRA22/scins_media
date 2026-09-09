@@ -60,7 +60,7 @@ export default function App() {
       }
     };
     loadConferences();
-  }, []);
+  }, [currentPath]);
 
   // Keyboard shortcut for Cmd/Ctrl+K search
   useEffect(() => {
@@ -151,11 +151,12 @@ export default function App() {
   };
 
   const isAdmin = currentPath === '/admin';
+  const isConferenceDetails = currentPath.startsWith('/conferences/');
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] text-slate-900 flex flex-col font-sans selection:bg-teal-500 selection:text-white">
-      {/* Top Navbar (Public app only) */}
-      {!isAdmin && (
+      {/* Top Navbar (Public app only, hidden on conference details routes) */}
+      {!isAdmin && !isConferenceDetails && (
         <Navbar
           currentPath={currentPath}
           onNavigate={navigateTo}

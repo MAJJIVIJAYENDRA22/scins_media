@@ -37,6 +37,7 @@ export const SponsorManager: React.FC<SponsorManagerProps> = ({
   const [tierFilter, setTierFilter] = useState('All');
   const [partnerTypeFilter, setPartnerTypeFilter] = useState('All');
   const [statusFilter, setStatusFilter] = useState('All');
+  const [conferenceFilter, setConferenceFilter] = useState<string>('All');
   const [sortBy, setSortBy] = useState<'tier' | 'name' | 'order'>('tier');
 
   // Modal
@@ -83,13 +84,14 @@ export const SponsorManager: React.FC<SponsorManagerProps> = ({
       const matchesTier = tierFilter === 'All' || s.tier === tierFilter;
       const matchesPartnerType =
         partnerTypeFilter === 'All' || (s.partner_type || 'Corporate Sponsor') === partnerTypeFilter;
+      const matchesConf = conferenceFilter === 'All' || s.conference_id === Number(conferenceFilter);
       const isActive = s.is_active ?? true;
       const matchesStatus =
         statusFilter === 'All' ||
         (statusFilter === 'active' && isActive) ||
         (statusFilter === 'inactive' && !isActive);
 
-      return matchesSearch && matchesTier && matchesPartnerType && matchesStatus;
+      return matchesSearch && matchesTier && matchesPartnerType && matchesConf && matchesStatus;
     });
 
     list.sort((a, b) => {
@@ -108,7 +110,7 @@ export const SponsorManager: React.FC<SponsorManagerProps> = ({
     });
 
     return list;
-  }, [sponsors, search, tierFilter, partnerTypeFilter, statusFilter, sortBy]);
+  }, [sponsors, search, tierFilter, partnerTypeFilter, statusFilter, conferenceFilter, sortBy]);
 
   const handleToggleStatus = async (sponsor: Sponsor) => {
     const currentActive = sponsor.is_active ?? true;
@@ -317,6 +319,19 @@ export const SponsorManager: React.FC<SponsorManagerProps> = ({
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
+            <select
+              value={conferenceFilter}
+              onChange={e => setConferenceFilter(e.target.value)}
+              className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-700 font-medium focus:outline-none focus:border-teal-500"
+            >
+              <option value="All">All Conferences</option>
+              {conferences.map(c => (
+                <option key={c.id} value={c.id}>
+                  {c.short_title || c.title}
+                </option>
+              ))}
+            </select>
+
             <select
               value={tierFilter}
               onChange={e => setTierFilter(e.target.value)}
@@ -529,6 +544,24 @@ export const SponsorManager: React.FC<SponsorManagerProps> = ({
             </div>
 
             <form onSubmit={handleSave} className="p-6 overflow-y-auto space-y-4 flex-1">
+              {/* Assigned Conference */}
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-slate-700">
+                  Assigned Conference <span className="text-red-500">*</span>
+                </label>
+                <select
+                  value={editingSponsor.conference_id || (conferences[0]?.id || 1)}
+                  onChange={e => setEditingSponsor({ ...editingSponsor, conference_id: Number(e.target.value) })}
+                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:bg-white focus:outline-none focus:border-teal-500"
+                >
+                  {conferences.map(c => (
+                    <option key={c.id} value={c.id}>
+                      {c.short_title || c.title} ({c.conference_code})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {/* Company Name */}
                 <div className="sm:col-span-2 space-y-1">

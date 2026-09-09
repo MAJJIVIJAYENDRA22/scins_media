@@ -8,6 +8,7 @@ import {
   Speaker,
   Session,
   ScheduleItem,
+  RegistrationCategory,
   Registration,
   AbstractSubmission,
   Publication,
@@ -15,11 +16,12 @@ import {
   MediaPartner,
   Testimonial,
   Blog,
-  FAQ,
   ConferenceFlyer,
   AuditLog,
   AdminUser,
-  ApiResponse
+  ApiResponse,
+  ContactEnquiry,
+  NewsletterSubscriber
 } from '../types';
 
 const API_BASE = '/api/v1';
@@ -63,6 +65,11 @@ export const api = {
     fetchJson<Conference>(`${API_BASE}/conferences/${id}/status`, {
       method: 'PATCH',
       body: JSON.stringify({ status })
+    }),
+  updateConferenceOrder: (id: number, display_order: number) =>
+    fetchJson<Conference>(`${API_BASE}/conferences/${id}/order`, {
+      method: 'PATCH',
+      body: JSON.stringify({ display_order })
     }),
   duplicateConference: (id: number) =>
     fetchJson<Conference>(`${API_BASE}/conferences/${id}/duplicate`, {
@@ -142,13 +149,14 @@ export const api = {
     }),
 
   // Sessions
-  getSessions: (params?: { conferenceId?: number; search?: string; track?: string; type?: string; status?: string }) => {
+  getSessions: (params?: { conferenceId?: number; search?: string; track?: string; type?: string; status?: string; publishedOnly?: boolean }) => {
     const q = new URLSearchParams();
     if (params?.conferenceId) q.append('conference_id', String(params.conferenceId));
     if (params?.search) q.append('search', params.search);
     if (params?.track) q.append('track', params.track);
     if (params?.type) q.append('type', params.type);
     if (params?.status) q.append('status', params.status);
+    if (params?.publishedOnly) q.append('published_only', 'true');
     return fetchJson<Session[]>(`${API_BASE}/sessions${q.toString() ? `?${q.toString()}` : ''}`);
   },
   getSession: (id: number) => fetchJson<Session>(`${API_BASE}/sessions/${id}`),
@@ -162,10 +170,10 @@ export const api = {
       method: 'PUT',
       body: JSON.stringify(data)
     }),
-  toggleSessionStatus: (id: number, status: string, is_active?: boolean) =>
+  toggleSessionStatus: (id: number, status?: string, is_active?: boolean, is_published?: boolean) =>
     fetchJson<Session>(`${API_BASE}/sessions/${id}/status`, {
       method: 'PATCH',
-      body: JSON.stringify({ status, is_active })
+      body: JSON.stringify({ status, is_active, is_published })
     }),
   deleteSession: (id: number) =>
     fetchJson<Session>(`${API_BASE}/sessions/${id}`, {
@@ -204,8 +212,45 @@ export const api = {
     }),
 
   // Schedule
-  getSchedule: (conferenceId?: number) =>
-    fetchJson<ScheduleItem[]>(`${API_BASE}/schedule${conferenceId ? `?conference_id=${conferenceId}` : ''}`),
+  getSchedule: (conferenceId?: number, dayLabel?: string) => {
+    const params = new URLSearchParams();
+    if (conferenceId) params.append('conference_id', String(conferenceId));
+    if (dayLabel) params.append('day_label', dayLabel);
+    const qs = params.toString();
+    return fetchJson<ScheduleItem[]>(`${API_BASE}/schedule${qs ? `?${qs}` : ''}`);
+  },
+  createScheduleItem: (data: Partial<ScheduleItem>) =>
+    fetchJson<ScheduleItem>(`${API_BASE}/schedule`, {
+      method: 'POST',
+      body: JSON.stringify(data)
+    }),
+  updateScheduleItem: (id: number, data: Partial<ScheduleItem>) =>
+    fetchJson<ScheduleItem>(`${API_BASE}/schedule/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data)
+    }),
+  deleteScheduleItem: (id: number) =>
+    fetchJson<ScheduleItem>(`${API_BASE}/schedule/${id}`, {
+      method: 'DELETE'
+    }),
+
+  // Registration Categories
+  getRegistrationCategories: (conferenceId?: number) =>
+    fetchJson<RegistrationCategory[]>(`${API_BASE}/registration-categories${conferenceId ? `?conference_id=${conferenceId}` : ''}`),
+  createRegistrationCategory: (data: Partial<RegistrationCategory>) =>
+    fetchJson<RegistrationCategory>(`${API_BASE}/registration-categories`, {
+      method: 'POST',
+      body: JSON.stringify(data)
+    }),
+  updateRegistrationCategory: (id: number, data: Partial<RegistrationCategory>) =>
+    fetchJson<RegistrationCategory>(`${API_BASE}/registration-categories/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data)
+    }),
+  deleteRegistrationCategory: (id: number) =>
+    fetchJson<RegistrationCategory>(`${API_BASE}/registration-categories/${id}`, {
+      method: 'DELETE'
+    }),
 
   // Registrations
   getRegistrations: () => fetchJson<Registration[]>(`${API_BASE}/registrations`),
@@ -236,18 +281,48 @@ export const api = {
   // Content
   getPublications: () => fetchJson<Publication[]>(`${API_BASE}/publications`),
   getMediaPartners: () => fetchJson<MediaPartner[]>(`${API_BASE}/media-partners`),
-  getTestimonials: () => fetchJson<Testimonial[]>(`${API_BASE}/testimonials`),
+  getTestimonials: (conferenceId?: number) =>
+    fetchJson<Testimonial[]>(`${API_BASE}/testimonials${conferenceId ? `?conference_id=${conferenceId}` : ''}`),
+  createTestimonial: (data: Partial<Testimonial>) =>
+    fetchJson<Testimonial>(`${API_BASE}/testimonials`, {
+      method: 'POST',
+      body: JSON.stringify(data)
+    }),
+  updateTestimonial: (id: number, data: Partial<Testimonial>) =>
+    fetchJson<Testimonial>(`${API_BASE}/testimonials/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data)
+    }),
+  deleteTestimonial: (id: number) =>
+    fetchJson<Testimonial>(`${API_BASE}/testimonials/${id}`, {
+      method: 'DELETE'
+    }),
   getBlogs: () => fetchJson<Blog[]>(`${API_BASE}/blogs`),
-  getFaqs: () => fetchJson<FAQ[]>(`${API_BASE}/faqs`),
   getFlyers: () => fetchJson<ConferenceFlyer[]>(`${API_BASE}/flyers`),
   getAuditLogs: () => fetchJson<AuditLog[]>(`${API_BASE}/audit-logs`),
   getAnalytics: () => fetchJson<any>(`${API_BASE}/analytics`),
 
-  // Submissions
+  // Contact Submissions & Enquiries
+  getContactSubmissions: (params?: { status?: string; search?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.status && params.status !== 'All') query.append('status', params.status);
+    if (params?.search) query.append('search', params.search);
+    const qs = query.toString();
+    return fetchJson<ContactEnquiry[]>(`${API_BASE}/contact${qs ? `?${qs}` : ''}`);
+  },
   submitContact: (data: any) =>
     fetchJson<any>(`${API_BASE}/contact`, {
       method: 'POST',
       body: JSON.stringify(data)
+    }),
+  updateContactStatus: (id: number, status: string) =>
+    fetchJson<ContactEnquiry>(`${API_BASE}/contact/${id}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status })
+    }),
+  deleteContactSubmission: (id: number) =>
+    fetchJson<any>(`${API_BASE}/contact/${id}`, {
+      method: 'DELETE'
     }),
 
   submitQuoteRequest: (data: any) =>
@@ -255,10 +330,28 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(data)
     }),
+
+  // Newsletter Subscribers
+  getSubscribers: (params?: { status?: string; search?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.status && params.status !== 'All') query.append('status', params.status);
+    if (params?.search) query.append('search', params.search);
+    const qs = query.toString();
+    return fetchJson<NewsletterSubscriber[]>(`${API_BASE}/subscribers${qs ? `?${qs}` : ''}`);
+  },
   subscribeNewsletter: (email: string) =>
     fetchJson<any>(`${API_BASE}/newsletter`, {
       method: 'POST',
       body: JSON.stringify({ email })
+    }),
+  updateSubscriberStatus: (id: number, status: string) =>
+    fetchJson<NewsletterSubscriber>(`${API_BASE}/subscribers/${id}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status })
+    }),
+  deleteSubscriber: (id: number) =>
+    fetchJson<any>(`${API_BASE}/subscribers/${id}`, {
+      method: 'DELETE'
     }),
 
   // Media & Asset Upload

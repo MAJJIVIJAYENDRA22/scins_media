@@ -20,7 +20,9 @@ import {
   FAQ,
   ConferenceFlyer,
   AuditLog,
-  AdminUser
+  AdminUser,
+  ContactEnquiry,
+  NewsletterSubscriber
 } from '../types';
 
 export const INITIAL_CONFERENCES: Conference[] = [
@@ -49,12 +51,38 @@ The global plastics crisis demands unprecedented scientific coordination. This c
     registration_deadline: '2026-06-10',
     mode: 'hybrid',
     status: 'published',
+    display_order: 1,
     hero_image: 'https://images.unsplash.com/photo-1532094349884-543bc11b234d?auto=format&fit=crop&w=1600&q=80',
+    flyer_url: 'https://scinsmedia.com/downloads/biopolymers-2026-brochure.pdf',
     featured_badge: '2nd Edition Flagship',
+    about_heading: 'Accelerating Sustainable Polymer Innovations & Industrial Decarbonization',
+    about_highlights: [
+      'Over 450+ physical attendees from 48 nations',
+      '20 specialized scientific tracks & breakout rooms',
+      'Elsevier Scopus-indexed special issue publication',
+      'Direct B2B technology transfer & venture showcase'
+    ],
+    gallery_images: [
+      'https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?auto=format&fit=crop&w=600&q=80',
+      'https://images.unsplash.com/photo-1532094349884-543bc11b234d?auto=format&fit=crop&w=600&q=80',
+      'https://images.unsplash.com/photo-1507668077129-56e32842fceb?auto=format&fit=crop&w=600&q=80',
+      'https://images.unsplash.com/photo-1524178232363-1fb2b075b655?auto=format&fit=crop&w=600&q=80'
+    ],
+    welcome_heading: 'Message from the General Chair',
     welcome_message: `It is our profound honor to welcome distinguished researchers, professors, industrial pioneers, and budding scholars to the 2nd World Congress on Biopolymers & Bioplastics in Paris. Our collective mission is to decouple modern material consumption from petrochemical dependence through breakthrough green chemistry, microbial synthesis, and circular macromolecular architecture. We look forward to your impactful contributions and lively debates.`,
     welcome_speaker_name: 'Prof. Henriette Dubois, Ph.D.',
+    welcome_speaker_role: 'Conference Chair',
     welcome_speaker_title: 'Chair of Scientific Organizing Committee & Director of Macromolecular Institute, Sorbonne Université',
     welcome_speaker_image: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=400&q=80',
+    welcome_footer_text: 'Join us at Biopolymers 2026 in Paris to collaborate, innovate, and drive scientific excellence forward.',
+    exhibitor_heading: 'Global Industry Leaders & Technology Showcase',
+    exhibitor_message: 'Explore breakthrough biopolymer technologies, commercial resin formulations, and certified biodegradable solutions from premier international partners including BASF, NatureWorks, Novamont, Danimer Scientific, and TotalEnergies Corbion. Connect with technical directors, review prototype materials, and explore industrial partnerships across both days of the congress.',
+    exhibitor_speaker_name: 'Confirmed Industry Exhibitors',
+    exhibitor_speaker_role: 'Platinum & Gold Partners',
+    exhibitor_speaker_title: 'Main Exhibition Hall & Innovation Pavilions (Booths P-101 to E-408)',
+    exhibitor_image: 'https://images.unsplash.com/photo-1560179707-f14e90ef3623?auto=format&fit=crop&w=500&q=80',
+    exhibitor_footer_text: 'Live demonstrations and commercial partner consultations scheduled throughout the congress.',
+    program_image: 'https://images.unsplash.com/photo-1507668077129-56e32842fceb?auto=format&fit=crop&w=800&q=80',
     meta_title: '2nd World Congress on Biopolymers & Bioplastics | Paris 2026',
     meta_description: 'Join 850+ global scientists and industry leaders at Biopolymers 2026 in Paris. Submit your research abstract, explore 20 scientific sessions, and network.',
     keywords: 'biopolymers, bioplastics, green chemistry, PHA, PLA, circular economy, Paris conference 2026',
@@ -99,6 +127,7 @@ The global plastics crisis demands unprecedented scientific coordination. This c
     registration_deadline: '2026-08-01',
     mode: 'hybrid',
     status: 'published',
+    display_order: 2,
     hero_image: 'https://images.unsplash.com/photo-1576086213369-97a306d36557?auto=format&fit=crop&w=1600&q=80',
     featured_badge: 'High Impact Medical Summit',
     welcome_message: 'Welcome to Boston for NanoMed 2026. Nanoscale engineering is redefining medical intervention thresholds across therapeutic domains.',
@@ -143,6 +172,7 @@ The global plastics crisis demands unprecedented scientific coordination. This c
     registration_deadline: '2026-09-05',
     mode: 'hybrid',
     status: 'published',
+    display_order: 3,
     hero_image: 'https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=1600&q=80',
     featured_badge: 'Computational Science Track',
     welcome_message: 'Machine intelligence is transitioning from diagnostic assistance to synthetic biological discovery. Welcome to Zurich.',
@@ -739,7 +769,19 @@ export const SESSIONS_20: Session[] = [
     room: 'Grand Auditorium Pasteur',
     session_type: 'Closing Plenary & Pitch' as any
   }
-];
+].map((s, idx) => ({
+  ...s,
+  is_published: true,
+  is_active: true,
+  status: 'published',
+  image_url: [
+    'https://images.unsplash.com/photo-1532187863486-abf9dbad1b69?auto=format&fit=crop&w=600&q=80',
+    'https://images.unsplash.com/photo-1507668077129-56e32842fceb?auto=format&fit=crop&w=600&q=80',
+    'https://images.unsplash.com/photo-1581093458791-9f3c3900df4b?auto=format&fit=crop&w=600&q=80',
+    'https://images.unsplash.com/photo-1518152006812-edab29b069ac?auto=format&fit=crop&w=600&q=80',
+    'https://images.unsplash.com/photo-1576086213369-97a306d36557?auto=format&fit=crop&w=600&q=80'
+  ][idx % 5]
+}));
 
 export const SCHEDULE_ITEMS: ScheduleItem[] = [
   // Day 1 - June 22, 2026
@@ -1650,4 +1692,94 @@ export const GLOBAL_HUBS = [
   { city: 'Cambridge', country: 'United Kingdom', lat: 52.2053, lng: 0.1218, conferences: 19, active: true, title: 'Quantum Information & Photonic Computing' },
   { city: 'Singapore', country: 'Singapore', lat: 1.3521, lng: 103.8198, conferences: 15, active: true, title: 'Infectious Diseases & Global Health' },
   { city: 'Dubai', country: 'United Arab Emirates', lat: 25.2048, lng: 55.2708, conferences: 13, active: true, title: 'Future Renewable Energy & Water Desalination' }
+];
+
+export const INITIAL_CONTACT_ENQUIRIES: ContactEnquiry[] = [
+  {
+    id: 1,
+    name: 'Prof. Dr. Julian Weintraub',
+    email: 'j.weintraub@imperial.ac.uk',
+    phone: '+44 20 7594 6000',
+    subject: 'Visa Support Letter Request',
+    message: 'Requesting official embassy visa invitation letter for attendance at Biopolymers 2026 in Paris. Passport details attached for French consular verification.',
+    conference_id: 1,
+    conference_code: 'BIO-2026',
+    status: 'new',
+    created_at: '2026-05-10 11:24:00'
+  },
+  {
+    id: 2,
+    name: 'Dr. Elena Rostova',
+    email: 'elena.rostova@ethz.ch',
+    phone: '+41 44 632 11 11',
+    subject: 'Registration & Invoice Payment',
+    message: 'Our university finance department needs an official pro-forma VAT invoice with corporate tax ID for 3 faculty full-conference delegate passes.',
+    conference_id: 1,
+    conference_code: 'BIO-2026',
+    status: 'in_progress',
+    created_at: '2026-05-08 14:15:30'
+  },
+  {
+    id: 3,
+    name: 'Dr. Marcus Vance',
+    email: 'm.vance@mit.edu',
+    phone: '+1 (617) 253-1000',
+    subject: 'Abstract Status Query',
+    message: 'Inquiring regarding the peer review decision timeline for abstract submission #SCINS-BIO-2026-001245 on stereocomplex polylactic acid scaffolds.',
+    conference_id: 1,
+    conference_code: 'BIO-2026',
+    status: 'responded',
+    created_at: '2026-05-04 09:30:12'
+  },
+  {
+    id: 4,
+    name: 'Prof. Akiko Tanaka',
+    email: 'a.tanaka@u-tokyo.ac.jp',
+    phone: '+81 3 5841 2111',
+    subject: 'Sponsorship & Industry Exhibit',
+    message: 'Our macromolecular engineering department would like to explore bronze exhibitor booth opportunities at the Paris congress venue.',
+    conference_id: 1,
+    conference_code: 'BIO-2026',
+    status: 'responded',
+    created_at: '2026-04-28 16:45:00'
+  }
+];
+
+export const INITIAL_SUBSCRIBERS: NewsletterSubscriber[] = [
+  {
+    id: 1,
+    email: 'dr.smith@harvard.edu',
+    status: 'active',
+    created_at: '2026-03-15 10:20:00'
+  },
+  {
+    id: 2,
+    email: 'prof.weintraub@imperial.ac.uk',
+    status: 'active',
+    created_at: '2026-03-22 14:10:00'
+  },
+  {
+    id: 3,
+    email: 'researcher.chen@tsinghua.edu.cn',
+    status: 'active',
+    created_at: '2026-04-02 08:45:00'
+  },
+  {
+    id: 4,
+    email: 'elena.rostova@ethz.ch',
+    status: 'active',
+    created_at: '2026-04-18 16:30:00'
+  },
+  {
+    id: 5,
+    email: 'm.vance@mit.edu',
+    status: 'active',
+    created_at: '2026-04-29 11:15:00'
+  },
+  {
+    id: 6,
+    email: 'newsletter.archive@science-digest.org',
+    status: 'unsubscribed',
+    created_at: '2026-02-10 12:00:00'
+  }
 ];

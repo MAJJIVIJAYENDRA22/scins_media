@@ -9,7 +9,6 @@ import {
   FileCheck2,
   CreditCard,
   Building,
-  History,
   Settings,
   Plus,
   Trash2,
@@ -24,7 +23,9 @@ import {
   ExternalLink,
   ChevronRight,
   Monitor,
-  BarChart3
+  BarChart3,
+  Mail,
+  Send
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -46,7 +47,9 @@ import {
   Registration,
   AbstractSubmission,
   AuditLog,
-  Sponsor
+  Sponsor,
+  ContactEnquiry,
+  NewsletterSubscriber
 } from '../types';
 import {
   INITIAL_CONFERENCES,
@@ -57,7 +60,9 @@ import {
   INITIAL_ABSTRACTS,
   AUDIT_LOGS,
   INITIAL_ADMIN_USER,
-  SPONSORS
+  SPONSORS,
+  INITIAL_CONTACT_ENQUIRIES,
+  INITIAL_SUBSCRIBERS
 } from '../data/initialData';
 import { api } from '../services/api';
 import { CongressWizard } from '../components/admin/CongressWizard';
@@ -66,6 +71,8 @@ import { CommitteeManager } from '../components/admin/CommitteeManager';
 import { SpeakerManager } from '../components/admin/SpeakerManager';
 import { SessionManager } from '../components/admin/SessionManager';
 import { SponsorManager } from '../components/admin/SponsorManager';
+import { ContactManager } from '../components/admin/ContactManager';
+import { SubscriberManager } from '../components/admin/SubscriberManager';
 
 interface AdminDashboardPageProps {
   onNavigate?: (path: string) => void;
@@ -87,7 +94,8 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
     | 'registrations'
     | 'abstracts'
     | 'sponsors'
-    | 'audit'
+    | 'contacts'
+    | 'subscribers'
     | 'settings'
   >('overview');
 
@@ -100,13 +108,15 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
   const [abstracts, setAbstracts] = useState<AbstractSubmission[]>([...INITIAL_ABSTRACTS]);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([...AUDIT_LOGS]);
   const [sponsors, setSponsors] = useState<Sponsor[]>([...SPONSORS]);
+  const [contactSubmissions, setContactSubmissions] = useState<ContactEnquiry[]>([...INITIAL_CONTACT_ENQUIRIES]);
+  const [subscribers, setSubscribers] = useState<NewsletterSubscriber[]>([...INITIAL_SUBSCRIBERS]);
 
   // Initial Sync from Backend Database
   useEffect(() => {
     let mounted = true;
     async function loadData() {
       try {
-        const [c, com, spk, ses, spo, abs, reg, logs] = await Promise.all([
+        const [c, com, spk, ses, spo, abs, reg, logs, conSub, subs] = await Promise.all([
           api.getConferences().catch(() => INITIAL_CONFERENCES),
           api.getCommitteeMembers().catch(() => COMMITTEE_MEMBERS),
           api.getSpeakers().catch(() => SPEAKERS),
@@ -114,7 +124,9 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
           api.getSponsors().catch(() => SPONSORS),
           api.getAbstracts().catch(() => INITIAL_ABSTRACTS),
           api.getRegistrations().catch(() => INITIAL_REGISTRATIONS),
-          api.getAuditLogs().catch(() => AUDIT_LOGS)
+          api.getAuditLogs().catch(() => AUDIT_LOGS),
+          api.getContactSubmissions().catch(() => INITIAL_CONTACT_ENQUIRIES),
+          api.getSubscribers().catch(() => INITIAL_SUBSCRIBERS)
         ]);
         if (mounted) {
           if (c && c.length) setConferences(c);
@@ -125,6 +137,8 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
           if (abs && abs.length) setAbstracts(abs);
           if (reg && reg.length) setRegistrations(reg);
           if (logs && logs.length) setAuditLogs(logs);
+          if (conSub && conSub.length) setContactSubmissions(conSub);
+          if (subs && subs.length) setSubscribers(subs);
         }
       } catch (err) {
         console.warn('Backend initial fetch error, using local state:', err);
@@ -147,6 +161,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
   const [currentPw, setCurrentPw] = useState('');
   const [newPw, setNewPw] = useState('');
   const [pwUpdated, setPwUpdated] = useState(false);
+  const [wizardConference, setWizardConference] = useState<Conference | null>(null);
 
   // Totals & Analytics
   const totalRevenue = registrations.reduce((acc, r) => acc + (r.payment_status === 'completed' ? r.amount : 0), 0);
@@ -267,21 +282,33 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
       .sort((a, b) => b.count - a.count);
   }, [conferences, registrations]);
 
-  // Callback when a conference is created through the 14-step wizard
+  // Callback when a conference is created or saved through the 14-step wizard
   const handleWizardConferenceCreated = (created: Conference) => {
-    setConferences(prev => [created, ...prev]);
+    setConferences(prev => {
+      const idx = prev.findIndex(c => c.id === created.id);
+      if (idx >= 0) {
+        const copy = [...prev];
+        copy[idx] = created;
+        return copy;
+      }
+      return [created, ...prev];
+    });
     const log: AuditLog = {
       id: auditLogs.length + 1,
       admin_name: INITIAL_ADMIN_USER.name,
       admin_email: INITIAL_ADMIN_USER.email,
-      action: 'CREATE_CONFERENCE',
+      action: 'SAVE_CONFERENCE',
       entity: 'Conference',
       entity_id: created.conference_code,
-      details: `Created & published new congress: ${created.title}`,
+      details: `Saved congress: ${created.title}`,
       ip_address: '127.0.0.1',
       created_at: new Date().toISOString().replace('T', ' ').substring(0, 19)
     };
     setAuditLogs(prev => [log, ...prev]);
+  };
+
+  const handleWizardConferenceUpdated = (updated: Conference) => {
+    setConferences(prev => prev.map(c => c.id === updated.id ? updated : c));
   };
 
   // Update Abstract Status
@@ -368,15 +395,21 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
 
           {[
             { id: 'overview', label: 'Executive Dashboard', icon: LayoutDashboard },
-            { id: 'wizard', label: '14-Step Congress Wizard', icon: Sparkles, badge: 'New' },
+            {
+              id: 'wizard',
+              label: wizardConference ? `Edit: ${wizardConference.short_title || 'Congress'}` : '14-Step Congress Wizard',
+              icon: Sparkles,
+              badge: wizardConference ? 'Editing' : 'New'
+            },
             { id: 'conferences', label: `Conferences (${conferences.length})`, icon: Calendar },
             { id: 'abstracts', label: `Abstracts Review (${pendingAbstractsCount})`, icon: FileCheck2 },
             { id: 'registrations', label: `Registrations (${registrations.length})`, icon: CreditCard },
             { id: 'committee', label: `Committee (${committee.length})`, icon: Users },
             { id: 'speakers', label: `Speakers (${speakers.length})`, icon: Mic },
-            { id: 'sessions', label: `20 Sessions (${sessions.length})`, icon: BookOpen },
+            { id: 'sessions', label: `Program / Schedule (${sessions.length})`, icon: BookOpen },
             { id: 'sponsors', label: `Sponsors & Partners (${sponsors.length})`, icon: Building },
-            { id: 'audit', label: 'System Audit Logs', icon: History },
+            { id: 'contacts', label: `Contact Submissions (${contactSubmissions.length})`, icon: Mail },
+            { id: 'subscribers', label: `Newsletter Subscribers (${subscribers.length})`, icon: Send },
             { id: 'settings', label: 'Security & Auth', icon: Settings }
           ].map(item => {
             const Icon = item.icon;
@@ -655,11 +688,16 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
             </div>
           )}
 
-          {/* TAB 2: 14-STEP ENTERPRISE CONGRESS CREATION WIZARD */}
+          {/* TAB 2: 14-STEP ENTERPRISE CONGRESS CREATION & EDIT WIZARD */}
           {activeTab === 'wizard' && (
             <CongressWizard
+              initialConference={wizardConference}
               onConferenceCreated={handleWizardConferenceCreated}
-              onCancel={() => setActiveTab('conferences')}
+              onConferenceUpdated={handleWizardConferenceUpdated}
+              onCancel={() => {
+                setWizardConference(null);
+                setActiveTab('conferences');
+              }}
               onNavigateToConference={(slug) => {
                 onSelectConference(slug);
                 onNavigate(`/conferences/${slug}`);
@@ -673,7 +711,10 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
               conferences={conferences}
               onConferencesChange={setConferences}
               onSelectConference={onSelectConference}
-              onOpenWizard={() => setActiveTab('wizard')}
+              onOpenWizard={(conf) => {
+                setWizardConference(conf || null);
+                setActiveTab('wizard');
+              }}
             />
           )}
 
@@ -848,46 +889,22 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
             />
           )}
 
-          {/* TAB 10: AUDIT LOGS */}
-          {activeTab === 'audit' && (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-base font-bold text-slate-900 font-display">
-                    System Security & Mutation Audit Logs
-                  </h3>
-                  <p className="text-xs text-slate-500">Timestamped record of all administrative database writes</p>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                {auditLogs.map(log => (
-                  <div
-                    key={log.id}
-                    className="p-3.5 bg-white border border-slate-200 rounded-xl shadow-xs flex items-start justify-between text-xs"
-                  >
-                    <div className="space-y-0.5">
-                      <div className="flex items-center space-x-2">
-                        <span className="font-mono text-teal-800 bg-teal-50 px-2 py-0.2 rounded border border-teal-200 font-bold text-[11px]">
-                          {log.action}
-                        </span>
-                        <span className="text-slate-400">•</span>
-                        <span className="text-slate-800 font-medium">{log.entity}</span>
-                        {log.entity_id && (
-                          <span className="text-slate-500 font-mono">({log.entity_id})</span>
-                        )}
-                      </div>
-                      <p className="text-slate-600">{log.details}</p>
-                    </div>
-                    <div className="text-right text-[10px] text-slate-500 font-mono flex-shrink-0">
-                      <div>{log.created_at}</div>
-                      <div>{log.admin_email}</div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
+          {/* TAB 10: CONTACT SUBMISSIONS */}
+          {activeTab === 'contacts' && (
+            <ContactManager
+              submissions={contactSubmissions}
+              onSubmissionsChange={setContactSubmissions}
+            />
           )}
+
+          {/* TAB 11: NEWSLETTER SUBSCRIBERS */}
+          {activeTab === 'subscribers' && (
+            <SubscriberManager
+              subscribers={subscribers}
+              onSubscribersChange={setSubscribers}
+            />
+          )}
+
 
           {/* TAB 11: SETTINGS & AUTH */}
           {activeTab === 'settings' && (

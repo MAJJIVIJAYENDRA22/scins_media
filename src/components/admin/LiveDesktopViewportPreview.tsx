@@ -64,6 +64,11 @@ export interface LivePreviewData {
   tagline?: string;
   description: string;
   detailed_about?: string;
+  about_heading?: string;
+  about_highlights?: string[];
+  gallery_images?: string[];
+  program_image?: string;
+  display_order?: number;
   objectives?: string[];
   target_audience?: string[];
   domain: string;
@@ -87,10 +92,20 @@ export interface LivePreviewData {
   flyer_url?: string;
   accent_color?: string;
   featured_badge?: string;
+  welcome_heading?: string;
   welcome_message?: string;
   welcome_speaker_name?: string;
+  welcome_speaker_role?: string;
   welcome_speaker_title?: string;
   welcome_speaker_image?: string;
+  welcome_footer_text?: string;
+  exhibitor_heading?: string;
+  exhibitor_speaker_name?: string;
+  exhibitor_speaker_role?: string;
+  exhibitor_speaker_title?: string;
+  exhibitor_image?: string;
+  exhibitor_message?: string;
+  exhibitor_footer_text?: string;
   meta_title?: string;
   meta_description?: string;
   keywords?: string;
@@ -172,7 +187,7 @@ const STEP_NAMES: Record<number, string> = {
   7: 'Welcome Greeting',
   8: 'SEO & Social',
   9: 'Committee',
-  10: 'Keynote Faculty',
+  10: 'Speakers',
   11: '20 Sessions',
   12: 'Pricing Tiers',
   13: 'Journals & Sponsors',
@@ -693,7 +708,7 @@ export const LiveDesktopViewportPreview: React.FC<LiveDesktopViewportPreviewProp
                   : 'hover:bg-slate-100 text-slate-700'
               }`}
             >
-              <span>Keynote Faculty</span>
+              <span>Speakers</span>
               <span
                 className={`text-[9px] px-1.5 py-0.2 rounded font-bold ${
                   activeTab === 'faculty' ? 'bg-teal-900 text-teal-200' : 'bg-slate-200 text-slate-800'
@@ -779,12 +794,68 @@ export const LiveDesktopViewportPreview: React.FC<LiveDesktopViewportPreviewProp
                     {data.description ||
                       'Join world-renowned researchers, academicians, clinicians, and industry pioneers for cutting-edge scientific lectures and networking.'}
                   </p>
+                  {data.about_heading && (
+                    <div className="pt-2 border-t border-slate-100 text-xs font-semibold text-teal-800">
+                      {data.about_heading}
+                    </div>
+                  )}
                   {data.detailed_about && (
                     <div className="pt-2 border-t border-slate-100 text-xs text-slate-600 leading-relaxed whitespace-pre-line">
                       {data.detailed_about}
                     </div>
                   )}
                 </div>
+
+                {/* About Highlights (4 Points) */}
+                {data.about_highlights && data.about_highlights.length > 0 && (
+                  <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs space-y-2.5">
+                    <h4 className="text-xs font-bold text-slate-900 font-display flex items-center space-x-1.5">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-teal-700" />
+                      <span>Key Highlights & Scientific Pillars</span>
+                    </h4>
+                    <div
+                      className={`grid gap-2 ${
+                        device === 'mobile' ? 'grid-cols-1' : 'grid-cols-1 sm:grid-cols-2'
+                      }`}
+                    >
+                      {data.about_highlights.map((highlight, hIdx) => (
+                        <div
+                          key={hIdx}
+                          className="flex items-start space-x-2 text-xs text-slate-700 bg-slate-50 p-2.5 rounded-xl border border-slate-100"
+                        >
+                          <div className="w-4 h-4 rounded-full bg-teal-100 text-teal-800 flex items-center justify-center shrink-0 mt-0.5">
+                            <Check className="w-2.5 h-2.5 stroke-[3]" />
+                          </div>
+                          <span className="leading-snug">{highlight}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Gallery Images (4 Grid) */}
+                {data.gallery_images && data.gallery_images.length > 0 && (
+                  <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs space-y-2.5">
+                    <h4 className="text-xs font-bold text-slate-900 font-display flex items-center space-x-1.5">
+                      <Layers className="w-3.5 h-3.5 text-teal-700" />
+                      <span>Congress & Venue Gallery ({data.gallery_images.filter(Boolean).length} Images)</span>
+                    </h4>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                      {data.gallery_images.filter(Boolean).map((img, gIdx) => (
+                        <div key={gIdx} className="aspect-video rounded-xl overflow-hidden bg-slate-100 border border-slate-200">
+                          <img
+                            src={img}
+                            alt={`Gallery ${gIdx + 1}`}
+                            className="w-full h-full object-cover hover:scale-105 transition-transform"
+                            onError={(e) => {
+                              (e.target as HTMLElement).style.display = 'none';
+                            }}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 {/* Target Audience Badges */}
                 {data.target_audience && data.target_audience.length > 0 && (
@@ -832,39 +903,91 @@ export const LiveDesktopViewportPreview: React.FC<LiveDesktopViewportPreviewProp
                   </div>
                 )}
 
-                {/* Presidential Welcome Letter Preview */}
-                {data.welcome_speaker_name && (
-                  <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-3 shadow-2xs">
-                    <div className="flex items-center space-x-3">
-                      {data.welcome_speaker_image ? (
-                        <img
-                          src={data.welcome_speaker_image}
-                          alt={data.welcome_speaker_name}
-                          className="w-12 h-12 rounded-2xl object-cover border border-slate-300 shadow-2xs shrink-0"
-                          onError={(e) => {
-                            (e.target as HTMLElement).style.display = 'none';
-                          }}
-                        />
-                      ) : (
-                        <div className="w-12 h-12 rounded-2xl bg-teal-100 text-teal-800 border border-teal-200 flex items-center justify-center font-bold text-sm shrink-0">
-                          {data.welcome_speaker_name.charAt(0)}
+                {/* Presidential Welcome Letter & Exhibitor Carousel Preview */}
+                <div className="space-y-3">
+                  {data.welcome_speaker_name && (
+                    <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-3 shadow-2xs">
+                      <div className="flex items-center space-x-3">
+                        {data.welcome_speaker_image ? (
+                          <img
+                            src={data.welcome_speaker_image}
+                            alt={data.welcome_speaker_name}
+                            className="w-12 h-12 rounded-2xl object-cover border border-slate-300 shadow-2xs shrink-0"
+                            onError={(e) => {
+                              (e.target as HTMLElement).style.display = 'none';
+                            }}
+                          />
+                        ) : (
+                          <div className="w-12 h-12 rounded-2xl bg-teal-100 text-teal-800 border border-teal-200 flex items-center justify-center font-bold text-sm shrink-0">
+                            {data.welcome_speaker_name.charAt(0)}
+                          </div>
+                        )}
+                        <div>
+                          <div className="text-[10px] font-bold uppercase tracking-wider text-teal-800">
+                            {data.welcome_heading || 'Presidential Welcome Address'}
+                          </div>
+                          <div className="font-bold text-xs text-slate-900">{data.welcome_speaker_name}</div>
+                          <div className="text-[11px] text-slate-500">
+                            {data.welcome_speaker_role ? `${data.welcome_speaker_role} • ` : ''}{data.welcome_speaker_title}
+                          </div>
+                        </div>
+                      </div>
+                      {data.welcome_message && (
+                        <p className="text-xs text-slate-700 leading-relaxed italic bg-white p-3 rounded-xl border border-slate-200">
+                          "{data.welcome_message}"
+                        </p>
+                      )}
+                      {data.welcome_footer_text && (
+                        <div className="text-[10px] text-slate-400 font-medium text-right">
+                          — {data.welcome_footer_text}
                         </div>
                       )}
-                      <div>
-                        <div className="text-[10px] font-bold uppercase tracking-wider text-teal-800">
-                          Presidential Welcome Message
-                        </div>
-                        <div className="font-bold text-xs text-slate-900">{data.welcome_speaker_name}</div>
-                        <div className="text-[11px] text-slate-500">{data.welcome_speaker_title}</div>
-                      </div>
                     </div>
-                    {data.welcome_message && (
-                      <p className="text-xs text-slate-700 leading-relaxed italic bg-white p-3 rounded-xl border border-slate-200">
-                        "{data.welcome_message}"
-                      </p>
-                    )}
-                  </div>
-                )}
+                  )}
+
+                  {/* Industry Exhibitor Preview Card */}
+                  {(data.exhibitor_speaker_name || data.exhibitor_heading) && (
+                    <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-3 shadow-2xs">
+                      <div className="flex items-center space-x-3">
+                        {data.exhibitor_image ? (
+                          <img
+                            src={data.exhibitor_image}
+                            alt={data.exhibitor_speaker_name || 'Exhibitor'}
+                            className="w-12 h-12 rounded-2xl object-cover border border-slate-300 shadow-2xs shrink-0"
+                            onError={(e) => {
+                              (e.target as HTMLElement).style.display = 'none';
+                            }}
+                          />
+                        ) : (
+                          <div className="w-12 h-12 rounded-2xl bg-teal-100 text-teal-800 border border-teal-200 flex items-center justify-center font-bold text-sm shrink-0">
+                            <Building2 className="w-6 h-6 text-teal-700" />
+                          </div>
+                        )}
+                        <div>
+                          <div className="text-[10px] font-bold uppercase tracking-wider text-teal-800">
+                            {data.exhibitor_heading || 'Industry Exhibitors'}
+                          </div>
+                          <div className="font-bold text-xs text-slate-900">
+                            {data.exhibitor_speaker_name || 'Confirmed Industry Exhibitors'}
+                          </div>
+                          <div className="text-[11px] text-slate-500">
+                            {data.exhibitor_speaker_role ? `${data.exhibitor_speaker_role} • ` : ''}{data.exhibitor_speaker_title}
+                          </div>
+                        </div>
+                      </div>
+                      {data.exhibitor_message && (
+                        <p className="text-xs text-slate-700 leading-relaxed italic bg-white p-3 rounded-xl border border-slate-200">
+                          "{data.exhibitor_message}"
+                        </p>
+                      )}
+                      {data.exhibitor_footer_text && (
+                        <div className="text-[10px] text-slate-400 font-medium text-right">
+                          — {data.exhibitor_footer_text}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
 
                 {/* Important Dates & Deadlines Matrix */}
                 <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs space-y-2.5">
@@ -1070,7 +1193,7 @@ export const LiveDesktopViewportPreview: React.FC<LiveDesktopViewportPreviewProp
               <div className="space-y-3 animate-in fade-in duration-150">
                 <div className="flex items-center justify-between">
                   <div className="text-xs font-bold text-slate-900 font-display">
-                    Featured Keynote & Invited Speakers ({data.speakers?.length || 0})
+                    Conference Speakers & Faculty ({data.speakers?.length || 0})
                   </div>
                   <span className="text-[10px] text-teal-800 bg-teal-50 border border-teal-200 px-2 py-0.5 rounded font-bold">
                     Global Faculty

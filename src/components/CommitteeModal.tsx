@@ -21,10 +21,10 @@ export const CommitteeModal: React.FC<CommitteeModalProps> = ({ member, onClose 
         onClick={e => e.stopPropagation()}
       >
         {/* Header Photo + Bio Bar */}
-        <div className="relative bg-gradient-to-r from-slate-900 to-teal-950 p-6 sm:p-8 text-white">
+        <div className="relative bg-gradient-to-r from-[#0A2540] to-teal-950 p-6 sm:p-8 text-white">
           <button
             onClick={onClose}
-            className="absolute top-4 right-4 p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
+            className="absolute top-4 right-4 p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
@@ -36,14 +36,14 @@ export const CommitteeModal: React.FC<CommitteeModalProps> = ({ member, onClose 
               className="w-24 h-24 sm:w-28 sm:h-28 rounded-2xl object-cover border-2 border-teal-400/50 shadow-xl flex-shrink-0"
             />
             <div className="text-center sm:text-left space-y-1">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-teal-300 bg-teal-900/60 px-2.5 py-0.5 rounded-full border border-teal-500/30">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-[#14B8A6] bg-teal-900/60 px-2.5 py-0.5 rounded-full border border-teal-500/30 inline-block">
                 {member.committee_role}
               </span>
               <h3 className="text-xl sm:text-2xl font-bold font-display text-white">
                 {member.name}
               </h3>
               <p className="text-xs text-teal-200">{member.designation}</p>
-              <p className="text-xs text-slate-400 font-medium">
+              <p className="text-xs text-slate-300 font-medium">
                 {member.institution} • {member.country}
               </p>
             </div>
@@ -54,8 +54,8 @@ export const CommitteeModal: React.FC<CommitteeModalProps> = ({ member, onClose 
         <div className="p-6 sm:p-8 space-y-6 max-h-[60vh] overflow-y-auto">
           {/* Biography */}
           <div>
-            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2 flex items-center">
-              <Sparkles className="w-3.5 h-3.5 text-teal-600 mr-1.5" />
+            <h4 className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-2 flex items-center">
+              <Sparkles className="w-3.5 h-3.5 text-[#0E7490] mr-1.5" />
               Academic Biography
             </h4>
             <p className="text-sm text-slate-700 leading-relaxed">{member.biography}</p>
@@ -64,14 +64,14 @@ export const CommitteeModal: React.FC<CommitteeModalProps> = ({ member, onClose 
           {/* Research Interests */}
           {member.research_interests && (
             <div>
-              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">
+              <h4 className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-2">
                 Primary Research Interests
               </h4>
               <div className="flex flex-wrap gap-2">
                 {member.research_interests.split(',').map((interest, idx) => (
                   <span
                     key={idx}
-                    className="text-xs font-semibold text-teal-800 bg-teal-50 border border-teal-200/70 px-3 py-1 rounded-xl"
+                    className="text-xs font-semibold text-[#0E7490] bg-teal-50 border border-teal-200/70 px-3 py-1 rounded-xl"
                   >
                     {interest.trim()}
                   </span>

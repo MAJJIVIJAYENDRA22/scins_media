@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { X, CheckCircle2, CreditCard, ShieldCheck, ArrowRight, ArrowLeft, Sparkles, Building, User, Mail, Globe, MapPin } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { Conference, RegistrationCategory } from '../types';
@@ -17,7 +17,31 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
   conference
 }) => {
   const [step, setStep] = useState(1);
-  const [selectedCat, setSelectedCat] = useState<RegistrationCategory>(REGISTRATION_CATEGORIES[1]); // Academician
+
+  const categoriesList = useMemo(() => {
+    const confCats = (conference.categories && conference.categories.length > 0)
+      ? conference.categories
+      : REGISTRATION_CATEGORIES.filter(c => c.conference_id === conference.id);
+    const list = confCats.length > 0 ? confCats : REGISTRATION_CATEGORIES;
+    return list.map(c => ({
+      ...c,
+      code: c.code || `PASS-${c.id}`,
+      early_bird_fee: c.early_bird_fee ?? c.academic_price ?? c.early_bird_price ?? 399,
+      standard_fee: c.standard_fee ?? c.industry_price ?? c.price ?? 499,
+      benefits: (c.benefits && c.benefits.length > 0)
+        ? c.benefits
+        : (c.features && c.features.length > 0)
+          ? c.features
+          : [
+              'Access to all scientific sessions & keynotes',
+              'Conference kit, badge & printed abstracts book',
+              'Daily organic networking luncheon & coffee breaks',
+              'Official Certificate of Attendance / Presentation'
+            ]
+    }));
+  }, [conference.categories, conference.id]);
+
+  const [selectedCat, setSelectedCat] = useState<RegistrationCategory>(() => categoriesList[0] || REGISTRATION_CATEGORIES[0]);
   const [submitting, setSubmitting] = useState(false);
   const [registrationId, setRegistrationId] = useState<string | null>(null);
 
@@ -154,7 +178,7 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                {REGISTRATION_CATEGORIES.map(cat => {
+                {categoriesList.map(cat => {
                   const isSelected = selectedCat.id === cat.id;
                   return (
                     <div

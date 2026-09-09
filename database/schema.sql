@@ -114,11 +114,27 @@ CREATE TABLE conferences (
     mode ENUM('in-person', 'hybrid', 'virtual') DEFAULT 'hybrid',
     status ENUM('draft', 'published', 'archived') DEFAULT 'published',
     hero_image VARCHAR(255),
+    flyer_url VARCHAR(255),
     featured_badge VARCHAR(100) DEFAULT '2nd Edition',
+    display_order INT DEFAULT 0,
+    about_heading VARCHAR(255),
+    about_highlights JSON DEFAULT NULL,
+    gallery_images JSON DEFAULT NULL,
+    welcome_heading VARCHAR(255),
     welcome_message LONGTEXT,
     welcome_speaker_name VARCHAR(100),
+    welcome_speaker_role VARCHAR(100) DEFAULT 'Conference Chair',
     welcome_speaker_title VARCHAR(150),
     welcome_speaker_image VARCHAR(255),
+    welcome_footer_text TEXT,
+    exhibitor_heading VARCHAR(255),
+    exhibitor_message LONGTEXT,
+    exhibitor_speaker_name VARCHAR(100),
+    exhibitor_speaker_role VARCHAR(100) DEFAULT 'Platinum & Gold Partners',
+    exhibitor_speaker_title VARCHAR(255),
+    exhibitor_image VARCHAR(255),
+    exhibitor_footer_text TEXT,
+    program_image VARCHAR(255),
     meta_title VARCHAR(255),
     meta_description TEXT,
     keywords VARCHAR(255),
@@ -128,7 +144,8 @@ CREATE TABLE conferences (
     FOREIGN KEY (created_by) REFERENCES admins(id) ON DELETE SET NULL,
     INDEX idx_slug (slug),
     INDEX idx_status (status),
-    INDEX idx_dates (start_date, end_date)
+    INDEX idx_dates (start_date, end_date),
+    INDEX idx_order (display_order)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE conference_gallery (

@@ -23,7 +23,9 @@ import {
   FAQS,
   CONFERENCE_FLYERS,
   AUDIT_LOGS,
-  INITIAL_ADMIN_USER
+  INITIAL_ADMIN_USER,
+  INITIAL_CONTACT_ENQUIRIES,
+  INITIAL_SUBSCRIBERS
 } from './src/data/initialData.ts';
 
 import {
@@ -36,7 +38,9 @@ import {
   AbstractSubmission,
   AuditLog,
   AdminUser,
-  Sponsor
+  Sponsor,
+  ContactEnquiry,
+  NewsletterSubscriber
 } from './src/types/index.ts';
 
 // In-Memory Data Store (Synchronized with MySQL schema when DB credentials are configured)
@@ -57,9 +61,9 @@ class DatabaseStore {
   faqs = [...FAQS];
 
   flyers = [...CONFERENCE_FLYERS];
-  contactEnquiries: any[] = [];
+  contactEnquiries: ContactEnquiry[] = [...INITIAL_CONTACT_ENQUIRIES];
   quoteRequests: any[] = [];
-  subscribers: string[] = ['dr.smith@harvard.edu', 'prof.weintraub@imperial.ac.uk'];
+  subscribers: NewsletterSubscriber[] = [...INITIAL_SUBSCRIBERS];
   auditLogs: AuditLog[] = [...AUDIT_LOGS];
   currentUser: AdminUser = { ...INITIAL_ADMIN_USER };
 
@@ -243,6 +247,14 @@ async function startServer() {
       );
     }
 
+    // Sort by display_order ascending, then start_date
+    list.sort((a, b) => {
+      const orderA = a.display_order ?? 999;
+      const orderB = b.display_order ?? 999;
+      if (orderA !== orderB) return orderA - orderB;
+      return new Date(a.start_date || '').getTime() - new Date(b.start_date || '').getTime();
+    });
+
     res.json({
       success: true,
       data: list,
@@ -256,13 +268,27 @@ async function startServer() {
     if (!conf) {
       return res.status(404).json({ success: false, message: `Conference '${identifier}' not found` });
     }
-    res.json({ success: true, data: conf });
+    const fullConf = {
+      ...conf,
+      committee: conf.committee || db.committee.filter(m => m.conference_id === conf.id),
+      sponsors: conf.sponsors || db.sponsors.filter(s => s.conference_id === conf.id),
+      media_partners: conf.media_partners || db.mediaPartners.filter(m => m.conference_id === conf.id),
+      schedule: conf.schedule || db.schedule.filter(s => s.conference_id === conf.id),
+      categories: conf.categories || db.categories.filter(c => c.conference_id === conf.id),
+      speakers: conf.speakers || db.speakers.filter(s => s.conference_id === conf.id),
+      sessions: conf.sessions || db.sessions.filter(s => s.conference_id === conf.id)
+    };
+    res.json({ success: true, data: fullConf });
   });
 
   app.post('/api/v1/conferences', (req: Request, res: Response) => {
     const body = req.body;
+    const nextOrder = db.conferences.length > 0 
+      ? Math.max(...db.conferences.map(c => c.display_order ?? 0)) + 1 
+      : 1;
+
     const newConf: Conference = {
-      id: db.conferences.length + 1,
+      id: Math.max(...db.conferences.map(c => c.id), 0) + 1,
       title: body.title || 'Untitled Scientific Congress',
       short_title: body.short_title || 'Congress 2026',
       slug: body.slug || `conference-${Date.now()}`,
@@ -271,6 +297,9 @@ async function startServer() {
       tagline: body.tagline || 'Pioneering Discovery',
       description: body.description || '',
       detailed_about: body.detailed_about || '',
+      about_heading: body.about_heading || '',
+      about_highlights: Array.isArray(body.about_highlights) ? body.about_highlights : [],
+      gallery_images: Array.isArray(body.gallery_images) ? body.gallery_images : [],
       domain: body.domain || 'Biotechnology',
       city: body.city || 'Paris',
       country: body.country || 'France',
@@ -285,17 +314,129 @@ async function startServer() {
       mode: body.mode || 'hybrid',
       status: body.status || 'published',
       hero_image: body.hero_image || 'https://images.unsplash.com/photo-1532094349884-543bc11b234d?auto=format&fit=crop&w=1600&q=80',
+      flyer_url: body.flyer_url || '',
       featured_badge: body.featured_badge || 'Flagship Edition',
+      display_order: typeof body.display_order === 'number' ? body.display_order : nextOrder,
+      
+      // Welcome Address
+      welcome_heading: body.welcome_heading || 'Message from the General Chair',
       welcome_message: body.welcome_message || '',
       welcome_speaker_name: body.welcome_speaker_name || '',
+      welcome_speaker_role: body.welcome_speaker_role || 'Conference Chair',
       welcome_speaker_title: body.welcome_speaker_title || '',
       welcome_speaker_image: body.welcome_speaker_image || '',
+      welcome_footer_text: body.welcome_footer_text || '',
+
+      // Industry Exhibitors
+      exhibitor_heading: body.exhibitor_heading || 'Global Industry Leaders & Technology Showcase',
+      exhibitor_message: body.exhibitor_message || '',
+      exhibitor_speaker_name: body.exhibitor_speaker_name || 'Confirmed Industry Exhibitors',
+      exhibitor_speaker_role: body.exhibitor_speaker_role || 'Platinum & Gold Partners',
+      exhibitor_speaker_title: body.exhibitor_speaker_title || '',
+      exhibitor_image: body.exhibitor_image || '',
+      exhibitor_footer_text: body.exhibitor_footer_text || '',
+
+      // Program image
+      program_image: body.program_image || '',
+
       meta_title: body.meta_title || body.title,
       meta_description: body.meta_description || body.description,
       keywords: body.keywords || '',
       created_at: new Date().toISOString()
     };
     db.conferences.push(newConf);
+
+    // Persist child entities if provided by the 14-step wizard
+    if (Array.isArray(body.committee) && body.committee.length > 0) {
+      body.committee.forEach((m: any) => {
+        const memId = Math.max(...db.committee.map(x => x.id), 0) + 1;
+        db.committee.push({
+          ...m,
+          id: memId,
+          conference_id: newConf.id,
+          is_published: true,
+          status: 'active'
+        });
+      });
+    }
+
+    if (Array.isArray(body.speakers) && body.speakers.length > 0) {
+      body.speakers.forEach((s: any) => {
+        const spkId = Math.max(...db.speakers.map(x => x.id), 0) + 1;
+        db.speakers.push({
+          ...s,
+          id: spkId,
+          conference_id: newConf.id,
+          is_active: true,
+          status: 'active'
+        });
+      });
+    }
+
+    if (Array.isArray(body.sessions) && body.sessions.length > 0) {
+      body.sessions.forEach((ses: any, sIdx: number) => {
+        const sesId = Math.max(...db.sessions.map(x => x.id), 0) + 1;
+        db.sessions.push({
+          ...ses,
+          id: sesId,
+          conference_id: newConf.id,
+          session_number: sIdx + 1,
+          is_published: true,
+          status: 'published'
+        });
+      });
+    }
+
+    if (Array.isArray(body.categories) && body.categories.length > 0) {
+      body.categories.forEach((cat: any) => {
+        const catId = Math.max(...db.categories.map(x => x.id), 0) + 1;
+        db.categories.push({
+          ...cat,
+          id: catId,
+          conference_id: newConf.id,
+          currency: cat.currency || 'USD',
+          early_bird_fee: cat.early_bird_price || cat.early_bird_fee || 799,
+          standard_fee: cat.price || cat.standard_fee || 899
+        });
+      });
+    }
+
+    if (Array.isArray(body.sponsors) && body.sponsors.length > 0) {
+      body.sponsors.forEach((spo: any) => {
+        const spoId = Math.max(...db.sponsors.map(x => x.id), 0) + 1;
+        db.sponsors.push({
+          ...spo,
+          id: spoId,
+          conference_id: newConf.id,
+          logo_url: spo.logo_url || 'https://images.unsplash.com/photo-1599305445671-ac291c95aaa9?auto=format&fit=crop&w=200&q=80',
+          tier: spo.tier || 'Platinum Sponsor'
+        });
+      });
+    }
+
+    if (Array.isArray(body.media_partners) && body.media_partners.length > 0) {
+      body.media_partners.forEach((m: any) => {
+        const mId = Math.max(...db.mediaPartners.map(x => x.id), 0) + 1;
+        db.mediaPartners.push({
+          ...m,
+          id: mId,
+          conference_id: newConf.id
+        });
+      });
+    }
+
+    if (Array.isArray(body.schedule) && body.schedule.length > 0) {
+      body.schedule.forEach((s: any, idx: number) => {
+        const sId = Math.max(...db.schedule.map(x => x.id), 0) + 1;
+        db.schedule.push({
+          ...s,
+          id: sId,
+          conference_id: newConf.id,
+          display_order: s.display_order ?? (idx + 1)
+        });
+      });
+    }
+
     db.addAuditLog('CREATE_CONFERENCE', 'Conference', newConf.conference_code, `Created conference: ${newConf.title}`);
     res.status(201).json({ success: true, message: 'Conference created successfully', data: newConf });
   });
@@ -307,6 +448,66 @@ async function startServer() {
       return res.status(404).json({ success: false, message: 'Conference not found' });
     }
     db.conferences[index] = { ...db.conferences[index], ...req.body };
+
+    // Synchronize child entities for this conference
+    if (Array.isArray(req.body.committee)) {
+      db.committee = db.committee.filter(m => m.conference_id !== id).concat(
+        req.body.committee.map((m: any, idx: number) => ({
+          ...m,
+          id: m.id || (Math.max(...db.committee.map(x => x.id), 0) + idx + 1),
+          conference_id: id,
+          is_published: m.is_published !== undefined ? m.is_published : true,
+          status: m.status || 'active'
+        }))
+      );
+    }
+
+    if (Array.isArray(req.body.sponsors)) {
+      db.sponsors = db.sponsors.filter(s => s.conference_id !== id).concat(
+        req.body.sponsors.map((s: any, idx: number) => ({
+          ...s,
+          id: s.id || (Math.max(...db.sponsors.map(x => x.id), 0) + idx + 1),
+          conference_id: id
+        }))
+      );
+    }
+
+    if (Array.isArray(req.body.media_partners)) {
+      db.mediaPartners = db.mediaPartners.filter(m => m.conference_id !== id).concat(
+        req.body.media_partners.map((m: any, idx: number) => ({
+          ...m,
+          id: m.id || (Math.max(...db.mediaPartners.map(x => x.id), 0) + idx + 1),
+          conference_id: id
+        }))
+      );
+    }
+
+    if (Array.isArray(req.body.categories)) {
+      db.categories = db.categories.filter(c => c.conference_id !== id).concat(
+        req.body.categories.map((c: any, idx: number) => ({
+          ...c,
+          id: c.id || (Math.max(...db.categories.map(x => x.id), 0) + idx + 1),
+          conference_id: id,
+          currency: c.currency || 'USD',
+          early_bird_fee: c.early_bird_fee || c.early_bird_price || 799,
+          standard_fee: c.standard_fee || c.price || 899,
+          price: c.price || c.standard_fee || 899,
+          early_bird_price: c.early_bird_price || c.early_bird_fee || 799
+        }))
+      );
+    }
+
+    if (Array.isArray(req.body.schedule)) {
+      db.schedule = db.schedule.filter(s => s.conference_id !== id).concat(
+        req.body.schedule.map((s: any, idx: number) => ({
+          ...s,
+          id: s.id || (Math.max(...db.schedule.map(x => x.id), 0) + idx + 1),
+          conference_id: id,
+          display_order: s.display_order ?? (idx + 1)
+        }))
+      );
+    }
+
     db.addAuditLog('UPDATE_CONFERENCE', 'Conference', String(id), `Updated conference: ${db.conferences[index].title}`);
     res.json({ success: true, message: 'Conference updated successfully', data: db.conferences[index] });
   });
@@ -323,6 +524,20 @@ async function startServer() {
     }
     db.addAuditLog('UPDATE_CONFERENCE_STATUS', 'Conference', String(id), `Updated conference status to ${status}`);
     res.json({ success: true, message: `Status updated to ${status}`, data: db.conferences[index] });
+  });
+
+  app.patch('/api/v1/conferences/:id/order', (req: Request, res: Response) => {
+    const id = Number(req.params.id);
+    const { display_order } = req.body;
+    const index = db.conferences.findIndex(c => c.id === id);
+    if (index === -1) {
+      return res.status(404).json({ success: false, message: 'Conference not found' });
+    }
+    if (typeof display_order === 'number') {
+      db.conferences[index].display_order = display_order;
+    }
+    db.addAuditLog('UPDATE_CONFERENCE_ORDER', 'Conference', String(id), `Updated display order to ${display_order}`);
+    res.json({ success: true, message: `Display order updated to ${display_order}`, data: db.conferences[index] });
   });
 
   app.post('/api/v1/conferences/:id/duplicate', (req: Request, res: Response) => {
@@ -563,12 +778,22 @@ async function startServer() {
     res.json({ success: true, message: 'Speaker deleted successfully', data: removed });
   });
 
-  // 5. Sessions (20 Scientific Sessions)
+  // 5. Sessions (Scientific Sessions & Breakout Tracks)
   app.get('/api/v1/sessions', (req: Request, res: Response) => {
-    const { conference_id, search, track, type, status } = req.query;
+    const { conference_id, search, track, type, status, published_only } = req.query;
     let list = [...db.sessions];
     if (conference_id) {
       list = list.filter(s => s.conference_id === Number(conference_id));
+    }
+    if (published_only === 'true' || published_only === '1') {
+      list = list.filter(s =>
+        (s.is_published !== false) &&
+        (s.is_active !== false) &&
+        s.status !== 'draft' &&
+        s.status !== 'unpublished' &&
+        s.status !== 'archived' &&
+        s.status !== 'deleted'
+      );
     }
     if (track && track !== 'All') {
       list = list.filter(s => s.track === track || s.track.toLowerCase().includes(String(track).toLowerCase()));
@@ -577,7 +802,7 @@ async function startServer() {
       list = list.filter(s => s.session_type === type);
     }
     if (status && status !== 'All') {
-      list = list.filter(s => (s.status || 'scheduled') === status);
+      list = list.filter(s => (s.status || 'published') === status);
     }
     if (search && typeof search === 'string') {
       const q = search.toLowerCase();
@@ -604,6 +829,7 @@ async function startServer() {
 
   app.post('/api/v1/sessions', (req: Request, res: Response) => {
     const newId = Math.max(...db.sessions.map(s => s.id), 0) + 1;
+    const isPub = req.body.is_published !== undefined ? req.body.is_published : (req.body.status !== 'draft' && req.body.status !== 'archived' && req.body.status !== 'unpublished');
     const newSession: Session = {
       id: newId,
       conference_id: Number(req.body.conference_id) || 1,
@@ -619,8 +845,11 @@ async function startServer() {
       room: req.body.room || 'Auditorium Pasteur',
       session_type: req.body.session_type || 'Oral Presentation',
       display_order: Number(req.body.display_order) || newId,
-      status: req.body.status || 'scheduled',
+      status: req.body.status || (isPub ? 'published' : 'draft'),
+      is_published: isPub,
       is_active: req.body.is_active !== undefined ? req.body.is_active : true,
+      image_url: req.body.image_url || '',
+      icon: req.body.icon || '',
       chairperson: req.body.chairperson || req.body.chair_person || 'Prof. Session Chair',
       speaker_name: req.body.speaker_name || ''
     };
@@ -646,11 +875,14 @@ async function startServer() {
     if (index === -1) {
       return res.status(404).json({ success: false, message: 'Session not found' });
     }
-    if (req.body.status) {
+    if (req.body.status !== undefined) {
       db.sessions[index].status = req.body.status;
     }
     if (req.body.is_active !== undefined) {
       db.sessions[index].is_active = req.body.is_active;
+    }
+    if (req.body.is_published !== undefined) {
+      db.sessions[index].is_published = req.body.is_published;
     }
     db.addAuditLog('TOGGLE_SESSION_STATUS', 'Session', db.sessions[index].session_code, `Updated status to ${req.body.status || 'updated'}`);
     res.json({ success: true, message: 'Session status updated', data: db.sessions[index] });
@@ -772,9 +1004,104 @@ async function startServer() {
 
   // 6. Schedule
   app.get('/api/v1/schedule', (req: Request, res: Response) => {
-    const confId = req.query.conference_id ? Number(req.query.conference_id) : 1;
-    const list = db.schedule.filter(s => s.conference_id === confId);
-    res.json({ success: true, data: list.length > 0 ? list : db.schedule });
+    const { conference_id, day_label } = req.query;
+    let list = [...db.schedule];
+    if (conference_id) {
+      const filtered = list.filter(s => s.conference_id === Number(conference_id));
+      list = filtered.length > 0 ? filtered : list;
+    }
+    if (day_label) {
+      list = list.filter(s => s.day_label === day_label);
+    }
+    res.json({ success: true, data: list });
+  });
+
+  app.post('/api/v1/schedule', (req: Request, res: Response) => {
+    const newId = Math.max(...db.schedule.map(s => s.id), 0) + 1;
+    const item: ScheduleItem = {
+      id: newId,
+      conference_id: Number(req.body.conference_id) || 1,
+      day_number: Number(req.body.day_number) || 1,
+      day_label: req.body.day_label || (req.body.day_number === 2 ? 'Day 2' : 'Day 1'),
+      schedule_date: req.body.schedule_date || '2026-06-22',
+      start_time: req.body.start_time || '09:00',
+      end_time: req.body.end_time || '10:00',
+      title: req.body.title || 'Scientific Session',
+      description: req.body.description || '',
+      room: req.body.room || 'Auditorium Hall A',
+      track: req.body.track || 'General Track',
+      speaker_name: req.body.speaker_name || '',
+      speaker_affiliation: req.body.speaker_affiliation || '',
+      item_type: req.body.item_type || 'session',
+      display_order: Number(req.body.display_order) || newId
+    };
+    db.schedule.push(item);
+    db.addAuditLog('ADD_SCHEDULE_ITEM', 'ScheduleItem', String(newId), `Added schedule item: ${item.title}`);
+    res.status(201).json({ success: true, message: 'Schedule item created', data: item });
+  });
+
+  app.put('/api/v1/schedule/:id', (req: Request, res: Response) => {
+    const id = Number(req.params.id);
+    const index = db.schedule.findIndex(s => s.id === id);
+    if (index === -1) return res.status(404).json({ success: false, message: 'Schedule item not found' });
+    db.schedule[index] = { ...db.schedule[index], ...req.body };
+    db.addAuditLog('UPDATE_SCHEDULE_ITEM', 'ScheduleItem', String(id), `Updated schedule item: ${db.schedule[index].title}`);
+    res.json({ success: true, message: 'Schedule item updated', data: db.schedule[index] });
+  });
+
+  app.delete('/api/v1/schedule/:id', (req: Request, res: Response) => {
+    const id = Number(req.params.id);
+    const index = db.schedule.findIndex(s => s.id === id);
+    if (index === -1) return res.status(404).json({ success: false, message: 'Schedule item not found' });
+    const removed = db.schedule.splice(index, 1)[0];
+    db.addAuditLog('DELETE_SCHEDULE_ITEM', 'ScheduleItem', String(id), `Deleted schedule item: ${removed.title}`);
+    res.json({ success: true, message: 'Schedule item deleted', data: removed });
+  });
+
+  // 6.5 Registration Categories
+  app.get('/api/v1/registration-categories', (req: Request, res: Response) => {
+    const { conference_id } = req.query;
+    let list = [...db.categories];
+    if (conference_id) {
+      const filtered = list.filter(c => c.conference_id === Number(conference_id));
+      list = filtered.length > 0 ? filtered : list;
+    }
+    res.json({ success: true, data: list });
+  });
+
+  app.post('/api/v1/registration-categories', (req: Request, res: Response) => {
+    const newId = Math.max(...db.categories.map(c => c.id), 0) + 1;
+    const cat = {
+      ...req.body,
+      id: newId,
+      conference_id: Number(req.body.conference_id) || 1,
+      early_bird_fee: Number(req.body.early_bird_fee || req.body.early_bird_price) || 649,
+      standard_fee: Number(req.body.standard_fee || req.body.price) || 799,
+      price: Number(req.body.price || req.body.standard_fee) || 799,
+      early_bird_price: Number(req.body.early_bird_price || req.body.early_bird_fee) || 649,
+      benefits: Array.isArray(req.body.benefits) ? req.body.benefits : ['Full conference access']
+    };
+    db.categories.push(cat);
+    db.addAuditLog('ADD_REGISTRATION_CATEGORY', 'RegistrationCategory', String(newId), `Added category: ${cat.name}`);
+    res.status(201).json({ success: true, message: 'Category created', data: cat });
+  });
+
+  app.put('/api/v1/registration-categories/:id', (req: Request, res: Response) => {
+    const id = Number(req.params.id);
+    const index = db.categories.findIndex(c => c.id === id);
+    if (index === -1) return res.status(404).json({ success: false, message: 'Category not found' });
+    db.categories[index] = { ...db.categories[index], ...req.body };
+    db.addAuditLog('UPDATE_REGISTRATION_CATEGORY', 'RegistrationCategory', String(id), `Updated category: ${db.categories[index].name}`);
+    res.json({ success: true, message: 'Category updated', data: db.categories[index] });
+  });
+
+  app.delete('/api/v1/registration-categories/:id', (req: Request, res: Response) => {
+    const id = Number(req.params.id);
+    const index = db.categories.findIndex(c => c.id === id);
+    if (index === -1) return res.status(404).json({ success: false, message: 'Category not found' });
+    const removed = db.categories.splice(index, 1)[0];
+    db.addAuditLog('DELETE_REGISTRATION_CATEGORY', 'RegistrationCategory', String(id), `Deleted category: ${removed.name}`);
+    res.json({ success: true, message: 'Category deleted', data: removed });
   });
 
   // 7. Registrations
@@ -893,21 +1220,109 @@ async function startServer() {
   // 9. Publications, Media Partners, Blogs, FAQs
   app.get('/api/v1/publications', (req, res) => res.json({ success: true, data: db.publications }));
   app.get('/api/v1/media-partners', (req, res) => res.json({ success: true, data: db.mediaPartners }));
-  app.get('/api/v1/testimonials', (req, res) => res.json({ success: true, data: db.testimonials }));
+  app.get('/api/v1/testimonials', (req: Request, res: Response) => {
+    const { conference_id } = req.query;
+    let list = [...db.testimonials];
+    if (conference_id) {
+      list = list.filter(t => t.conference_id === Number(conference_id));
+    }
+    res.json({ success: true, data: list.length > 0 ? list : db.testimonials });
+  });
+
+  app.post('/api/v1/testimonials', (req: Request, res: Response) => {
+    const newId = Math.max(...db.testimonials.map(t => t.id), 0) + 1;
+    const item = {
+      id: newId,
+      name: req.body.name || 'Anonymous Scholar',
+      designation: req.body.designation || 'Faculty Member',
+      institution: req.body.institution || 'University',
+      country: req.body.country || 'Global',
+      quote: req.body.quote || '',
+      photo_url: req.body.photo_url || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&q=80',
+      rating: Number(req.body.rating) || 5,
+      is_featured: req.body.is_featured !== undefined ? req.body.is_featured : true,
+      conference_id: req.body.conference_id ? Number(req.body.conference_id) : undefined
+    };
+    db.testimonials.push(item);
+    res.status(201).json({ success: true, message: 'Testimonial created', data: item });
+  });
+
+  app.put('/api/v1/testimonials/:id', (req: Request, res: Response) => {
+    const id = Number(req.params.id);
+    const index = db.testimonials.findIndex(t => t.id === id);
+    if (index === -1) return res.status(404).json({ success: false, message: 'Testimonial not found' });
+    db.testimonials[index] = { ...db.testimonials[index], ...req.body };
+    res.json({ success: true, message: 'Testimonial updated', data: db.testimonials[index] });
+  });
+
+  app.delete('/api/v1/testimonials/:id', (req: Request, res: Response) => {
+    const id = Number(req.params.id);
+    const index = db.testimonials.findIndex(t => t.id === id);
+    if (index === -1) return res.status(404).json({ success: false, message: 'Testimonial not found' });
+    const removed = db.testimonials.splice(index, 1)[0];
+    res.json({ success: true, message: 'Testimonial deleted', data: removed });
+  });
   app.get('/api/v1/blogs', (req, res) => res.json({ success: true, data: db.blogs }));
   app.get('/api/v1/faqs', (req, res) => res.json({ success: true, data: db.faqs }));
   app.get('/api/v1/flyers', (req, res) => res.json({ success: true, data: db.flyers }));
   app.get('/api/v1/audit-logs', (req, res) => res.json({ success: true, data: db.auditLogs }));
 
   // Enquiries & Newsletters
+  app.get('/api/v1/contact', (req: Request, res: Response) => {
+    const { status, search } = req.query;
+    let list = [...db.contactEnquiries];
+    if (status && status !== 'All') {
+      list = list.filter(c => c.status === status);
+    }
+    if (search && typeof search === 'string') {
+      const q = search.toLowerCase();
+      list = list.filter(c =>
+        c.name.toLowerCase().includes(q) ||
+        c.email.toLowerCase().includes(q) ||
+        (c.phone && c.phone.toLowerCase().includes(q)) ||
+        c.subject.toLowerCase().includes(q) ||
+        c.message.toLowerCase().includes(q)
+      );
+    }
+    res.json({ success: true, data: list });
+  });
+
   app.post('/api/v1/contact', (req: Request, res: Response) => {
-    const enquiry = { id: db.contactEnquiries.length + 1, ...req.body, status: 'new', created_at: new Date().toISOString() };
-    db.contactEnquiries.push(enquiry);
-    db.addAuditLog('NEW_CONTACT_ENQUIRY', 'ContactEnquiry', String(enquiry.id), `Received message from ${enquiry.email}`);
+    const newId = Math.max(...db.contactEnquiries.map(c => c.id), 0) + 1;
+    const enquiry: ContactEnquiry = {
+      id: newId,
+      name: req.body.name || 'Anonymous Researcher',
+      email: req.body.email || '',
+      phone: req.body.phone || '',
+      subject: req.body.subject || 'General Academic Inquiry',
+      message: req.body.message || '',
+      conference_code: req.body.conference_code || 'BIO-2026',
+      conference_id: Number(req.body.conference_id) || 1,
+      status: 'new',
+      created_at: new Date().toISOString().replace('T', ' ').substring(0, 19)
+    };
+    db.contactEnquiries.unshift(enquiry);
+    db.addAuditLog('NEW_CONTACT_ENQUIRY', 'ContactEnquiry', String(enquiry.id), `Received message from ${enquiry.name} (${enquiry.email})`);
     res.status(201).json({ success: true, message: 'Your enquiry has been submitted to the Secretariat.', data: enquiry });
   });
 
+  app.patch('/api/v1/contact/:id/status', (req: Request, res: Response) => {
+    const id = Number(req.params.id);
+    const item = db.contactEnquiries.find(c => c.id === id);
+    if (!item) return res.status(404).json({ success: false, message: 'Contact submission not found' });
+    if (req.body.status) item.status = req.body.status;
+    db.addAuditLog('UPDATE_CONTACT_STATUS', 'ContactEnquiry', String(id), `Updated inquiry status to ${req.body.status}`);
+    res.json({ success: true, message: 'Status updated successfully', data: item });
+  });
 
+  app.delete('/api/v1/contact/:id', (req: Request, res: Response) => {
+    const id = Number(req.params.id);
+    const index = db.contactEnquiries.findIndex(c => c.id === id);
+    if (index === -1) return res.status(404).json({ success: false, message: 'Contact submission not found' });
+    const removed = db.contactEnquiries.splice(index, 1)[0];
+    db.addAuditLog('DELETE_CONTACT_ENQUIRY', 'ContactEnquiry', String(id), `Deleted inquiry from ${removed.email}`);
+    res.json({ success: true, message: 'Submission deleted successfully', data: removed });
+  });
 
   app.post('/api/v1/quotes', (req: Request, res: Response) => {
     const quote = { id: db.quoteRequests.length + 1, ...req.body, status: 'new', created_at: new Date().toISOString() };
@@ -916,13 +1331,55 @@ async function startServer() {
     res.status(201).json({ success: true, message: 'Custom proposal request received', data: quote });
   });
 
-  app.post('/api/v1/newsletter', (req: Request, res: Response) => {
-    const { email } = req.body;
-    if (email && !db.subscribers.includes(email)) {
-      db.subscribers.push(email);
-      db.addAuditLog('NEWSLETTER_SUBSCRIBE', 'Newsletter', email, 'New subscriber joined scientific updates');
+  app.get('/api/v1/subscribers', (req: Request, res: Response) => {
+    const { status, search } = req.query;
+    let list = [...db.subscribers];
+    if (status && status !== 'All') {
+      list = list.filter(s => s.status === status);
     }
-    res.json({ success: true, message: 'Subscribed to Scinsmedia Scientific Intelligence updates.' });
+    if (search && typeof search === 'string') {
+      const q = search.toLowerCase();
+      list = list.filter(s => s.email.toLowerCase().includes(q));
+    }
+    res.json({ success: true, data: list });
+  });
+
+  app.post('/api/v1/newsletter', (req: Request, res: Response) => {
+    const email = (req.body.email || '').trim().toLowerCase();
+    if (!email) return res.status(400).json({ success: false, message: 'Email is required' });
+    const existing = db.subscribers.find(s => s.email.toLowerCase() === email);
+    if (existing) {
+      existing.status = 'active';
+      return res.json({ success: true, message: 'Subscription reactivated.', data: existing });
+    }
+    const newId = Math.max(...db.subscribers.map(s => s.id), 0) + 1;
+    const newSub: NewsletterSubscriber = {
+      id: newId,
+      email,
+      status: 'active',
+      created_at: new Date().toISOString().replace('T', ' ').substring(0, 19)
+    };
+    db.subscribers.unshift(newSub);
+    db.addAuditLog('NEWSLETTER_SUBSCRIBE', 'Newsletter', email, 'New subscriber joined scientific intelligence updates');
+    res.status(201).json({ success: true, message: 'Subscribed to Scinsmedia Scientific Intelligence updates.', data: newSub });
+  });
+
+  app.patch('/api/v1/subscribers/:id/status', (req: Request, res: Response) => {
+    const id = Number(req.params.id);
+    const sub = db.subscribers.find(s => s.id === id);
+    if (!sub) return res.status(404).json({ success: false, message: 'Subscriber not found' });
+    if (req.body.status) sub.status = req.body.status;
+    db.addAuditLog('UPDATE_SUBSCRIBER_STATUS', 'Newsletter', sub.email, `Updated subscriber status to ${req.body.status}`);
+    res.json({ success: true, message: 'Subscriber status updated', data: sub });
+  });
+
+  app.delete('/api/v1/subscribers/:id', (req: Request, res: Response) => {
+    const id = Number(req.params.id);
+    const index = db.subscribers.findIndex(s => s.id === id);
+    if (index === -1) return res.status(404).json({ success: false, message: 'Subscriber not found' });
+    const removed = db.subscribers.splice(index, 1)[0];
+    db.addAuditLog('DELETE_SUBSCRIBER', 'Newsletter', removed.email, `Removed subscriber ${removed.email}`);
+    res.json({ success: true, message: 'Subscriber removed successfully', data: removed });
   });
 
   // Analytics & Export
@@ -969,6 +1426,12 @@ async function startServer() {
     } else if (type === 'abstracts') {
       csvData = 'SubmissionID,Title,PrimaryAuthor,Email,Country,Affiliation,Domain,Status,Date\n' +
         db.abstracts.map(a => `"${a.submission_id}","${a.title.replace(/"/g, '""')}","${a.primary_author_name}","${a.primary_author_email}","${a.primary_author_country}","${a.primary_author_affiliation}","${a.research_domain}","${a.status}","${a.created_at}"`).join('\n');
+    } else if (type === 'subscribers') {
+      csvData = 'ID,Email,SubscriptionDate,Status\n' +
+        db.subscribers.map(s => `"${s.id}","${s.email}","${s.created_at}","${s.status}"`).join('\n');
+    } else if (type === 'contacts') {
+      csvData = 'ID,Name,Email,Phone,Subject,Message,Status,Date\n' +
+        db.contactEnquiries.map(c => `"${c.id}","${c.name.replace(/"/g, '""')}","${c.email}","${c.phone || ''}","${c.subject.replace(/"/g, '""')}","${c.message.replace(/"/g, '""')}","${c.status}","${c.created_at}"`).join('\n');
     } else {
       csvData = 'ID,Name,Type,Date\n1,General Export,System,' + new Date().toISOString();
     }
