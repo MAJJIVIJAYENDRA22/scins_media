@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" type="image/png" href="/favicon.png" />
+    <link rel="apple-touch-icon" href="/favicon.png" />
+    <title>SCINS Media</title>
+    <meta name="description" content="Enterprise Scientific Conference and Publishing Platform with Admin Management, cPanel Database Sync, and Registrations" />
+    <meta property="og:title" content="SCINS Media" />
+    <meta property="og:description" content="Enterprise Scientific Conference and Publishing Platform with Admin Management, cPanel Database Sync, and Registrations" />
+    <meta property="og:type" content="website" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <script>
+      (function() {
+        var p = window.location.pathname || '';
+        var clean = (p.length > 1 && p.endsWith('/')) ? p.slice(0, -1) : p;
+        if (clean === '/admin' || clean.indexOf('/admin/') === 0) {
+          if (clean !== '/admin/login') {
+            try {
+              var token = sessionStorage.getItem('scins_admin_token') || localStorage.getItem('scins_admin_token');
+              var isValid = false;
+              if (token && typeof token === 'string' && token.length >= 10 && token.indexOf('.') !== -1) {
+                var parts = token.split('.');
+                if (parts.length === 3) {
+                  var b64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+                  var pad = (4 - (b64.length % 4)) % 4;
+                  var padded = b64 + '='.repeat(pad);
+                  var payload = JSON.parse(atob(padded));
+                  if (payload && (!payload.exp || payload.exp >= Math.floor(Date.now() / 1000))) {
+                    isValid = true;
+                  }
+                }
+              }
+              if (!isValid) {
+                try {
+                  localStorage.removeItem('scins_admin_token');
+                  localStorage.removeItem('scins_admin_user');
+                  sessionStorage.removeItem('scins_admin_token');
+                  sessionStorage.removeItem('scins_admin_user');
+                } catch (_) {}
+                window.location.replace('/admin/login');
+              }
+            } catch (e) {
+              window.location.replace('/admin/login');
+            }
+          }
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+

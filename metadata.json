@@ -1,0 +1,6 @@
+{
+  "name": "SCINS Media",
+  "description": "Enterprise Scientific Conference and Publishing Platform with Admin Management, cPanel Database Sync, and Registrations",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
