@@ -11,7 +11,7 @@ import { createServer as createViteServer } from 'vite';
 import mysql, { Pool } from 'mysql2/promise';
 import Stripe from 'stripe';
 import crypto from 'crypto';
-
+import fs from 'fs';
 import path from 'path';
 let stripeClient: Stripe | null = null;
 function getStripe(): Stripe | null {
@@ -450,10 +450,9 @@ async function syncToMysql(query: string, params: any[] = []) {
 }
 
 async function startServer() {
-  await initMysqlPool();
-
   const app = express();
-  const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
+  const rawPort = process.env.PORT ? String(process.env.PORT).trim() : '3000';
+  const PORT = parseInt(rawPort, 10) || 3000;
   const JWT_SECRET = process.env.JWT_SECRET || 'scinsmedia_secure_jwt_secret_2026';
   const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || 'admin@scinsmedia.com').toLowerCase();
   const ADMIN_PASSWORD_HASH = process.env.ADMIN_PASSWORD_HASH || '$2b$10$8SP.2YRdAvta0d9Yp/WSwuP7O9PQNkE23RMvdNhgMA8TiBd9mtjj.';
@@ -781,6 +780,7 @@ const adminLoginRateLimiter = rateLimit({
   max: process.env.NODE_ENV === 'production' ? 10 : 100, // relaxed in development
   standardHeaders: true,
   legacyHeaders: false,
+  validate: { trustProxy: false },
   handler: (req, res) => {
     res.status(429).json({ success: false, message: 'Too many login attempts. Please try again later.' });
   }
@@ -3552,14 +3552,10 @@ const adminLoginRateLimiter = rateLimit({
   // =========================================================================
   // FRONTEND INTEGRATION (Vite Middleware & Production Fallback)
   // =========================================================================
-  if (process.env.NODE_ENV !== 'production') {
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: 'spa'
-    });
-    app.use(vite.middlewares);
-  } else {
-    const distPath = path.join(process.cwd(), 'dist');
+  const distPath = path.join(process.cwd(), 'dist');
+  const hasDist = fs.existsSync(path.join(distPath, 'index.html'));
+
+  if (hasDist || process.env.NODE_ENV === 'production') {
     app.use(express.static(distPath, {
       maxAge: '7d',
       etag: true,
@@ -3568,10 +3564,23 @@ const adminLoginRateLimiter = rateLimit({
     app.get('*', (req: Request, res: Response) => {
       res.sendFile(path.join(distPath, 'index.html'));
     });
+  } else {
+    const vite = await createViteServer({
+      server: { middlewareMode: true },
+      appType: 'spa'
+    });
+    app.use(vite.middlewares);
   }
 
-  const server = app.listen(PORT, '0.0.0.0', () => {
-    console.log(`[Scinsmedia Enterprise Engine] Running on http://0.0.0.0:${PORT}`);
+  // Bind immediately to PORT on all network interfaces (0.0.0.0 for cloud container ingress)
+  const HOST = process.env.HOST || '0.0.0.0';
+  const server = app.listen(PORT, HOST, () => {
+    console.log(`[Scinsmedia Enterprise Engine] Listening on ${HOST}:${PORT} (ready for cloud traffic)`);
+  });
+
+  // Hydrate MySQL asynchronously without blocking or delaying port detection probes
+  initMysqlPool().catch(err => {
+    console.warn('[MySQL Background Sync Notice]:', err?.message || err);
   });
 
   // Request & Connection Timeouts (prevents Slowloris & dangling socket leaks)
