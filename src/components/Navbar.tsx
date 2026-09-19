@@ -136,17 +136,7 @@ export const Navbar: React.FC<NavbarProps> = ({
       {/* Mobile Drawer Menu */}
       {mobileMenuOpen && (
         <div className="lg:hidden bg-white border-b border-slate-200 px-4 pt-3 pb-6 space-y-3 shadow-lg">
-          <div className="flex items-center justify-between pb-2.5 border-b border-slate-100">
-            <img
-              src="/scins-media-logo.png"
-              alt="SCINS MEDIA"
-              className="h-12 w-auto max-h-12 object-contain"
-            />
-            <span className="text-[10px] font-bold uppercase tracking-wider text-teal-800 bg-teal-50 px-2 py-0.5 rounded border border-teal-200">
-              International Conferences
-            </span>
-          </div>
-          <div className="grid grid-cols-2 gap-2 pt-1">
+          <div className="grid grid-cols-2 gap-2">
             <button
               onClick={() => {
                 onNavigate('/conferences');

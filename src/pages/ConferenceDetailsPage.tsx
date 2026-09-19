@@ -1193,8 +1193,8 @@ export const ConferenceDetailsPage: React.FC<ConferenceDetailsPageProps> = ({
             © {new Date().getFullYear()} SCINS Media. {conference.short_title || conference.title}.
           </span>
           <div className="flex items-center gap-4">
-            <a href="mailto:secretariat@scinsmedia.com" className="text-teal-400 hover:text-teal-300 transition-colors">
-              secretariat@scinsmedia.com
+            <a href="mailto:scinsmedia@gmail.com" className="text-teal-400 hover:text-teal-300 transition-colors">
+              scinsmedia@gmail.com
             </a>
             <button
               type="button"

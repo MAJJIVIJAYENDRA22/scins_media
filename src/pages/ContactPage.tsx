@@ -8,7 +8,7 @@ export const ContactPage: React.FC = () => {
     try {
       const saved = typeof window !== 'undefined' ? localStorage.getItem('scins_organization_info') : null;
       if (saved) return JSON.parse(saved);
-    } catch {}
+    } catch { }
     return INITIAL_ORGANIZATION_INFO;
   });
 
@@ -17,7 +17,7 @@ export const ContactPage: React.FC = () => {
       try {
         const saved = localStorage.getItem('scins_organization_info');
         if (saved) setOrgInfo(JSON.parse(saved));
-      } catch {}
+      } catch { }
     };
     window.addEventListener('scins_organization_updated', handleUpdate);
     return () => window.removeEventListener('scins_organization_updated', handleUpdate);
@@ -53,14 +53,7 @@ export const ContactPage: React.FC = () => {
         <div className="bg-[#0A2540] rounded-3xl p-8 sm:p-12 text-white shadow-xl relative overflow-hidden">
           <div className="absolute inset-0 bg-radial-at-tr from-teal-900/30 via-transparent to-transparent pointer-events-none" />
           <div className="relative z-10 max-w-3xl space-y-3">
-            <div className="flex items-center space-x-3">
-              <div className="bg-white px-4 py-2 rounded-2xl shadow-xs inline-flex items-center">
-                <img
-                  src="/scins-media-logo.png"
-                  alt="SCINS MEDIA"
-                  className="h-12 sm:h-14 w-auto max-h-14 object-contain"
-                />
-              </div>
+            <div>
               <span className="text-xs font-bold uppercase tracking-wider text-[#14B8A6] bg-teal-950/80 px-3.5 py-1 rounded-full border border-teal-800/80 inline-block">
                 International Secretariats
               </span>
@@ -69,7 +62,7 @@ export const ContactPage: React.FC = () => {
               Contact the Conference Secretariat
             </h1>
             <p className="text-sm sm:text-base text-slate-300 leading-relaxed">
-              Get assistance with abstract submissions, registration invoices, official visa support invitation letters, or institutional sponsorship.
+              Access direct administrative support for abstract submissions, registration invoices, official consular visa invitation letters, and institutional sponsorships.
             </p>
           </div>
         </div>
@@ -89,7 +82,7 @@ export const ContactPage: React.FC = () => {
                 </div>
                 <div className="flex items-center">
                   <Mail className="w-4 h-4 text-[#0E7490] mr-2 flex-shrink-0" />
-                  <span className="font-mono text-[#0E7490] font-medium">{orgInfo.secretariat_email || 'secretariat@scinsmedia.com'}</span>
+                  <span className="font-mono text-[#0E7490] font-medium">{orgInfo.secretariat_email || 'scinsmedia@gmail.com'}</span>
                 </div>
               </div>
             </div>
@@ -105,7 +98,7 @@ export const ContactPage: React.FC = () => {
                 </div>
                 <div className="flex items-center">
                   <Mail className="w-4 h-4 text-[#0E7490] mr-2 flex-shrink-0" />
-                  <span className="font-mono text-[#0E7490] font-medium">{orgInfo.editorial_email || 'editorial@scinsmedia.com'}</span>
+                  <span className="font-mono text-[#0E7490] font-medium">{orgInfo.editorial_email || 'scinsmedia@gmail.com'}</span>
                 </div>
               </div>
             </div>
@@ -116,7 +109,7 @@ export const ContactPage: React.FC = () => {
                 <span>Official Visa Assistance Support</span>
               </div>
               <p className="leading-relaxed text-slate-600">
-                Registered delegates requiring formal consular visa invitation letters will receive an embassy-attested PDF with security barcode within 48 hours of registration confirmation.
+                Registered delegates requiring formal consular visa invitation letters receive an official institutional document with verification credentials within 48 hours of registration confirmation.
               </p>
             </div>
           </div>
@@ -124,10 +117,10 @@ export const ContactPage: React.FC = () => {
           {/* Form */}
           <div className="lg:col-span-7 bg-white p-8 rounded-3xl border border-slate-200/90 shadow-xs">
             <h3 className="text-lg font-bold text-slate-900 font-display mb-1">
-              Send Official Communication to the Secretariat
+              Submit an Inquiry to the Secretariat
             </h3>
             <p className="text-xs text-slate-500 mb-6">
-              Our conference coordinators respond within 24 hours on academic business days.
+              Our conference coordination team typically responds within 24 hours on international business days.
             </p>
 
             {submitted ? (
@@ -175,9 +168,10 @@ export const ContactPage: React.FC = () => {
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-slate-800 mb-1">Phone Number (Optional)</label>
+                    <label className="block text-xs font-semibold text-slate-800 mb-1">Phone Number</label>
                     <input
                       type="tel"
+                      required
                       placeholder="e.g., +44 20 7594 6000"
                       value={formData.phone}
                       onChange={e => setFormData({ ...formData, phone: e.target.value })}

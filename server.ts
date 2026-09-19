@@ -149,6 +149,240 @@ export function invalidatePublicCache(): void {
   publicCache.clear();
 }
 
+function formatDateStr(val: any): string {
+  if (!val) return '';
+  if (val instanceof Date) {
+    return val.toISOString().split('T')[0];
+  }
+  return String(val).split('T')[0];
+}
+
+function parseJsonSafe<T>(val: any, fallback: T): T {
+  if (!val) return fallback;
+  if (typeof val === 'object') return val as T;
+  try {
+    return JSON.parse(val) as T;
+  } catch {
+    return fallback;
+  }
+}
+
+async function seedInitialConferencesToMysql() {
+  if (!mysqlPool) return;
+  console.log('[MySQL Seeding] Database is empty. Seeding initial conference records...');
+  for (const conf of INITIAL_CONFERENCES) {
+    try {
+      await mysqlPool.query(
+        `INSERT INTO conferences (
+          id, title, short_title, slug, conference_code, theme, tagline, description, detailed_about,
+          about_heading, about_highlights, gallery_images, domain, city, country, venue, venue_address, timezone,
+          start_date, end_date, abstract_deadline, early_bird_deadline, registration_deadline, mode, status,
+          hero_image, logo_url, flyer_url, sample_abstract_url, featured_badge, display_order,
+          welcome_heading, welcome_message, welcome_speaker_name, welcome_speaker_role, welcome_speaker_title, welcome_speaker_image, welcome_footer_text,
+          exhibitor_heading, exhibitor_message, exhibitor_speaker_name, exhibitor_speaker_role, exhibitor_speaker_title, exhibitor_image, exhibitor_footer_text,
+          program_image, meta_title, meta_description, keywords, accept_late_breaking, cme_credits_eligible, primary_language, max_attendees, accent_color, journal_name, journal_issn, indexing_partners
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON DUPLICATE KEY UPDATE title = VALUES(title)`,
+        [
+          conf.id, conf.title, conf.short_title, conf.slug, conf.conference_code, conf.theme, conf.tagline || '', conf.description, conf.detailed_about || '',
+          conf.about_heading || '', JSON.stringify(conf.about_highlights || []), JSON.stringify(conf.gallery_images || []), conf.domain, conf.city, conf.country, conf.venue, conf.venue_address || '', conf.timezone,
+          conf.start_date, conf.end_date, conf.abstract_deadline, conf.early_bird_deadline, conf.registration_deadline, conf.mode, conf.status,
+          conf.hero_image, conf.logo_url || '', conf.flyer_url || '', conf.sample_abstract_url || '', conf.featured_badge || '', conf.display_order || 1,
+          conf.welcome_heading || '', conf.welcome_message || '', conf.welcome_speaker_name || '', conf.welcome_speaker_role || '', conf.welcome_speaker_title || '', conf.welcome_speaker_image || '', conf.welcome_footer_text || '',
+          conf.exhibitor_heading || '', conf.exhibitor_message || '', conf.exhibitor_speaker_name || '', conf.exhibitor_speaker_role || '', conf.exhibitor_speaker_title || '', conf.exhibitor_image || '', conf.exhibitor_footer_text || '',
+          conf.program_image || '', conf.meta_title || conf.title, conf.meta_description || conf.description, conf.keywords || '', conf.accept_late_breaking ?? true, conf.cme_credits_eligible ?? true, conf.primary_language || 'English', conf.max_attendees || 500, conf.accent_color || 'teal', conf.journal_name || '', conf.journal_issn || '', JSON.stringify(conf.indexing_partners || [])
+        ]
+      );
+    } catch (e: any) {
+      console.warn(`[Seed Warning for ${conf.slug}]:`, e.message);
+    }
+  }
+}
+
+async function loadDatabaseFromMysql() {
+  if (!mysqlPool) return;
+  try {
+    const [rows]: any = await mysqlPool.query(
+      'SELECT * FROM conferences ORDER BY display_order ASC, start_date ASC'
+    );
+
+    if (Array.isArray(rows) && rows.length > 0) {
+      console.log(`[MySQL Hydration] Found ${rows.length} existing conferences in scinsmedia_db. Loading...`);
+      db.conferences = rows.map((r: any) => ({
+        id: Number(r.id),
+        title: r.title || '',
+        short_title: r.short_title || '',
+        slug: r.slug || '',
+        conference_code: r.conference_code || '',
+        theme: r.theme || '',
+        tagline: r.tagline || '',
+        description: r.description || '',
+        detailed_about: r.detailed_about || '',
+        about_heading: r.about_heading || '',
+        about_highlights: parseJsonSafe<string[]>(r.about_highlights, []),
+        gallery_images: parseJsonSafe<string[]>(r.gallery_images, []),
+        domain: r.domain || '',
+        city: r.city || '',
+        country: r.country || '',
+        venue: r.venue || '',
+        venue_address: r.venue_address || '',
+        timezone: r.timezone || 'UTC',
+        start_date: formatDateStr(r.start_date),
+        end_date: formatDateStr(r.end_date),
+        abstract_deadline: formatDateStr(r.abstract_deadline),
+        early_bird_deadline: formatDateStr(r.early_bird_deadline),
+        registration_deadline: formatDateStr(r.registration_deadline),
+        mode: r.mode || 'hybrid',
+        status: r.status || 'published',
+        hero_image: r.hero_image || '',
+        logo_url: r.logo_url || '',
+        flyer_url: r.flyer_url || '',
+        sample_abstract_url: r.sample_abstract_url || '',
+        featured_badge: r.featured_badge || '',
+        display_order: Number(r.display_order ?? 0),
+        welcome_heading: r.welcome_heading || '',
+        welcome_message: r.welcome_message || '',
+        welcome_speaker_name: r.welcome_speaker_name || '',
+        welcome_speaker_role: r.welcome_speaker_role || '',
+        welcome_speaker_title: r.welcome_speaker_title || '',
+        welcome_speaker_image: r.welcome_speaker_image || '',
+        welcome_footer_text: r.welcome_footer_text || '',
+        exhibitor_heading: r.exhibitor_heading || '',
+        exhibitor_message: r.exhibitor_message || '',
+        exhibitor_speaker_name: r.exhibitor_speaker_name || '',
+        exhibitor_speaker_role: r.exhibitor_speaker_role || '',
+        exhibitor_speaker_title: r.exhibitor_speaker_title || '',
+        exhibitor_image: r.exhibitor_image || '',
+        exhibitor_footer_text: r.exhibitor_footer_text || '',
+        program_image: r.program_image || '',
+        meta_title: r.meta_title || r.title,
+        meta_description: r.meta_description || r.description,
+        keywords: r.keywords || '',
+        accept_late_breaking: Boolean(r.accept_late_breaking),
+        cme_credits_eligible: Boolean(r.cme_credits_eligible),
+        primary_language: r.primary_language || 'English',
+        max_attendees: Number(r.max_attendees || 500),
+        accent_color: r.accent_color || 'teal',
+        journal_name: r.journal_name || '',
+        journal_issn: r.journal_issn || '',
+        indexing_partners: parseJsonSafe<string[]>(r.indexing_partners, []),
+        created_at: r.created_at ? new Date(r.created_at).toISOString() : new Date().toISOString()
+      }));
+
+      try {
+        const [commRows]: any = await mysqlPool.query('SELECT * FROM committee_members ORDER BY display_order ASC, id ASC');
+        if (Array.isArray(commRows) && commRows.length > 0) {
+          db.committee = commRows.map((m: any) => ({
+            id: Number(m.id),
+            conference_id: Number(m.conference_id),
+            name: m.name || '',
+            designation: m.designation || '',
+            institution: m.institution || '',
+            country: m.country || '',
+            committee_role: m.committee_role || 'Scientific Committee',
+            photo_url: m.photo_url || '',
+            biography: m.biography || '',
+            education: m.education || '',
+            experience: m.experience || '',
+            research_interests: m.research_interests || '',
+            publications_count: Number(m.publications_count || 0),
+            linkedin_url: m.linkedin_url || '',
+            orcid_url: m.orcid_url || '',
+            google_scholar_url: m.google_scholar_url || '',
+            display_order: Number(m.display_order || 1),
+            is_published: Boolean(m.is_published),
+            status: m.is_published ? 'active' : 'inactive'
+          }));
+        }
+      } catch (err: any) {
+        console.warn('[MySQL Hydration] committee_members table notice:', err.message);
+      }
+
+      try {
+        const [sesRows]: any = await mysqlPool.query('SELECT * FROM sessions ORDER BY display_order ASC, id ASC');
+        if (Array.isArray(sesRows) && sesRows.length > 0) {
+          db.sessions = sesRows.map((s: any) => ({
+            id: Number(s.id),
+            conference_id: Number(s.conference_id),
+            session_number: Number(s.session_number || 1),
+            session_code: s.session_code || '',
+            title: s.title || '',
+            track: s.track || '',
+            category: s.category || '',
+            description: s.description || '',
+            session_date: formatDateStr(s.session_date),
+            start_time: s.start_time ? String(s.start_time).substring(0, 5) : '09:00',
+            end_time: s.end_time ? String(s.end_time).substring(0, 5) : '10:30',
+            room: s.room || '',
+            session_type: s.session_type || 'Oral Presentation',
+            display_order: Number(s.display_order || 1),
+            is_published: true,
+            status: 'published'
+          }));
+        }
+      } catch (err: any) {
+        console.warn('[MySQL Hydration] sessions table notice:', err.message);
+      }
+
+      try {
+        const [catRows]: any = await mysqlPool.query('SELECT * FROM registration_categories ORDER BY display_order ASC, id ASC');
+        if (Array.isArray(catRows) && catRows.length > 0) {
+          db.categories = catRows.map((c: any) => ({
+            id: Number(c.id),
+            conference_id: Number(c.conference_id),
+            name: c.name || '',
+            price: Number(c.price || 0),
+            currency: c.currency || 'USD',
+            early_bird_price: Number(c.early_bird_price || c.price || 0),
+            early_bird_fee: Number(c.early_bird_price || c.price || 0),
+            standard_fee: Number(c.price || 0),
+            deadline: formatDateStr(c.deadline),
+            benefits: parseJsonSafe<string[]>(c.benefits, []),
+            is_popular: Boolean(c.is_popular),
+            display_order: Number(c.display_order || 1),
+            payment_gateway_link: c.payment_gateway_link || '',
+            is_active: Boolean(c.is_active)
+          }));
+        }
+      } catch (err: any) {
+        console.warn('[MySQL Hydration] registration_categories table notice:', err.message);
+      }
+
+      try {
+        const [schedRows]: any = await mysqlPool.query('SELECT * FROM schedule_items ORDER BY display_order ASC, id ASC');
+        if (Array.isArray(schedRows) && schedRows.length > 0) {
+          db.schedule = schedRows.map((s: any) => ({
+            id: Number(s.id),
+            conference_id: Number(s.conference_id),
+            day_number: Number(s.day_number || 1),
+            day_label: `Day ${s.day_number || 1}`,
+            schedule_date: formatDateStr(s.schedule_date),
+            start_time: s.start_time || '09:00',
+            end_time: s.end_time || '10:00',
+            title: s.title || '',
+            description: s.description || '',
+            room: s.room || '',
+            track: s.track || '',
+            speaker_name: s.speaker_name || '',
+            speaker_affiliation: s.speaker_affiliation || '',
+            item_type: s.item_type || 'session',
+            display_order: Number(s.display_order || 1)
+          }));
+        }
+      } catch (err: any) {
+        console.warn('[MySQL Hydration] schedule_items table notice:', err.message);
+      }
+
+      console.log(`[MySQL Hydration] Successfully hydrated ${db.conferences.length} conferences and child tables from scinsmedia_db.`);
+    } else {
+      console.log('[MySQL Hydration] Database table conferences is empty (0 records). Initializing safe seed...');
+      await seedInitialConferencesToMysql();
+    }
+  } catch (err: any) {
+    console.error('[MySQL Hydration Error]:', err.message);
+  }
+}
+
 async function initMysqlPool() {
   const config = getDbConfig();
   if (config.host && config.user && config.database) {
@@ -175,6 +409,9 @@ async function initMysqlPool() {
       const conn = await mysqlPool.getConnection();
       console.log(`[MySQL] Successfully connected to GoDaddy cPanel database: ${config.database}@${config.host}`);
       conn.release();
+
+      // Hydrate memory store from persistent MySQL database
+      await loadDatabaseFromMysql();
     } catch (err: any) {
       console.warn(`[MySQL] GoDaddy cPanel connection status: ${err.message}. Operating in resilient enterprise mirror mode.`);
       mysqlPool = null;
@@ -184,7 +421,7 @@ async function initMysqlPool() {
   }
 }
 
-// Asynchronous MySQL Sync Helper (Dual-write to MySQL when GoDaddy cPanel DB is configured)
+// Asynchronous MySQL Sync Helper
 async function syncToMysql(query: string, params: any[] = []) {
   if (!mysqlPool) return;
   try {
@@ -670,7 +907,7 @@ const adminLoginRateLimiter = rateLimit({
   });
 
   // 2. Conferences
-  app.get('/api/v1/conferences', (req: Request, res: Response) => {
+  app.get('/api/v1/conferences', async (req: Request, res: Response) => {
     const { domain, country, mode, search, status } = req.query;
     const cacheKey = `conf_list_${domain || ''}_${country || ''}_${mode || ''}_${search || ''}_${status || ''}`;
     const cached = getCached<any>(cacheKey);
@@ -680,6 +917,80 @@ const adminLoginRateLimiter = rateLimit({
     }
 
     let list = [...db.conferences];
+
+    // If MySQL pool is active, query directly to ensure fresh state across Passenger workers
+    if (mysqlPool) {
+      try {
+        const [rows]: any = await mysqlPool.query(
+          'SELECT * FROM conferences ORDER BY display_order ASC, start_date ASC'
+        );
+        if (Array.isArray(rows) && rows.length > 0) {
+          list = rows.map((r: any) => ({
+            id: Number(r.id),
+            title: r.title || '',
+            short_title: r.short_title || '',
+            slug: r.slug || '',
+            conference_code: r.conference_code || '',
+            theme: r.theme || '',
+            tagline: r.tagline || '',
+            description: r.description || '',
+            detailed_about: r.detailed_about || '',
+            about_heading: r.about_heading || '',
+            about_highlights: parseJsonSafe<string[]>(r.about_highlights, []),
+            gallery_images: parseJsonSafe<string[]>(r.gallery_images, []),
+            domain: r.domain || '',
+            city: r.city || '',
+            country: r.country || '',
+            venue: r.venue || '',
+            venue_address: r.venue_address || '',
+            timezone: r.timezone || 'UTC',
+            start_date: formatDateStr(r.start_date),
+            end_date: formatDateStr(r.end_date),
+            abstract_deadline: formatDateStr(r.abstract_deadline),
+            early_bird_deadline: formatDateStr(r.early_bird_deadline),
+            registration_deadline: formatDateStr(r.registration_deadline),
+            mode: r.mode || 'hybrid',
+            status: r.status || 'published',
+            hero_image: r.hero_image || '',
+            logo_url: r.logo_url || '',
+            flyer_url: r.flyer_url || '',
+            sample_abstract_url: r.sample_abstract_url || '',
+            featured_badge: r.featured_badge || '',
+            display_order: Number(r.display_order ?? 0),
+            welcome_heading: r.welcome_heading || '',
+            welcome_message: r.welcome_message || '',
+            welcome_speaker_name: r.welcome_speaker_name || '',
+            welcome_speaker_role: r.welcome_speaker_role || '',
+            welcome_speaker_title: r.welcome_speaker_title || '',
+            welcome_speaker_image: r.welcome_speaker_image || '',
+            welcome_footer_text: r.welcome_footer_text || '',
+            exhibitor_heading: r.exhibitor_heading || '',
+            exhibitor_message: r.exhibitor_message || '',
+            exhibitor_speaker_name: r.exhibitor_speaker_name || '',
+            exhibitor_speaker_role: r.exhibitor_speaker_role || '',
+            exhibitor_speaker_title: r.exhibitor_speaker_title || '',
+            exhibitor_image: r.exhibitor_image || '',
+            exhibitor_footer_text: r.exhibitor_footer_text || '',
+            program_image: r.program_image || '',
+            meta_title: r.meta_title || r.title,
+            meta_description: r.meta_description || r.description,
+            keywords: r.keywords || '',
+            accept_late_breaking: Boolean(r.accept_late_breaking),
+            cme_credits_eligible: Boolean(r.cme_credits_eligible),
+            primary_language: r.primary_language || 'English',
+            max_attendees: Number(r.max_attendees || 500),
+            accent_color: r.accent_color || 'teal',
+            journal_name: r.journal_name || '',
+            journal_issn: r.journal_issn || '',
+            indexing_partners: parseJsonSafe<string[]>(r.indexing_partners, []),
+            created_at: r.created_at ? new Date(r.created_at).toISOString() : new Date().toISOString()
+          }));
+          db.conferences = list;
+        }
+      } catch (err: any) {
+        console.warn('[MySQL Read Conferences Warning]:', err.message);
+      }
+    }
 
     if (status && typeof status === 'string') {
       list = list.filter(c => c.status === status);
@@ -731,7 +1042,7 @@ const adminLoginRateLimiter = rateLimit({
     res.json(responsePayload);
   });
 
-  app.get('/api/v1/conferences/:identifier', (req: Request, res: Response) => {
+  app.get('/api/v1/conferences/:identifier', async (req: Request, res: Response) => {
     const { identifier } = req.params;
     const cacheKey = `conf_detail_${identifier}`;
     const cached = getCached<any>(cacheKey);
@@ -740,33 +1051,203 @@ const adminLoginRateLimiter = rateLimit({
       return res.json(cached);
     }
 
-    const conf = db.conferences.find(c => c.slug === identifier || String(c.id) === identifier || c.conference_code === identifier);
+    let conf = db.conferences.find(c => c.slug === identifier || String(c.id) === identifier || c.conference_code === identifier);
+
+    if (mysqlPool) {
+      try {
+        const [rows]: any = await mysqlPool.query(
+          'SELECT * FROM conferences WHERE slug = ? OR id = ? OR conference_code = ? LIMIT 1',
+          [identifier, isNaN(Number(identifier)) ? -1 : Number(identifier), identifier]
+        );
+        if (Array.isArray(rows) && rows.length > 0) {
+          const r = rows[0];
+          conf = {
+            id: Number(r.id),
+            title: r.title || '',
+            short_title: r.short_title || '',
+            slug: r.slug || '',
+            conference_code: r.conference_code || '',
+            theme: r.theme || '',
+            tagline: r.tagline || '',
+            description: r.description || '',
+            detailed_about: r.detailed_about || '',
+            about_heading: r.about_heading || '',
+            about_highlights: parseJsonSafe<string[]>(r.about_highlights, []),
+            gallery_images: parseJsonSafe<string[]>(r.gallery_images, []),
+            domain: r.domain || '',
+            city: r.city || '',
+            country: r.country || '',
+            venue: r.venue || '',
+            venue_address: r.venue_address || '',
+            timezone: r.timezone || 'UTC',
+            start_date: formatDateStr(r.start_date),
+            end_date: formatDateStr(r.end_date),
+            abstract_deadline: formatDateStr(r.abstract_deadline),
+            early_bird_deadline: formatDateStr(r.early_bird_deadline),
+            registration_deadline: formatDateStr(r.registration_deadline),
+            mode: r.mode || 'hybrid',
+            status: r.status || 'published',
+            hero_image: r.hero_image || '',
+            logo_url: r.logo_url || '',
+            flyer_url: r.flyer_url || '',
+            sample_abstract_url: r.sample_abstract_url || '',
+            featured_badge: r.featured_badge || '',
+            display_order: Number(r.display_order ?? 0),
+            welcome_heading: r.welcome_heading || '',
+            welcome_message: r.welcome_message || '',
+            welcome_speaker_name: r.welcome_speaker_name || '',
+            welcome_speaker_role: r.welcome_speaker_role || '',
+            welcome_speaker_title: r.welcome_speaker_title || '',
+            welcome_speaker_image: r.welcome_speaker_image || '',
+            welcome_footer_text: r.welcome_footer_text || '',
+            exhibitor_heading: r.exhibitor_heading || '',
+            exhibitor_message: r.exhibitor_message || '',
+            exhibitor_speaker_name: r.exhibitor_speaker_name || '',
+            exhibitor_speaker_role: r.exhibitor_speaker_role || '',
+            exhibitor_speaker_title: r.exhibitor_speaker_title || '',
+            exhibitor_image: r.exhibitor_image || '',
+            exhibitor_footer_text: r.exhibitor_footer_text || '',
+            program_image: r.program_image || '',
+            meta_title: r.meta_title || r.title,
+            meta_description: r.meta_description || r.description,
+            keywords: r.keywords || '',
+            accept_late_breaking: Boolean(r.accept_late_breaking),
+            cme_credits_eligible: Boolean(r.cme_credits_eligible),
+            primary_language: r.primary_language || 'English',
+            max_attendees: Number(r.max_attendees || 500),
+            accent_color: r.accent_color || 'teal',
+            journal_name: r.journal_name || '',
+            journal_issn: r.journal_issn || '',
+            indexing_partners: parseJsonSafe<string[]>(r.indexing_partners, []),
+            created_at: r.created_at ? new Date(r.created_at).toISOString() : new Date().toISOString()
+          };
+        }
+      } catch (err: any) {
+        console.warn('[MySQL Single Conf Query Warning]:', err.message);
+      }
+    }
+
     if (!conf) {
       return res.status(404).json({ success: false, message: `Conference '${identifier}' not found` });
     }
+
+    let confCommittee = db.committee.filter(m => m.conference_id === conf!.id);
+    let confSessions = db.sessions.filter(s => s.conference_id === conf!.id);
+    let confCategories = db.categories.filter(c => c.conference_id === conf!.id);
+    let confSchedule = db.schedule.filter(s => s.conference_id === conf!.id);
+    let confSpeakers = db.speakers.filter(s => s.conference_id === conf!.id);
+    let confSponsors = db.sponsors.filter(s => s.conference_id === conf!.id);
+
+    if (mysqlPool) {
+      try {
+        const [cRows]: any = await mysqlPool.query('SELECT * FROM committee_members WHERE conference_id = ? ORDER BY display_order ASC, id ASC', [conf.id]);
+        if (Array.isArray(cRows) && cRows.length > 0) {
+          confCommittee = cRows.map((m: any) => ({
+            id: Number(m.id),
+            conference_id: Number(m.conference_id),
+            name: m.name || '',
+            designation: m.designation || '',
+            institution: m.institution || '',
+            country: m.country || '',
+            committee_role: m.committee_role || 'Scientific Committee',
+            photo_url: m.photo_url || '',
+            biography: m.biography || '',
+            education: m.education || '',
+            experience: m.experience || '',
+            research_interests: m.research_interests || '',
+            publications_count: Number(m.publications_count || 0),
+            linkedin_url: m.linkedin_url || '',
+            orcid_url: m.orcid_url || '',
+            google_scholar_url: m.google_scholar_url || '',
+            display_order: Number(m.display_order || 1),
+            is_published: Boolean(m.is_published)
+          }));
+        }
+        const [sRows]: any = await mysqlPool.query('SELECT * FROM sessions WHERE conference_id = ? ORDER BY display_order ASC, id ASC', [conf.id]);
+        if (Array.isArray(sRows) && sRows.length > 0) {
+          confSessions = sRows.map((s: any) => ({
+            id: Number(s.id),
+            conference_id: Number(s.conference_id),
+            session_number: Number(s.session_number || 1),
+            session_code: s.session_code || '',
+            title: s.title || '',
+            track: s.track || '',
+            category: s.category || '',
+            description: s.description || '',
+            session_date: formatDateStr(s.session_date),
+            start_time: s.start_time ? String(s.start_time).substring(0, 5) : '09:00',
+            end_time: s.end_time ? String(s.end_time).substring(0, 5) : '10:30',
+            room: s.room || '',
+            session_type: s.session_type || 'Oral Presentation',
+            display_order: Number(s.display_order || 1)
+          }));
+        }
+        const [catRows]: any = await mysqlPool.query('SELECT * FROM registration_categories WHERE conference_id = ? ORDER BY display_order ASC, id ASC', [conf.id]);
+        if (Array.isArray(catRows) && catRows.length > 0) {
+          confCategories = catRows.map((c: any) => ({
+            id: Number(c.id),
+            conference_id: Number(c.conference_id),
+            name: c.name || '',
+            price: Number(c.price || 0),
+            currency: c.currency || 'USD',
+            early_bird_price: Number(c.early_bird_price || c.price || 0),
+            early_bird_fee: Number(c.early_bird_price || c.price || 0),
+            standard_fee: Number(c.price || 0),
+            deadline: formatDateStr(c.deadline),
+            benefits: parseJsonSafe<string[]>(c.benefits, []),
+            is_popular: Boolean(c.is_popular),
+            display_order: Number(c.display_order || 1),
+            payment_gateway_link: c.payment_gateway_link || '',
+            is_active: Boolean(c.is_active)
+          }));
+        }
+        const [schRows]: any = await mysqlPool.query('SELECT * FROM schedule_items WHERE conference_id = ? ORDER BY display_order ASC, id ASC', [conf.id]);
+        if (Array.isArray(schRows) && schRows.length > 0) {
+          confSchedule = schRows.map((s: any) => ({
+            id: Number(s.id),
+            conference_id: Number(s.conference_id),
+            day_number: Number(s.day_number || 1),
+            day_label: `Day ${s.day_number || 1}`,
+            schedule_date: formatDateStr(s.schedule_date),
+            start_time: s.start_time || '09:00',
+            end_time: s.end_time || '10:00',
+            title: s.title || '',
+            description: s.description || '',
+            room: s.room || '',
+            track: s.track || '',
+            speaker_name: s.speaker_name || '',
+            speaker_affiliation: s.speaker_affiliation || '',
+            item_type: s.item_type || 'session',
+            display_order: Number(s.display_order || 1)
+          }));
+        }
+      } catch (err: any) {
+        console.warn('[MySQL Conf Details Child Query Warning]:', err.message);
+      }
+    }
+
     const fullConf = {
       ...conf,
-      committee: (Array.isArray(conf.committee) && conf.committee.length > 0) ? conf.committee : db.committee.filter(m => m.conference_id === conf.id),
-      sponsors: (Array.isArray(conf.sponsors) && conf.sponsors.length > 0) ? conf.sponsors : db.sponsors.filter(s => s.conference_id === conf.id),
-      media_partners: (Array.isArray(conf.media_partners) && conf.media_partners.length > 0) ? conf.media_partners : db.mediaPartners.filter(m => m.conference_id === conf.id),
-      schedule: (Array.isArray(conf.schedule) && conf.schedule.length > 0) ? conf.schedule : db.schedule.filter(s => s.conference_id === conf.id),
-      categories: (Array.isArray(conf.categories) && conf.categories.length > 0) ? conf.categories : db.categories.filter(c => c.conference_id === conf.id),
-      speakers: (Array.isArray(conf.speakers) && conf.speakers.length > 0) ? conf.speakers : db.speakers.filter(s => s.conference_id === conf.id),
-      sessions: (Array.isArray(conf.sessions) && conf.sessions.length > 0) ? conf.sessions : db.sessions.filter(s => s.conference_id === conf.id)
+      committee: confCommittee,
+      sponsors: confSponsors,
+      media_partners: db.mediaPartners.filter(m => m.conference_id === conf!.id),
+      schedule: confSchedule,
+      categories: confCategories,
+      speakers: confSpeakers,
+      sessions: confSessions
     };
     const responsePayload = { success: true, data: fullConf };
     setCache(cacheKey, responsePayload);
     res.json(responsePayload);
   });
 
-  app.post('/api/v1/conferences', authenticateAdmin, (req: Request, res: Response) => {
+  app.post('/api/v1/conferences', authenticateAdmin, async (req: Request, res: Response) => {
     const body = req.body;
     const nextOrder = db.conferences.length > 0 
       ? Math.max(...db.conferences.map(c => c.display_order ?? 0)) + 1 
       : 1;
 
-    const newConf: Conference = {
-      id: Math.max(...db.conferences.map(c => c.id), 0) + 1,
+    const confData = {
       title: body.title || 'Untitled Scientific Congress',
       short_title: body.short_title || 'Congress 2026',
       slug: body.slug || `conference-${Date.now()}`,
@@ -797,8 +1278,6 @@ const adminLoginRateLimiter = rateLimit({
       sample_abstract_url: body.sample_abstract_url || '',
       featured_badge: body.featured_badge || 'Flagship Edition',
       display_order: typeof body.display_order === 'number' ? body.display_order : nextOrder,
-      
-      // Welcome Address
       welcome_heading: body.welcome_heading || 'Message from the General Chair',
       welcome_message: body.welcome_message || '',
       welcome_speaker_name: body.welcome_speaker_name || '',
@@ -806,8 +1285,6 @@ const adminLoginRateLimiter = rateLimit({
       welcome_speaker_title: body.welcome_speaker_title || '',
       welcome_speaker_image: body.welcome_speaker_image || '',
       welcome_footer_text: body.welcome_footer_text || '',
-
-      // Industry Exhibitors
       exhibitor_heading: body.exhibitor_heading || 'Global Industry Leaders & Technology Showcase',
       exhibitor_message: body.exhibitor_message || '',
       exhibitor_speaker_name: body.exhibitor_speaker_name || 'Confirmed Industry Exhibitors',
@@ -815,10 +1292,7 @@ const adminLoginRateLimiter = rateLimit({
       exhibitor_speaker_title: body.exhibitor_speaker_title || '',
       exhibitor_image: body.exhibitor_image || '',
       exhibitor_footer_text: body.exhibitor_footer_text || '',
-
-      // Program image
       program_image: body.program_image || '',
-
       meta_title: body.meta_title || body.title,
       meta_description: body.meta_description || body.description,
       keywords: body.keywords || '',
@@ -829,19 +1303,159 @@ const adminLoginRateLimiter = rateLimit({
       accent_color: body.accent_color || 'teal',
       journal_name: body.journal_name || '',
       journal_issn: body.journal_issn || '',
-      indexing_partners: Array.isArray(body.indexing_partners) ? body.indexing_partners : [],
+      indexing_partners: Array.isArray(body.indexing_partners) ? body.indexing_partners : []
+    };
+
+    let assignedId = Math.max(...db.conferences.map(c => c.id), 0) + 1;
+
+    if (mysqlPool) {
+      try {
+        const [insertRes]: any = await mysqlPool.query(
+          `INSERT INTO conferences (
+            title, short_title, slug, conference_code, theme, tagline, description, detailed_about,
+            about_heading, about_highlights, gallery_images, domain, city, country, venue, venue_address, timezone,
+            start_date, end_date, abstract_deadline, early_bird_deadline, registration_deadline, mode, status,
+            hero_image, logo_url, flyer_url, sample_abstract_url, featured_badge, display_order,
+            welcome_heading, welcome_message, welcome_speaker_name, welcome_speaker_role, welcome_speaker_title, welcome_speaker_image, welcome_footer_text,
+            exhibitor_heading, exhibitor_message, exhibitor_speaker_name, exhibitor_speaker_role, exhibitor_speaker_title, exhibitor_image, exhibitor_footer_text,
+            program_image, meta_title, meta_description, keywords, accept_late_breaking, cme_credits_eligible, primary_language, max_attendees, accent_color, journal_name, journal_issn, indexing_partners
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            confData.title, confData.short_title, confData.slug, confData.conference_code, confData.theme, confData.tagline, confData.description, confData.detailed_about,
+            confData.about_heading, JSON.stringify(confData.about_highlights), JSON.stringify(confData.gallery_images), confData.domain, confData.city, confData.country, confData.venue, confData.venue_address, confData.timezone,
+            confData.start_date, confData.end_date, confData.abstract_deadline, confData.early_bird_deadline, confData.registration_deadline, confData.mode, confData.status,
+            confData.hero_image, confData.logo_url, confData.flyer_url, confData.sample_abstract_url, confData.featured_badge, confData.display_order,
+            confData.welcome_heading, confData.welcome_message, confData.welcome_speaker_name, confData.welcome_speaker_role, confData.welcome_speaker_title, confData.welcome_speaker_image, confData.welcome_footer_text,
+            confData.exhibitor_heading, confData.exhibitor_message, confData.exhibitor_speaker_name, confData.exhibitor_speaker_role, confData.exhibitor_speaker_title, confData.exhibitor_image, confData.exhibitor_footer_text,
+            confData.program_image, confData.meta_title, confData.meta_description, confData.keywords, confData.accept_late_breaking, confData.cme_credits_eligible, confData.primary_language, confData.max_attendees, confData.accent_color, confData.journal_name, confData.journal_issn, JSON.stringify(confData.indexing_partners)
+          ]
+        );
+        assignedId = Number(insertRes.insertId);
+        console.log(`[MySQL Insert Conference] Created conference with persistent ID ${assignedId}`);
+
+        // Insert child records into MySQL
+        if (Array.isArray(body.committee) && body.committee.length > 0) {
+          for (let idx = 0; idx < body.committee.length; idx++) {
+            const m = body.committee[idx];
+            try {
+              await mysqlPool.query(
+                `INSERT INTO committee_members (
+                  conference_id, name, designation, institution, country, committee_role, photo_url,
+                  biography, education, experience, research_interests, publications_count, linkedin_url,
+                  orcid_url, google_scholar_url, display_order, is_published
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                [
+                  assignedId, m.name || 'Committee Member', m.designation || '', m.institution || '', m.country || 'Global',
+                  m.committee_role || 'Scientific Committee', m.photo_url || '', m.biography || '', m.education || '',
+                  m.experience || '', m.research_interests || '', Number(m.publications_count || 0), m.linkedin_url || '',
+                  m.orcid_url || '', m.google_scholar_url || '', Number(m.display_order || idx + 1), m.is_published !== false
+                ]
+              );
+            } catch (ce: any) {
+              console.warn('[MySQL Insert Committee Member Notice]:', ce.message);
+            }
+          }
+        }
+
+        if (Array.isArray(body.sessions) && body.sessions.length > 0) {
+          for (let sIdx = 0; sIdx < body.sessions.length; sIdx++) {
+            const ses = body.sessions[sIdx];
+            try {
+              await mysqlPool.query(
+                `INSERT INTO sessions (
+                  conference_id, session_number, session_code, title, track, category, description,
+                  session_date, start_time, end_time, room, session_type, display_order
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                [
+                  assignedId, sIdx + 1, ses.session_code || `SES-${sIdx + 1}`, ses.title || 'Session Track',
+                  ses.track || 'General', ses.category || 'General', ses.description || '', ses.session_date || confData.start_date,
+                  ses.start_time || '09:00:00', ses.end_time || '10:30:00', ses.room || 'Hall A',
+                  ses.session_type || 'Oral Presentation', Number(ses.display_order || sIdx + 1)
+                ]
+              );
+            } catch (se: any) {
+              console.warn('[MySQL Insert Session Notice]:', se.message);
+            }
+          }
+        }
+
+        if (Array.isArray(body.categories) && body.categories.length > 0) {
+          for (let cIdx = 0; cIdx < body.categories.length; cIdx++) {
+            const cat = body.categories[cIdx];
+            try {
+              await mysqlPool.query(
+                `INSERT INTO registration_categories (
+                  conference_id, name, price, currency, early_bird_price, deadline, benefits, is_popular, display_order, payment_gateway_link, is_active
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                [
+                  assignedId, cat.name || 'Delegate Pass', Number(cat.price || cat.standard_fee || 799), cat.currency || 'USD',
+                  Number(cat.early_bird_price || cat.early_bird_fee || 699), cat.deadline || confData.early_bird_deadline,
+                  JSON.stringify(cat.benefits || []), Boolean(cat.is_popular), Number(cat.display_order || cIdx + 1),
+                  cat.payment_gateway_link || '', cat.is_active !== false
+                ]
+              );
+            } catch (ce: any) {
+              console.warn('[MySQL Insert Category Notice]:', ce.message);
+            }
+          }
+        }
+
+        if (Array.isArray(body.schedule) && body.schedule.length > 0) {
+          for (let scIdx = 0; scIdx < body.schedule.length; scIdx++) {
+            const sch = body.schedule[scIdx];
+            try {
+              await mysqlPool.query(
+                `INSERT INTO schedule_items (
+                  conference_id, day_number, schedule_date, start_time, end_time, title, description,
+                  room, track, speaker_name, speaker_affiliation, item_type, display_order
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                [
+                  assignedId, Number(sch.day_number || 1), sch.schedule_date || confData.start_date,
+                  sch.start_time || '09:00', sch.end_time || '10:00', sch.title || 'Schedule Item',
+                  sch.description || '', sch.room || '', sch.track || '', sch.speaker_name || '',
+                  sch.speaker_affiliation || '', sch.item_type || 'session', Number(sch.display_order || scIdx + 1)
+                ]
+              );
+            } catch (sche: any) {
+              console.warn('[MySQL Insert Schedule Notice]:', sche.message);
+            }
+          }
+        }
+
+        try {
+          await mysqlPool.query(
+            `INSERT INTO conference_settings (
+              conference_id, registration_enabled, abstract_submission_enabled, publication_enabled,
+              sponsors_enabled, media_partners_enabled, schedule_published, show_counter, max_attendees
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON DUPLICATE KEY UPDATE max_attendees = VALUES(max_attendees)`,
+            [assignedId, true, true, true, true, true, true, true, confData.max_attendees]
+          );
+        } catch (ste: any) {
+          console.warn('[MySQL Insert Settings Notice]:', ste.message);
+        }
+
+      } catch (dbErr: any) {
+        console.error('[MySQL Conference Creation Failed]:', dbErr);
+        return res.status(500).json({ success: false, message: `Failed to persist conference in MySQL: ${dbErr.message}` });
+      }
+    }
+
+    const newConf: Conference = {
+      id: assignedId,
+      ...confData,
       created_at: new Date().toISOString()
     };
     db.conferences.push(newConf);
 
-    // Persist child entities if provided by the 14-step wizard
+    // Sync child entities in RAM mirror as well
     if (Array.isArray(body.committee) && body.committee.length > 0) {
       body.committee.forEach((m: any) => {
         const memId = Math.max(...db.committee.map(x => x.id), 0) + 1;
         db.committee.push({
           ...m,
           id: memId,
-          conference_id: newConf.id,
+          conference_id: assignedId,
           is_published: true,
           status: 'active'
         });
@@ -854,7 +1468,7 @@ const adminLoginRateLimiter = rateLimit({
         db.speakers.push({
           ...s,
           id: spkId,
-          conference_id: newConf.id,
+          conference_id: assignedId,
           is_active: true,
           status: 'active'
         });
@@ -867,7 +1481,7 @@ const adminLoginRateLimiter = rateLimit({
         db.sessions.push({
           ...ses,
           id: sesId,
-          conference_id: newConf.id,
+          conference_id: assignedId,
           session_number: sIdx + 1,
           is_published: true,
           status: 'published'
@@ -881,7 +1495,7 @@ const adminLoginRateLimiter = rateLimit({
         db.categories.push({
           ...cat,
           id: catId,
-          conference_id: newConf.id,
+          conference_id: assignedId,
           name: cat.name || 'Delegate Pass',
           currency: cat.currency || 'USD',
           early_bird_fee: cat.early_bird_price || cat.early_bird_fee || 799,
@@ -903,20 +1517,9 @@ const adminLoginRateLimiter = rateLimit({
         db.sponsors.push({
           ...spo,
           id: spoId,
-          conference_id: newConf.id,
+          conference_id: assignedId,
           logo_url: spo.logo_url || 'https://images.unsplash.com/photo-1599305445671-ac291c95aaa9?auto=format&fit=crop&w=200&q=80',
           tier: spo.tier || 'Platinum Sponsor'
-        });
-      });
-    }
-
-    if (Array.isArray(body.media_partners) && body.media_partners.length > 0) {
-      body.media_partners.forEach((m: any) => {
-        const mId = Math.max(...db.mediaPartners.map(x => x.id), 0) + 1;
-        db.mediaPartners.push({
-          ...m,
-          id: mId,
-          conference_id: newConf.id
         });
       });
     }
@@ -927,59 +1530,151 @@ const adminLoginRateLimiter = rateLimit({
         db.schedule.push({
           ...s,
           id: sId,
-          conference_id: newConf.id,
+          conference_id: assignedId,
           display_order: s.display_order ?? (idx + 1)
         });
       });
     }
 
     db.addAuditLog('CREATE_CONFERENCE', 'Conference', newConf.conference_code, `Created conference: ${newConf.title}`);
-    syncToMysql(
-      `INSERT INTO conferences (
-        title, short_title, slug, conference_code, theme, tagline, description, detailed_about,
-        about_heading, about_highlights, gallery_images, domain, city, country, venue, venue_address, timezone,
-        start_date, end_date, abstract_deadline, early_bird_deadline, registration_deadline, mode, status,
-        hero_image, logo_url, flyer_url, sample_abstract_url, featured_badge, display_order,
-        welcome_heading, welcome_message, welcome_speaker_name, welcome_speaker_role, welcome_speaker_title, welcome_speaker_image, welcome_footer_text,
-        exhibitor_heading, exhibitor_message, exhibitor_speaker_name, exhibitor_speaker_role, exhibitor_speaker_title, exhibitor_image, exhibitor_footer_text,
-        program_image, meta_title, meta_description, keywords, accept_late_breaking, cme_credits_eligible, primary_language, max_attendees, accent_color, journal_name, journal_issn, indexing_partners
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      ON DUPLICATE KEY UPDATE
-        title = VALUES(title), short_title = VALUES(short_title), theme = VALUES(theme), description = VALUES(description),
-        detailed_about = VALUES(detailed_about), status = VALUES(status), venue = VALUES(venue), start_date = VALUES(start_date), end_date = VALUES(end_date),
-        hero_image = VALUES(hero_image), logo_url = VALUES(logo_url), flyer_url = VALUES(flyer_url)`,
-      [
-        newConf.title, newConf.short_title, newConf.slug, newConf.conference_code, newConf.theme, newConf.tagline, newConf.description, newConf.detailed_about,
-        newConf.about_heading, JSON.stringify(newConf.about_highlights || []), JSON.stringify(newConf.gallery_images || []), newConf.domain, newConf.city, newConf.country, newConf.venue, newConf.venue_address, newConf.timezone,
-        newConf.start_date, newConf.end_date, newConf.abstract_deadline, newConf.early_bird_deadline, newConf.registration_deadline, newConf.mode, newConf.status,
-        newConf.hero_image, newConf.logo_url, newConf.flyer_url, newConf.sample_abstract_url, newConf.featured_badge, newConf.display_order,
-        newConf.welcome_heading, newConf.welcome_message, newConf.welcome_speaker_name, newConf.welcome_speaker_role, newConf.welcome_speaker_title, newConf.welcome_speaker_image, newConf.welcome_footer_text,
-        newConf.exhibitor_heading, newConf.exhibitor_message, newConf.exhibitor_speaker_name, newConf.exhibitor_speaker_role, newConf.exhibitor_speaker_title, newConf.exhibitor_image, newConf.exhibitor_footer_text,
-        newConf.program_image, newConf.meta_title, newConf.meta_description, newConf.keywords, newConf.accept_late_breaking, newConf.cme_credits_eligible, newConf.primary_language, newConf.max_attendees, newConf.accent_color, newConf.journal_name, newConf.journal_issn, JSON.stringify(newConf.indexing_partners || [])
-      ]
-    );
+    invalidatePublicCache();
+
     const enrichedNewConf = {
       ...newConf,
-      committee: db.committee.filter(m => m.conference_id === newConf.id),
-      speakers: db.speakers.filter(s => s.conference_id === newConf.id),
-      sessions: db.sessions.filter(s => s.conference_id === newConf.id),
-      categories: db.categories.filter(c => c.conference_id === newConf.id),
-      sponsors: db.sponsors.filter(s => s.conference_id === newConf.id),
-      media_partners: db.mediaPartners.filter(m => m.conference_id === newConf.id),
-      schedule: db.schedule.filter(s => s.conference_id === newConf.id)
+      committee: db.committee.filter(m => m.conference_id === assignedId),
+      speakers: db.speakers.filter(s => s.conference_id === assignedId),
+      sessions: db.sessions.filter(s => s.conference_id === assignedId),
+      categories: db.categories.filter(c => c.conference_id === assignedId),
+      sponsors: db.sponsors.filter(s => s.conference_id === assignedId),
+      media_partners: db.mediaPartners.filter(m => m.conference_id === assignedId),
+      schedule: db.schedule.filter(s => s.conference_id === assignedId)
     };
-    res.status(201).json({ success: true, message: 'Conference created successfully', data: enrichedNewConf });
+    res.status(201).json({ success: true, message: 'Conference created and permanently persisted in MySQL', data: enrichedNewConf });
   });
 
-  app.put('/api/v1/conferences/:id', authenticateAdmin, (req: Request, res: Response) => {
+  app.put('/api/v1/conferences/:id', authenticateAdmin, async (req: Request, res: Response) => {
     const id = Number(req.params.id);
     const index = db.conferences.findIndex(c => c.id === id);
-    if (index === -1) {
+    if (index === -1 && !mysqlPool) {
       return res.status(404).json({ success: false, message: 'Conference not found' });
     }
-    db.conferences[index] = { ...db.conferences[index], ...req.body };
 
-    // Synchronize child entities for this conference
+    const updatedConf = { ...(index !== -1 ? db.conferences[index] : {}), ...req.body, id };
+
+    if (mysqlPool) {
+      try {
+        await mysqlPool.query(
+          `UPDATE conferences SET
+            title = ?, short_title = ?, slug = ?, conference_code = ?, theme = ?, tagline = ?, description = ?, detailed_about = ?,
+            about_heading = ?, about_highlights = ?, gallery_images = ?, domain = ?, city = ?, country = ?, venue = ?, venue_address = ?, timezone = ?,
+            start_date = ?, end_date = ?, abstract_deadline = ?, early_bird_deadline = ?, registration_deadline = ?, mode = ?, status = ?,
+            hero_image = ?, logo_url = ?, flyer_url = ?, sample_abstract_url = ?, featured_badge = ?, display_order = ?,
+            welcome_heading = ?, welcome_message = ?, welcome_speaker_name = ?, welcome_speaker_role = ?, welcome_speaker_title = ?, welcome_speaker_image = ?, welcome_footer_text = ?,
+            exhibitor_heading = ?, exhibitor_message = ?, exhibitor_speaker_name = ?, exhibitor_speaker_role = ?, exhibitor_speaker_title = ?, exhibitor_image = ?, exhibitor_footer_text = ?,
+            program_image = ?, meta_title = ?, meta_description = ?, keywords = ?, accept_late_breaking = ?, cme_credits_eligible = ?, primary_language = ?, max_attendees = ?, accent_color = ?, journal_name = ?, journal_issn = ?, indexing_partners = ?
+          WHERE id = ?`,
+          [
+            updatedConf.title, updatedConf.short_title, updatedConf.slug, updatedConf.conference_code, updatedConf.theme, updatedConf.tagline, updatedConf.description, updatedConf.detailed_about,
+            updatedConf.about_heading, JSON.stringify(updatedConf.about_highlights || []), JSON.stringify(updatedConf.gallery_images || []), updatedConf.domain, updatedConf.city, updatedConf.country, updatedConf.venue, updatedConf.venue_address, updatedConf.timezone,
+            formatDateStr(updatedConf.start_date), formatDateStr(updatedConf.end_date), formatDateStr(updatedConf.abstract_deadline), formatDateStr(updatedConf.early_bird_deadline), formatDateStr(updatedConf.registration_deadline), updatedConf.mode, updatedConf.status,
+            updatedConf.hero_image, updatedConf.logo_url, updatedConf.flyer_url, updatedConf.sample_abstract_url, updatedConf.featured_badge, updatedConf.display_order,
+            updatedConf.welcome_heading, updatedConf.welcome_message, updatedConf.welcome_speaker_name, updatedConf.welcome_speaker_role, updatedConf.welcome_speaker_title, updatedConf.welcome_speaker_image, updatedConf.welcome_footer_text,
+            updatedConf.exhibitor_heading, updatedConf.exhibitor_message, updatedConf.exhibitor_speaker_name, updatedConf.exhibitor_speaker_role, updatedConf.exhibitor_speaker_title, updatedConf.exhibitor_image, updatedConf.exhibitor_footer_text,
+            updatedConf.program_image, updatedConf.meta_title, updatedConf.meta_description, updatedConf.keywords, updatedConf.accept_late_breaking, updatedConf.cme_credits_eligible, updatedConf.primary_language, updatedConf.max_attendees, updatedConf.accent_color, updatedConf.journal_name, updatedConf.journal_issn, JSON.stringify(updatedConf.indexing_partners || []),
+            id
+          ]
+        );
+
+        // Synchronize child entities in MySQL if passed
+        if (Array.isArray(req.body.committee)) {
+          await mysqlPool.query('DELETE FROM committee_members WHERE conference_id = ?', [id]);
+          for (let idx = 0; idx < req.body.committee.length; idx++) {
+            const m = req.body.committee[idx];
+            await mysqlPool.query(
+              `INSERT INTO committee_members (
+                conference_id, name, designation, institution, country, committee_role, photo_url,
+                biography, education, experience, research_interests, publications_count, linkedin_url,
+                orcid_url, google_scholar_url, display_order, is_published
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+              [
+                id, m.name || 'Committee Member', m.designation || '', m.institution || '', m.country || 'Global',
+                m.committee_role || 'Scientific Committee', m.photo_url || '', m.biography || '', m.education || '',
+                m.experience || '', m.research_interests || '', Number(m.publications_count || 0), m.linkedin_url || '',
+                m.orcid_url || '', m.google_scholar_url || '', Number(m.display_order || idx + 1), m.is_published !== false
+              ]
+            );
+          }
+        }
+
+        if (Array.isArray(req.body.sessions)) {
+          await mysqlPool.query('DELETE FROM sessions WHERE conference_id = ?', [id]);
+          for (let sIdx = 0; sIdx < req.body.sessions.length; sIdx++) {
+            const ses = req.body.sessions[sIdx];
+            await mysqlPool.query(
+              `INSERT INTO sessions (
+                conference_id, session_number, session_code, title, track, category, description,
+                session_date, start_time, end_time, room, session_type, display_order
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+              [
+                id, sIdx + 1, ses.session_code || `SES-${sIdx + 1}`, ses.title || 'Session Track',
+                ses.track || 'General', ses.category || 'General', ses.description || '', ses.session_date || updatedConf.start_date,
+                ses.start_time || '09:00:00', ses.end_time || '10:30:00', ses.room || 'Hall A',
+                ses.session_type || 'Oral Presentation', Number(ses.display_order || sIdx + 1)
+              ]
+            );
+          }
+        }
+
+        if (Array.isArray(req.body.categories)) {
+          await mysqlPool.query('DELETE FROM registration_categories WHERE conference_id = ?', [id]);
+          for (let cIdx = 0; cIdx < req.body.categories.length; cIdx++) {
+            const cat = req.body.categories[cIdx];
+            await mysqlPool.query(
+              `INSERT INTO registration_categories (
+                conference_id, name, price, currency, early_bird_price, deadline, benefits, is_popular, display_order, payment_gateway_link, is_active
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+              [
+                id, cat.name || 'Delegate Pass', Number(cat.price || cat.standard_fee || 799), cat.currency || 'USD',
+                Number(cat.early_bird_price || cat.early_bird_fee || 699), cat.deadline || updatedConf.early_bird_deadline,
+                JSON.stringify(cat.benefits || []), Boolean(cat.is_popular), Number(cat.display_order || cIdx + 1),
+                cat.payment_gateway_link || '', cat.is_active !== false
+              ]
+            );
+          }
+        }
+
+        if (Array.isArray(req.body.schedule)) {
+          await mysqlPool.query('DELETE FROM schedule_items WHERE conference_id = ?', [id]);
+          for (let scIdx = 0; scIdx < req.body.schedule.length; scIdx++) {
+            const sch = req.body.schedule[scIdx];
+            await mysqlPool.query(
+              `INSERT INTO schedule_items (
+                conference_id, day_number, schedule_date, start_time, end_time, title, description,
+                room, track, speaker_name, speaker_affiliation, item_type, display_order
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+              [
+                id, Number(sch.day_number || 1), sch.schedule_date || updatedConf.start_date,
+                sch.start_time || '09:00', sch.end_time || '10:00', sch.title || 'Schedule Item',
+                sch.description || '', sch.room || '', sch.track || '', sch.speaker_name || '',
+                sch.speaker_affiliation || '', sch.item_type || 'session', Number(sch.display_order || scIdx + 1)
+              ]
+            );
+          }
+        }
+
+      } catch (dbErr: any) {
+        console.error('[MySQL Conference Update Failed]:', dbErr);
+        return res.status(500).json({ success: false, message: `Failed to update conference in MySQL: ${dbErr.message}` });
+      }
+    }
+
+    if (index !== -1) {
+      db.conferences[index] = updatedConf;
+    } else {
+      db.conferences.push(updatedConf);
+    }
+
+    // Synchronize RAM child entities
     if (Array.isArray(req.body.committee)) {
       db.committee = db.committee.filter(m => m.conference_id !== id).concat(
         req.body.committee.map((m: any, idx: number) => ({
@@ -1017,26 +1712,6 @@ const adminLoginRateLimiter = rateLimit({
       );
     }
 
-    if (Array.isArray(req.body.sponsors)) {
-      db.sponsors = db.sponsors.filter(s => s.conference_id !== id).concat(
-        req.body.sponsors.map((s: any, idx: number) => ({
-          ...s,
-          id: s.id || (Math.max(...db.sponsors.map(x => x.id), 0) + idx + 1),
-          conference_id: id
-        }))
-      );
-    }
-
-    if (Array.isArray(req.body.media_partners)) {
-      db.mediaPartners = db.mediaPartners.filter(m => m.conference_id !== id).concat(
-        req.body.media_partners.map((m: any, idx: number) => ({
-          ...m,
-          id: m.id || (Math.max(...db.mediaPartners.map(x => x.id), 0) + idx + 1),
-          conference_id: id
-        }))
-      );
-    }
-
     if (Array.isArray(req.body.categories)) {
       db.categories = db.categories.filter(c => c.conference_id !== id).concat(
         req.body.categories.map((c: any, idx: number) => ({
@@ -1069,31 +1744,11 @@ const adminLoginRateLimiter = rateLimit({
       );
     }
 
-    db.addAuditLog('UPDATE_CONFERENCE', 'Conference', String(id), `Updated conference: ${db.conferences[index].title}`);
-    const updatedConf = db.conferences[index];
-    syncToMysql(
-      `UPDATE conferences SET
-        title = ?, short_title = ?, slug = ?, conference_code = ?, theme = ?, tagline = ?, description = ?, detailed_about = ?,
-        about_heading = ?, about_highlights = ?, gallery_images = ?, domain = ?, city = ?, country = ?, venue = ?, venue_address = ?, timezone = ?,
-        start_date = ?, end_date = ?, abstract_deadline = ?, early_bird_deadline = ?, registration_deadline = ?, mode = ?, status = ?,
-        hero_image = ?, logo_url = ?, flyer_url = ?, sample_abstract_url = ?, featured_badge = ?, display_order = ?,
-        welcome_heading = ?, welcome_message = ?, welcome_speaker_name = ?, welcome_speaker_role = ?, welcome_speaker_title = ?, welcome_speaker_image = ?, welcome_footer_text = ?,
-        exhibitor_heading = ?, exhibitor_message = ?, exhibitor_speaker_name = ?, exhibitor_speaker_role = ?, exhibitor_speaker_title = ?, exhibitor_image = ?, exhibitor_footer_text = ?,
-        program_image = ?, meta_title = ?, meta_description = ?, keywords = ?, accept_late_breaking = ?, cme_credits_eligible = ?, primary_language = ?, max_attendees = ?, accent_color = ?, journal_name = ?, journal_issn = ?, indexing_partners = ?
-      WHERE id = ?`,
-      [
-        updatedConf.title, updatedConf.short_title, updatedConf.slug, updatedConf.conference_code, updatedConf.theme, updatedConf.tagline, updatedConf.description, updatedConf.detailed_about,
-        updatedConf.about_heading, JSON.stringify(updatedConf.about_highlights || []), JSON.stringify(updatedConf.gallery_images || []), updatedConf.domain, updatedConf.city, updatedConf.country, updatedConf.venue, updatedConf.venue_address, updatedConf.timezone,
-        updatedConf.start_date, updatedConf.end_date, updatedConf.abstract_deadline, updatedConf.early_bird_deadline, updatedConf.registration_deadline, updatedConf.mode, updatedConf.status,
-        updatedConf.hero_image, updatedConf.logo_url, updatedConf.flyer_url, updatedConf.sample_abstract_url, updatedConf.featured_badge, updatedConf.display_order,
-        updatedConf.welcome_heading, updatedConf.welcome_message, updatedConf.welcome_speaker_name, updatedConf.welcome_speaker_role, updatedConf.welcome_speaker_title, updatedConf.welcome_speaker_image, updatedConf.welcome_footer_text,
-        updatedConf.exhibitor_heading, updatedConf.exhibitor_message, updatedConf.exhibitor_speaker_name, updatedConf.exhibitor_speaker_role, updatedConf.exhibitor_speaker_title, updatedConf.exhibitor_image, updatedConf.exhibitor_footer_text,
-        updatedConf.program_image, updatedConf.meta_title, updatedConf.meta_description, updatedConf.keywords, updatedConf.accept_late_breaking, updatedConf.cme_credits_eligible, updatedConf.primary_language, updatedConf.max_attendees, updatedConf.accent_color, updatedConf.journal_name, updatedConf.journal_issn, JSON.stringify(updatedConf.indexing_partners || []),
-        id
-      ]
-    );
+    db.addAuditLog('UPDATE_CONFERENCE', 'Conference', String(id), `Updated conference: ${updatedConf.title}`);
+    invalidatePublicCache();
+
     const enrichedUpdatedConf = {
-      ...db.conferences[index],
+      ...updatedConf,
       committee: db.committee.filter(m => m.conference_id === id),
       speakers: db.speakers.filter(s => s.conference_id === id),
       sessions: db.sessions.filter(s => s.conference_id === id),
@@ -1102,69 +1757,244 @@ const adminLoginRateLimiter = rateLimit({
       media_partners: db.mediaPartners.filter(m => m.conference_id === id),
       schedule: db.schedule.filter(s => s.conference_id === id)
     };
-    res.json({ success: true, message: 'Conference updated successfully', data: enrichedUpdatedConf });
+    res.json({ success: true, message: 'Conference updated successfully in MySQL', data: enrichedUpdatedConf });
   });
 
-  app.patch('/api/v1/conferences/:id/status', authenticateAdmin, (req: Request, res: Response) => {
+  app.patch('/api/v1/conferences/:id/status', authenticateAdmin, async (req: Request, res: Response) => {
     const id = Number(req.params.id);
     const { status } = req.body;
-    const index = db.conferences.findIndex(c => c.id === id);
-    if (index === -1) {
-      return res.status(404).json({ success: false, message: 'Conference not found' });
+    if (mysqlPool) {
+      try {
+        await mysqlPool.query('UPDATE conferences SET status = ? WHERE id = ?', [status, id]);
+      } catch (err: any) {
+        console.error('[MySQL Update Status Error]:', err);
+        return res.status(500).json({ success: false, message: `Failed to update status in MySQL: ${err.message}` });
+      }
     }
-    if (status) {
+    const index = db.conferences.findIndex(c => c.id === id);
+    if (index !== -1 && status) {
       db.conferences[index].status = status;
     }
+    invalidatePublicCache();
     db.addAuditLog('UPDATE_CONFERENCE_STATUS', 'Conference', String(id), `Updated conference status to ${status}`);
-    res.json({ success: true, message: `Status updated to ${status}`, data: db.conferences[index] });
+    res.json({ success: true, message: `Status updated to ${status}`, data: index !== -1 ? db.conferences[index] : { id, status } });
   });
 
-  app.patch('/api/v1/conferences/:id/order', authenticateAdmin, (req: Request, res: Response) => {
+  app.patch('/api/v1/conferences/:id/order', authenticateAdmin, async (req: Request, res: Response) => {
     const id = Number(req.params.id);
     const { display_order } = req.body;
-    const index = db.conferences.findIndex(c => c.id === id);
-    if (index === -1) {
-      return res.status(404).json({ success: false, message: 'Conference not found' });
+    if (mysqlPool) {
+      try {
+        await mysqlPool.query('UPDATE conferences SET display_order = ? WHERE id = ?', [display_order, id]);
+      } catch (err: any) {
+        console.error('[MySQL Update Order Error]:', err);
+        return res.status(500).json({ success: false, message: `Failed to update order in MySQL: ${err.message}` });
+      }
     }
-    if (typeof display_order === 'number') {
+    const index = db.conferences.findIndex(c => c.id === id);
+    if (index !== -1 && typeof display_order === 'number') {
       db.conferences[index].display_order = display_order;
     }
+    invalidatePublicCache();
     db.addAuditLog('UPDATE_CONFERENCE_ORDER', 'Conference', String(id), `Updated display order to ${display_order}`);
-    res.json({ success: true, message: `Display order updated to ${display_order}`, data: db.conferences[index] });
+    res.json({ success: true, message: `Display order updated to ${display_order}`, data: index !== -1 ? db.conferences[index] : { id, display_order } });
   });
 
-  app.post('/api/v1/conferences/:id/duplicate', authenticateAdmin, (req: Request, res: Response) => {
+  app.post('/api/v1/conferences/:id/duplicate', authenticateAdmin, async (req: Request, res: Response) => {
     const id = Number(req.params.id);
-    const original = db.conferences.find(c => c.id === id);
+    let original = db.conferences.find(c => c.id === id);
+    if (mysqlPool) {
+      try {
+        const [rows]: any = await mysqlPool.query('SELECT * FROM conferences WHERE id = ?', [id]);
+        if (Array.isArray(rows) && rows.length > 0) {
+          const r = rows[0];
+          original = {
+            id: Number(r.id),
+            title: r.title,
+            short_title: r.short_title,
+            slug: r.slug,
+            conference_code: r.conference_code,
+            theme: r.theme,
+            tagline: r.tagline,
+            description: r.description,
+            detailed_about: r.detailed_about,
+            about_heading: r.about_heading,
+            about_highlights: parseJsonSafe(r.about_highlights, []),
+            gallery_images: parseJsonSafe(r.gallery_images, []),
+            domain: r.domain,
+            city: r.city,
+            country: r.country,
+            venue: r.venue,
+            venue_address: r.venue_address,
+            timezone: r.timezone,
+            start_date: formatDateStr(r.start_date),
+            end_date: formatDateStr(r.end_date),
+            abstract_deadline: formatDateStr(r.abstract_deadline),
+            early_bird_deadline: formatDateStr(r.early_bird_deadline),
+            registration_deadline: formatDateStr(r.registration_deadline),
+            mode: r.mode,
+            status: r.status,
+            hero_image: r.hero_image,
+            logo_url: r.logo_url,
+            flyer_url: r.flyer_url,
+            sample_abstract_url: r.sample_abstract_url,
+            featured_badge: r.featured_badge,
+            display_order: Number(r.display_order ?? 0),
+            welcome_heading: r.welcome_heading,
+            welcome_message: r.welcome_message,
+            welcome_speaker_name: r.welcome_speaker_name,
+            welcome_speaker_role: r.welcome_speaker_role,
+            welcome_speaker_title: r.welcome_speaker_title,
+            welcome_speaker_image: r.welcome_speaker_image,
+            welcome_footer_text: r.welcome_footer_text,
+            exhibitor_heading: r.exhibitor_heading,
+            exhibitor_message: r.exhibitor_message,
+            exhibitor_speaker_name: r.exhibitor_speaker_name,
+            exhibitor_speaker_role: r.exhibitor_speaker_role,
+            exhibitor_speaker_title: r.exhibitor_speaker_title,
+            exhibitor_image: r.exhibitor_image,
+            exhibitor_footer_text: r.exhibitor_footer_text,
+            program_image: r.program_image,
+            meta_title: r.meta_title,
+            meta_description: r.meta_description,
+            keywords: r.keywords,
+            accept_late_breaking: Boolean(r.accept_late_breaking),
+            cme_credits_eligible: Boolean(r.cme_credits_eligible),
+            primary_language: r.primary_language,
+            max_attendees: Number(r.max_attendees || 500),
+            accent_color: r.accent_color || 'teal',
+            journal_name: r.journal_name,
+            journal_issn: r.journal_issn,
+            indexing_partners: parseJsonSafe(r.indexing_partners, [])
+          };
+        }
+      } catch (err: any) {
+        console.warn('[MySQL Duplicate Fetch Notice]:', err.message);
+      }
+    }
+
     if (!original) {
       return res.status(404).json({ success: false, message: 'Original conference not found' });
     }
-    const newId = Math.max(...db.conferences.map(c => c.id), 0) + 1;
+
     const copyTimestamp = Date.now().toString().slice(-4);
+    const newTitle = `${original.title} (Clone)`;
+    const newShortTitle = `${original.short_title} (Copy)`;
+    const newSlug = `${original.slug}-copy-${copyTimestamp}`;
+    const newCode = `${original.conference_code}-CPY${copyTimestamp}`;
+
+    let newId = Math.max(...db.conferences.map(c => c.id), 0) + 1;
+
+    if (mysqlPool) {
+      try {
+        const [dupRes]: any = await mysqlPool.query(
+          `INSERT INTO conferences (
+            title, short_title, slug, conference_code, theme, tagline, description, detailed_about,
+            about_heading, about_highlights, gallery_images, domain, city, country, venue, venue_address, timezone,
+            start_date, end_date, abstract_deadline, early_bird_deadline, registration_deadline, mode, status,
+            hero_image, logo_url, flyer_url, sample_abstract_url, featured_badge, display_order,
+            welcome_heading, welcome_message, welcome_speaker_name, welcome_speaker_role, welcome_speaker_title, welcome_speaker_image, welcome_footer_text,
+            exhibitor_heading, exhibitor_message, exhibitor_speaker_name, exhibitor_speaker_role, exhibitor_speaker_title, exhibitor_image, exhibitor_footer_text,
+            program_image, meta_title, meta_description, keywords, accept_late_breaking, cme_credits_eligible, primary_language, max_attendees, accent_color, journal_name, journal_issn, indexing_partners
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            newTitle, newShortTitle, newSlug, newCode, original.theme, original.tagline, original.description, original.detailed_about,
+            original.about_heading, JSON.stringify(original.about_highlights || []), JSON.stringify(original.gallery_images || []), original.domain, original.city, original.country, original.venue, original.venue_address, original.timezone,
+            formatDateStr(original.start_date), formatDateStr(original.end_date), formatDateStr(original.abstract_deadline), formatDateStr(original.early_bird_deadline), formatDateStr(original.registration_deadline), original.mode, 'draft',
+            original.hero_image, original.logo_url, original.flyer_url, original.sample_abstract_url, original.featured_badge, (original.display_order || 0) + 1,
+            original.welcome_heading, original.welcome_message, original.welcome_speaker_name, original.welcome_speaker_role, original.welcome_speaker_title, original.welcome_speaker_image, original.welcome_footer_text,
+            original.exhibitor_heading, original.exhibitor_message, original.exhibitor_speaker_name, original.exhibitor_speaker_role, original.exhibitor_speaker_title, original.exhibitor_image, original.exhibitor_footer_text,
+            original.program_image, original.meta_title, original.meta_description, original.keywords, original.accept_late_breaking, original.cme_credits_eligible, original.primary_language, original.max_attendees, original.accent_color, original.journal_name, original.journal_issn, JSON.stringify(original.indexing_partners || [])
+          ]
+        );
+        newId = Number(dupRes.insertId);
+
+        // Copy committee
+        await mysqlPool.query(
+          `INSERT INTO committee_members (
+            conference_id, name, designation, institution, country, committee_role, photo_url,
+            biography, education, experience, research_interests, publications_count, linkedin_url,
+            orcid_url, google_scholar_url, display_order, is_published
+          ) SELECT ?, name, designation, institution, country, committee_role, photo_url,
+            biography, education, experience, research_interests, publications_count, linkedin_url,
+            orcid_url, google_scholar_url, display_order, is_published
+          FROM committee_members WHERE conference_id = ?`,
+          [newId, id]
+        );
+
+        // Copy sessions
+        await mysqlPool.query(
+          `INSERT INTO sessions (
+            conference_id, session_number, session_code, title, track, category, description,
+            session_date, start_time, end_time, room, session_type, display_order
+          ) SELECT ?, session_number, CONCAT(session_code, '-CPY'), title, track, category, description,
+            session_date, start_time, end_time, room, session_type, display_order
+          FROM sessions WHERE conference_id = ?`,
+          [newId, id]
+        );
+
+        // Copy categories
+        await mysqlPool.query(
+          `INSERT INTO registration_categories (
+            conference_id, name, price, currency, early_bird_price, deadline, benefits, is_popular, display_order, payment_gateway_link, is_active
+          ) SELECT ?, name, price, currency, early_bird_price, deadline, benefits, is_popular, display_order, payment_gateway_link, is_active
+          FROM registration_categories WHERE conference_id = ?`,
+          [newId, id]
+        );
+
+        // Copy schedule
+        await mysqlPool.query(
+          `INSERT INTO schedule_items (
+            conference_id, day_number, schedule_date, start_time, end_time, title, description,
+            room, track, speaker_name, speaker_affiliation, item_type, display_order
+          ) SELECT ?, day_number, schedule_date, start_time, end_time, title, description,
+            room, track, speaker_name, speaker_affiliation, item_type, display_order
+          FROM schedule_items WHERE conference_id = ?`,
+          [newId, id]
+        );
+
+      } catch (dbErr: any) {
+        console.error('[MySQL Conference Duplicate Failed]:', dbErr);
+        return res.status(500).json({ success: false, message: `Failed to duplicate conference in MySQL: ${dbErr.message}` });
+      }
+    }
+
     const duplicated: Conference = {
       ...original,
       id: newId,
-      title: `${original.title} (Clone)`,
-      short_title: `${original.short_title} (Copy)`,
-      slug: `${original.slug}-copy-${copyTimestamp}`,
-      conference_code: `${original.conference_code}-CPY${copyTimestamp}`,
+      title: newTitle,
+      short_title: newShortTitle,
+      slug: newSlug,
+      conference_code: newCode,
       status: 'draft',
       created_at: new Date().toISOString()
     };
     db.conferences.push(duplicated);
+    invalidatePublicCache();
     db.addAuditLog('DUPLICATE_CONFERENCE', 'Conference', duplicated.conference_code, `Cloned from ${original.title}`);
-    res.status(201).json({ success: true, message: 'Conference duplicated as draft successfully', data: duplicated });
+    res.status(201).json({ success: true, message: 'Conference duplicated as draft successfully in MySQL', data: duplicated });
   });
 
-  app.delete('/api/v1/conferences/:id', authenticateAdmin, (req: Request, res: Response) => {
+  app.delete('/api/v1/conferences/:id', authenticateAdmin, async (req: Request, res: Response) => {
     const id = Number(req.params.id);
-    const index = db.conferences.findIndex(c => c.id === id);
-    if (index === -1) {
-      return res.status(404).json({ success: false, message: 'Conference not found' });
+    if (mysqlPool) {
+      try {
+        await mysqlPool.query('DELETE FROM conferences WHERE id = ?', [id]);
+        console.log(`[MySQL Delete Conference] Deleted conference ID ${id} and cascading child records.`);
+      } catch (err: any) {
+        console.error('[MySQL Delete Conference Failed]:', err);
+        return res.status(500).json({ success: false, message: `Failed to delete conference in MySQL: ${err.message}` });
+      }
     }
-    const removed = db.conferences.splice(index, 1)[0];
-    db.addAuditLog('DELETE_CONFERENCE', 'Conference', String(id), `Deleted conference: ${removed.title}`);
-    res.json({ success: true, message: 'Conference deleted successfully', data: removed });
+    const index = db.conferences.findIndex(c => c.id === id);
+    const removed = index !== -1 ? db.conferences.splice(index, 1)[0] : { id };
+    db.committee = db.committee.filter(m => m.conference_id !== id);
+    db.sessions = db.sessions.filter(s => s.conference_id !== id);
+    db.categories = db.categories.filter(c => c.conference_id !== id);
+    db.schedule = db.schedule.filter(s => s.conference_id !== id);
+    invalidatePublicCache();
+    db.addAuditLog('DELETE_CONFERENCE', 'Conference', String(id), `Deleted conference ID: ${id}`);
+    res.json({ success: true, message: 'Conference deleted successfully from MySQL', data: removed });
   });
 
   // 3. Committee Members
@@ -1203,8 +2033,34 @@ const adminLoginRateLimiter = rateLimit({
     res.json({ success: true, data: member });
   });
 
-  app.post('/api/v1/committee', authenticateAdmin, (req: Request, res: Response) => {
-    const newId = Math.max(...db.committee.map(m => m.id), 0) + 1;
+  app.post('/api/v1/committee', authenticateAdmin, async (req: Request, res: Response) => {
+    let newId = Math.max(...db.committee.map(m => m.id), 0) + 1;
+    const isPub = req.body.is_published !== undefined ? Boolean(req.body.is_published) : true;
+    if (mysqlPool) {
+      try {
+        const [r]: any = await mysqlPool.query(
+          `INSERT INTO committee_members (
+            conference_id, name, designation, institution, country, committee_role, photo_url,
+            biography, education, experience, research_interests, publications_count, linkedin_url,
+            orcid_url, google_scholar_url, display_order, is_published
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            Number(req.body.conference_id) || 1, req.body.name || 'New Committee Member',
+            req.body.designation || 'Professor of Science', req.body.institution || 'University Research Institute',
+            req.body.country || 'Global', req.body.committee_role || 'Scientific Committee',
+            req.body.photo_url || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80',
+            req.body.biography || '', req.body.education || '', req.body.experience || '',
+            req.body.research_interests || '', Number(req.body.publications_count) || 10,
+            req.body.linkedin_url || '', req.body.orcid_url || '', req.body.google_scholar_url || '',
+            Number(req.body.display_order) || (db.committee.length + 1), isPub
+          ]
+        );
+        newId = Number(r.insertId);
+      } catch (err: any) {
+        console.error('[MySQL Add Committee Error]:', err);
+        return res.status(500).json({ success: false, message: `Failed to add committee member in MySQL: ${err.message}` });
+      }
+    }
     const newMember: CommitteeMember = {
       id: newId,
       conference_id: Number(req.body.conference_id) || 1,
@@ -1223,48 +2079,97 @@ const adminLoginRateLimiter = rateLimit({
       orcid_url: req.body.orcid_url || '',
       google_scholar_url: req.body.google_scholar_url || '',
       display_order: Number(req.body.display_order) || (db.committee.length + 1),
-      is_published: req.body.is_published !== undefined ? req.body.is_published : true,
+      is_published: isPub,
       status: req.body.status || 'active'
     };
     db.committee.push(newMember);
+    invalidatePublicCache();
     db.addAuditLog('ADD_COMMITTEE_MEMBER', 'CommitteeMember', String(newMember.id), `Added committee member: ${newMember.name}`);
-    res.status(201).json({ success: true, message: 'Committee member added successfully', data: newMember });
+    res.status(201).json({ success: true, message: 'Committee member added successfully in MySQL', data: newMember });
   });
 
-  app.put('/api/v1/committee/:id', authenticateAdmin, (req: Request, res: Response) => {
+  app.put('/api/v1/committee/:id', authenticateAdmin, async (req: Request, res: Response) => {
     const id = Number(req.params.id);
-    const index = db.committee.findIndex(m => m.id === id);
-    if (index === -1) {
-      return res.status(404).json({ success: false, message: 'Committee member not found' });
+    if (mysqlPool) {
+      try {
+        await mysqlPool.query(
+          `UPDATE committee_members SET
+            name = COALESCE(?, name),
+            designation = COALESCE(?, designation),
+            institution = COALESCE(?, institution),
+            country = COALESCE(?, country),
+            committee_role = COALESCE(?, committee_role),
+            photo_url = COALESCE(?, photo_url),
+            biography = COALESCE(?, biography),
+            education = COALESCE(?, education),
+            experience = COALESCE(?, experience),
+            research_interests = COALESCE(?, research_interests),
+            publications_count = COALESCE(?, publications_count),
+            linkedin_url = COALESCE(?, linkedin_url),
+            orcid_url = COALESCE(?, orcid_url),
+            google_scholar_url = COALESCE(?, google_scholar_url),
+            display_order = COALESCE(?, display_order),
+            is_published = COALESCE(?, is_published)
+          WHERE id = ?`,
+          [
+            req.body.name, req.body.designation, req.body.institution, req.body.country,
+            req.body.committee_role, req.body.photo_url, req.body.biography, req.body.education,
+            req.body.experience, req.body.research_interests, req.body.publications_count,
+            req.body.linkedin_url, req.body.orcid_url, req.body.google_scholar_url,
+            req.body.display_order, req.body.is_published, id
+          ]
+        );
+      } catch (err: any) {
+        console.error('[MySQL Update Committee Error]:', err);
+        return res.status(500).json({ success: false, message: `Failed to update committee member in MySQL: ${err.message}` });
+      }
     }
-    db.committee[index] = { ...db.committee[index], ...req.body };
-    db.addAuditLog('UPDATE_COMMITTEE_MEMBER', 'CommitteeMember', String(id), `Updated member: ${db.committee[index].name}`);
-    res.json({ success: true, message: 'Committee member updated successfully', data: db.committee[index] });
+    const index = db.committee.findIndex(m => m.id === id);
+    if (index !== -1) {
+      db.committee[index] = { ...db.committee[index], ...req.body };
+    }
+    invalidatePublicCache();
+    db.addAuditLog('UPDATE_COMMITTEE_MEMBER', 'CommitteeMember', String(id), `Updated member: ${req.body.name || id}`);
+    res.json({ success: true, message: 'Committee member updated successfully in MySQL', data: index !== -1 ? db.committee[index] : req.body });
   });
 
-  app.patch('/api/v1/committee/:id/status', (req: Request, res: Response) => {
+  app.patch('/api/v1/committee/:id/status', async (req: Request, res: Response) => {
     const id = Number(req.params.id);
     const index = db.committee.findIndex(m => m.id === id);
-    if (index === -1) {
-      return res.status(404).json({ success: false, message: 'Committee member not found' });
+    const currentPub = index !== -1 ? (db.committee[index].is_published ?? true) : true;
+    const newPub = req.body.is_published !== undefined ? Boolean(req.body.is_published) : !currentPub;
+    if (mysqlPool) {
+      try {
+        await mysqlPool.query('UPDATE committee_members SET is_published = ? WHERE id = ?', [newPub, id]);
+      } catch (err: any) {
+        console.error('[MySQL Toggle Committee Status Error]:', err);
+        return res.status(500).json({ success: false, message: `Failed to update status in MySQL: ${err.message}` });
+      }
     }
-    const currentPub = db.committee[index].is_published ?? true;
-    const newPub = req.body.is_published !== undefined ? req.body.is_published : !currentPub;
-    db.committee[index].is_published = newPub;
-    db.committee[index].status = newPub ? 'active' : 'inactive';
+    if (index !== -1) {
+      db.committee[index].is_published = newPub;
+      db.committee[index].status = newPub ? 'active' : 'inactive';
+    }
+    invalidatePublicCache();
     db.addAuditLog('TOGGLE_COMMITTEE_STATUS', 'CommitteeMember', String(id), `Set status to ${newPub ? 'Published' : 'Hidden'}`);
-    res.json({ success: true, message: `Status updated to ${newPub ? 'Active' : 'Inactive'}`, data: db.committee[index] });
+    res.json({ success: true, message: `Status updated to ${newPub ? 'Active' : 'Inactive'} in MySQL`, data: index !== -1 ? db.committee[index] : { id, is_published: newPub } });
   });
 
-  app.delete('/api/v1/committee/:id', (req: Request, res: Response) => {
+  app.delete('/api/v1/committee/:id', async (req: Request, res: Response) => {
     const id = Number(req.params.id);
-    const index = db.committee.findIndex(m => m.id === id);
-    if (index === -1) {
-      return res.status(404).json({ success: false, message: 'Committee member not found' });
+    if (mysqlPool) {
+      try {
+        await mysqlPool.query('DELETE FROM committee_members WHERE id = ?', [id]);
+      } catch (err: any) {
+        console.error('[MySQL Delete Committee Error]:', err);
+        return res.status(500).json({ success: false, message: `Failed to delete committee member in MySQL: ${err.message}` });
+      }
     }
-    const removed = db.committee.splice(index, 1)[0];
-    db.addAuditLog('DELETE_COMMITTEE_MEMBER', 'CommitteeMember', String(id), `Removed committee member: ${removed.name}`);
-    res.json({ success: true, message: 'Committee member deleted successfully', data: removed });
+    const index = db.committee.findIndex(m => m.id === id);
+    const removed = index !== -1 ? db.committee.splice(index, 1)[0] : { id };
+    invalidatePublicCache();
+    db.addAuditLog('DELETE_COMMITTEE_MEMBER', 'CommitteeMember', String(id), `Removed committee member ID: ${id}`);
+    res.json({ success: true, message: 'Committee member deleted successfully from MySQL', data: removed });
   });
 
   // 4. Speakers
@@ -1420,9 +2325,34 @@ const adminLoginRateLimiter = rateLimit({
     res.json({ success: true, data: session });
   });
 
-  app.post('/api/v1/sessions', authenticateAdmin, (req: Request, res: Response) => {
-    const newId = Math.max(...db.sessions.map(s => s.id), 0) + 1;
+  app.post('/api/v1/sessions', authenticateAdmin, async (req: Request, res: Response) => {
+    let newId = Math.max(...db.sessions.map(s => s.id), 0) + 1;
     const isPub = req.body.is_published !== undefined ? req.body.is_published : (req.body.status !== 'draft' && req.body.status !== 'archived' && req.body.status !== 'unpublished');
+    if (mysqlPool) {
+      try {
+        const [r]: any = await mysqlPool.query(
+          `INSERT INTO sessions (
+            conference_id, session_number, session_code, title, track, category, description,
+            session_date, start_time, end_time, room, session_type, display_order
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            Number(req.body.conference_id) || 1, Number(req.body.session_number) || (db.sessions.length + 1),
+            req.body.session_code || `BIO-SES-${String(newId).padStart(2, '0')}`,
+            req.body.title || 'New Scientific Session', req.body.track || 'General Track',
+            req.body.category || 'Oral Presentations', req.body.description || '',
+            formatDateStr(req.body.session_date || '2026-06-22'),
+            req.body.start_time ? String(req.body.start_time).substring(0, 5) : '10:00',
+            req.body.end_time ? String(req.body.end_time).substring(0, 5) : '11:30',
+            req.body.room || 'Auditorium Pasteur', req.body.session_type || 'Oral Presentation',
+            Number(req.body.display_order) || newId
+          ]
+        );
+        newId = Number(r.insertId);
+      } catch (err: any) {
+        console.error('[MySQL Add Session Error]:', err);
+        return res.status(500).json({ success: false, message: `Failed to add session in MySQL: ${err.message}` });
+      }
+    }
     const newSession: Session = {
       id: newId,
       conference_id: Number(req.body.conference_id) || 1,
@@ -1447,49 +2377,77 @@ const adminLoginRateLimiter = rateLimit({
       speaker_name: req.body.speaker_name || ''
     };
     db.sessions.push(newSession);
+    invalidatePublicCache();
     db.addAuditLog('ADD_SESSION', 'Session', newSession.session_code, `Added session: ${newSession.title}`);
-    res.status(201).json({ success: true, message: 'Session created successfully', data: newSession });
+    res.status(201).json({ success: true, message: 'Session created successfully in MySQL', data: newSession });
   });
 
-  app.put('/api/v1/sessions/:id', authenticateAdmin, (req: Request, res: Response) => {
+  app.put('/api/v1/sessions/:id', authenticateAdmin, async (req: Request, res: Response) => {
     const id = Number(req.params.id);
-    const index = db.sessions.findIndex(s => s.id === id);
-    if (index === -1) {
-      return res.status(404).json({ success: false, message: 'Session not found' });
+    if (mysqlPool) {
+      try {
+        await mysqlPool.query(
+          `UPDATE sessions SET
+            title = COALESCE(?, title),
+            track = COALESCE(?, track),
+            category = COALESCE(?, category),
+            description = COALESCE(?, description),
+            session_date = COALESCE(?, session_date),
+            start_time = COALESCE(?, start_time),
+            end_time = COALESCE(?, end_time),
+            room = COALESCE(?, room),
+            session_type = COALESCE(?, session_type),
+            display_order = COALESCE(?, display_order)
+          WHERE id = ?`,
+          [
+            req.body.title, req.body.track, req.body.category, req.body.description,
+            req.body.session_date ? formatDateStr(req.body.session_date) : null,
+            req.body.start_time, req.body.end_time, req.body.room,
+            req.body.session_type, req.body.display_order, id
+          ]
+        );
+      } catch (err: any) {
+        console.error('[MySQL Update Session Error]:', err);
+        return res.status(500).json({ success: false, message: `Failed to update session in MySQL: ${err.message}` });
+      }
     }
-    db.sessions[index] = { ...db.sessions[index], ...req.body };
-    db.addAuditLog('UPDATE_SESSION', 'Session', db.sessions[index].session_code, `Updated session: ${db.sessions[index].title}`);
-    res.json({ success: true, message: 'Session updated successfully', data: db.sessions[index] });
+    const index = db.sessions.findIndex(s => s.id === id);
+    if (index !== -1) {
+      db.sessions[index] = { ...db.sessions[index], ...req.body };
+    }
+    invalidatePublicCache();
+    db.addAuditLog('UPDATE_SESSION', 'Session', String(id), `Updated session: ${req.body.title || id}`);
+    res.json({ success: true, message: 'Session updated successfully in MySQL', data: index !== -1 ? db.sessions[index] : req.body });
   });
 
-  app.patch('/api/v1/sessions/:id/status', (req: Request, res: Response) => {
+  app.patch('/api/v1/sessions/:id/status', async (req: Request, res: Response) => {
     const id = Number(req.params.id);
     const index = db.sessions.findIndex(s => s.id === id);
-    if (index === -1) {
-      return res.status(404).json({ success: false, message: 'Session not found' });
+    if (index !== -1) {
+      if (req.body.status !== undefined) db.sessions[index].status = req.body.status;
+      if (req.body.is_active !== undefined) db.sessions[index].is_active = req.body.is_active;
+      if (req.body.is_published !== undefined) db.sessions[index].is_published = req.body.is_published;
     }
-    if (req.body.status !== undefined) {
-      db.sessions[index].status = req.body.status;
-    }
-    if (req.body.is_active !== undefined) {
-      db.sessions[index].is_active = req.body.is_active;
-    }
-    if (req.body.is_published !== undefined) {
-      db.sessions[index].is_published = req.body.is_published;
-    }
-    db.addAuditLog('TOGGLE_SESSION_STATUS', 'Session', db.sessions[index].session_code, `Updated status to ${req.body.status || 'updated'}`);
-    res.json({ success: true, message: 'Session status updated', data: db.sessions[index] });
+    invalidatePublicCache();
+    db.addAuditLog('TOGGLE_SESSION_STATUS', 'Session', String(id), `Updated status to ${req.body.status || 'updated'}`);
+    res.json({ success: true, message: 'Session status updated', data: index !== -1 ? db.sessions[index] : { id } });
   });
 
-  app.delete('/api/v1/sessions/:id', (req: Request, res: Response) => {
+  app.delete('/api/v1/sessions/:id', async (req: Request, res: Response) => {
     const id = Number(req.params.id);
-    const index = db.sessions.findIndex(s => s.id === id);
-    if (index === -1) {
-      return res.status(404).json({ success: false, message: 'Session not found' });
+    if (mysqlPool) {
+      try {
+        await mysqlPool.query('DELETE FROM sessions WHERE id = ?', [id]);
+      } catch (err: any) {
+        console.error('[MySQL Delete Session Error]:', err);
+        return res.status(500).json({ success: false, message: `Failed to delete session in MySQL: ${err.message}` });
+      }
     }
-    const removed = db.sessions.splice(index, 1)[0];
-    db.addAuditLog('DELETE_SESSION', 'Session', removed.session_code, `Deleted session: ${removed.title}`);
-    res.json({ success: true, message: 'Session deleted successfully', data: removed });
+    const index = db.sessions.findIndex(s => s.id === id);
+    const removed = index !== -1 ? db.sessions.splice(index, 1)[0] : { id };
+    invalidatePublicCache();
+    db.addAuditLog('DELETE_SESSION', 'Session', String(id), `Deleted session ID: ${id}`);
+    res.json({ success: true, message: 'Session deleted successfully from MySQL', data: removed });
   });
 
   // 5.5 Sponsors & Academic Partners
@@ -1609,8 +2567,31 @@ const adminLoginRateLimiter = rateLimit({
     res.json({ success: true, data: list });
   });
 
-  app.post('/api/v1/schedule', (req: Request, res: Response) => {
-    const newId = Math.max(...db.schedule.map(s => s.id), 0) + 1;
+  app.post('/api/v1/schedule', async (req: Request, res: Response) => {
+    let newId = Math.max(...db.schedule.map(s => s.id), 0) + 1;
+    if (mysqlPool) {
+      try {
+        const [r]: any = await mysqlPool.query(
+          `INSERT INTO schedule_items (
+            conference_id, day_number, schedule_date, start_time, end_time, title, description,
+            room, track, speaker_name, speaker_affiliation, item_type, display_order
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            Number(req.body.conference_id) || 1, Number(req.body.day_number) || 1,
+            formatDateStr(req.body.schedule_date || '2026-06-22'),
+            req.body.start_time || '09:00', req.body.end_time || '10:00',
+            req.body.title || 'Scientific Session', req.body.description || '',
+            req.body.room || 'Auditorium Hall A', req.body.track || 'General Track',
+            req.body.speaker_name || '', req.body.speaker_affiliation || '',
+            req.body.item_type || 'session', Number(req.body.display_order) || newId
+          ]
+        );
+        newId = Number(r.insertId);
+      } catch (err: any) {
+        console.error('[MySQL Add Schedule Error]:', err);
+        return res.status(500).json({ success: false, message: `Failed to add schedule item in MySQL: ${err.message}` });
+      }
+    }
     const item: ScheduleItem = {
       id: newId,
       conference_id: Number(req.body.conference_id) || 1,
@@ -1629,26 +2610,66 @@ const adminLoginRateLimiter = rateLimit({
       display_order: Number(req.body.display_order) || newId
     };
     db.schedule.push(item);
+    invalidatePublicCache();
     db.addAuditLog('ADD_SCHEDULE_ITEM', 'ScheduleItem', String(newId), `Added schedule item: ${item.title}`);
-    res.status(201).json({ success: true, message: 'Schedule item created', data: item });
+    res.status(201).json({ success: true, message: 'Schedule item created successfully in MySQL', data: item });
   });
 
-  app.put('/api/v1/schedule/:id', (req: Request, res: Response) => {
+  app.put('/api/v1/schedule/:id', async (req: Request, res: Response) => {
     const id = Number(req.params.id);
+    if (mysqlPool) {
+      try {
+        await mysqlPool.query(
+          `UPDATE schedule_items SET
+            day_number = COALESCE(?, day_number),
+            schedule_date = COALESCE(?, schedule_date),
+            start_time = COALESCE(?, start_time),
+            end_time = COALESCE(?, end_time),
+            title = COALESCE(?, title),
+            description = COALESCE(?, description),
+            room = COALESCE(?, room),
+            track = COALESCE(?, track),
+            speaker_name = COALESCE(?, speaker_name),
+            speaker_affiliation = COALESCE(?, speaker_affiliation),
+            item_type = COALESCE(?, item_type),
+            display_order = COALESCE(?, display_order)
+          WHERE id = ?`,
+          [
+            req.body.day_number, req.body.schedule_date ? formatDateStr(req.body.schedule_date) : null,
+            req.body.start_time, req.body.end_time, req.body.title, req.body.description,
+            req.body.room, req.body.track, req.body.speaker_name, req.body.speaker_affiliation,
+            req.body.item_type, req.body.display_order, id
+          ]
+        );
+      } catch (err: any) {
+        console.error('[MySQL Update Schedule Error]:', err);
+        return res.status(500).json({ success: false, message: `Failed to update schedule item in MySQL: ${err.message}` });
+      }
+    }
     const index = db.schedule.findIndex(s => s.id === id);
-    if (index === -1) return res.status(404).json({ success: false, message: 'Schedule item not found' });
-    db.schedule[index] = { ...db.schedule[index], ...req.body };
-    db.addAuditLog('UPDATE_SCHEDULE_ITEM', 'ScheduleItem', String(id), `Updated schedule item: ${db.schedule[index].title}`);
-    res.json({ success: true, message: 'Schedule item updated', data: db.schedule[index] });
+    if (index !== -1) {
+      db.schedule[index] = { ...db.schedule[index], ...req.body };
+    }
+    invalidatePublicCache();
+    db.addAuditLog('UPDATE_SCHEDULE_ITEM', 'ScheduleItem', String(id), `Updated schedule item: ${req.body.title || id}`);
+    res.json({ success: true, message: 'Schedule item updated successfully in MySQL', data: index !== -1 ? db.schedule[index] : req.body });
   });
 
-  app.delete('/api/v1/schedule/:id', (req: Request, res: Response) => {
+  app.delete('/api/v1/schedule/:id', async (req: Request, res: Response) => {
     const id = Number(req.params.id);
+    if (mysqlPool) {
+      try {
+        await mysqlPool.query('DELETE FROM schedule_items WHERE id = ?', [id]);
+      } catch (err: any) {
+        console.error('[MySQL Delete Schedule Error]:', err);
+        return res.status(500).json({ success: false, message: `Failed to delete schedule item in MySQL: ${err.message}` });
+      }
+    }
     const index = db.schedule.findIndex(s => s.id === id);
-    if (index === -1) return res.status(404).json({ success: false, message: 'Schedule item not found' });
-    const removed = db.schedule.splice(index, 1)[0];
-    db.addAuditLog('DELETE_SCHEDULE_ITEM', 'ScheduleItem', String(id), `Deleted schedule item: ${removed.title}`);
-    res.json({ success: true, message: 'Schedule item deleted', data: removed });
+    const removed = index !== -1 ? db.schedule.splice(index, 1)[0] : { id };
+    invalidatePublicCache();
+    db.addAuditLog('DELETE_SCHEDULE_ITEM', 'ScheduleItem', String(id), `Deleted schedule item: ${(removed as any).title || id}`);
+    res.json({ success: true, message: 'Schedule item deleted successfully from MySQL', data: removed });
   });
 
   // 6.5 Registration Categories
@@ -1662,39 +2683,101 @@ const adminLoginRateLimiter = rateLimit({
     res.json({ success: true, data: list });
   });
 
-  app.post('/api/v1/registration-categories', (req: Request, res: Response) => {
-    const newId = Math.max(...db.categories.map(c => c.id), 0) + 1;
-    const cat = {
-      ...req.body,
-      id: newId,
+  app.post('/api/v1/registration-categories', async (req: Request, res: Response) => {
+    let newId = Math.max(...db.categories.map(c => c.id), 0) + 1;
+    const catData = {
       conference_id: Number(req.body.conference_id) || 1,
+      name: req.body.name || 'Delegate Pass',
       early_bird_fee: Number(req.body.early_bird_fee || req.body.early_bird_price) || 649,
       standard_fee: Number(req.body.standard_fee || req.body.price) || 799,
       price: Number(req.body.price || req.body.standard_fee) || 799,
       early_bird_price: Number(req.body.early_bird_price || req.body.early_bird_fee) || 649,
-      benefits: Array.isArray(req.body.benefits) ? req.body.benefits : ['Full conference access']
+      currency: req.body.currency || 'USD',
+      deadline: formatDateStr(req.body.deadline),
+      benefits: Array.isArray(req.body.benefits) ? req.body.benefits : ['Full conference access'],
+      is_popular: Boolean(req.body.is_popular),
+      display_order: Number(req.body.display_order) || newId,
+      payment_gateway_link: req.body.payment_gateway_link || '',
+      is_active: req.body.is_active !== undefined ? Boolean(req.body.is_active) : true
     };
+    if (mysqlPool) {
+      try {
+        const [r]: any = await mysqlPool.query(
+          `INSERT INTO registration_categories (
+            conference_id, name, price, currency, early_bird_price, deadline, benefits, is_popular, display_order, payment_gateway_link, is_active
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            catData.conference_id, catData.name, catData.price, catData.currency,
+            catData.early_bird_price, catData.deadline || null, JSON.stringify(catData.benefits),
+            catData.is_popular, catData.display_order, catData.payment_gateway_link, catData.is_active
+          ]
+        );
+        newId = Number(r.insertId);
+      } catch (err: any) {
+        console.error('[MySQL Add Registration Category Error]:', err);
+        return res.status(500).json({ success: false, message: `Failed to add category in MySQL: ${err.message}` });
+      }
+    }
+    const cat = { ...catData, id: newId };
     db.categories.push(cat);
+    invalidatePublicCache();
     db.addAuditLog('ADD_REGISTRATION_CATEGORY', 'RegistrationCategory', String(newId), `Added category: ${cat.name}`);
-    res.status(201).json({ success: true, message: 'Category created', data: cat });
+    res.status(201).json({ success: true, message: 'Category created successfully in MySQL', data: cat });
   });
 
-  app.put('/api/v1/registration-categories/:id', (req: Request, res: Response) => {
+  app.put('/api/v1/registration-categories/:id', async (req: Request, res: Response) => {
     const id = Number(req.params.id);
+    if (mysqlPool) {
+      try {
+        await mysqlPool.query(
+          `UPDATE registration_categories SET
+            name = COALESCE(?, name),
+            price = COALESCE(?, price),
+            currency = COALESCE(?, currency),
+            early_bird_price = COALESCE(?, early_bird_price),
+            deadline = COALESCE(?, deadline),
+            benefits = COALESCE(?, benefits),
+            is_popular = COALESCE(?, is_popular),
+            display_order = COALESCE(?, display_order),
+            payment_gateway_link = COALESCE(?, payment_gateway_link),
+            is_active = COALESCE(?, is_active)
+          WHERE id = ?`,
+          [
+            req.body.name, req.body.price, req.body.currency, req.body.early_bird_price || req.body.early_bird_fee,
+            req.body.deadline ? formatDateStr(req.body.deadline) : null,
+            req.body.benefits ? JSON.stringify(req.body.benefits) : null,
+            req.body.is_popular, req.body.display_order, req.body.payment_gateway_link, req.body.is_active, id
+          ]
+        );
+      } catch (err: any) {
+        console.error('[MySQL Update Registration Category Error]:', err);
+        return res.status(500).json({ success: false, message: `Failed to update category in MySQL: ${err.message}` });
+      }
+    }
     const index = db.categories.findIndex(c => c.id === id);
-    if (index === -1) return res.status(404).json({ success: false, message: 'Category not found' });
-    db.categories[index] = { ...db.categories[index], ...req.body };
-    db.addAuditLog('UPDATE_REGISTRATION_CATEGORY', 'RegistrationCategory', String(id), `Updated category: ${db.categories[index].name}`);
-    res.json({ success: true, message: 'Category updated', data: db.categories[index] });
+    if (index !== -1) {
+      db.categories[index] = { ...db.categories[index], ...req.body };
+    }
+    invalidatePublicCache();
+    db.addAuditLog('UPDATE_REGISTRATION_CATEGORY', 'RegistrationCategory', String(id), `Updated category: ${req.body.name || id}`);
+    res.json({ success: true, message: 'Category updated successfully in MySQL', data: index !== -1 ? db.categories[index] : req.body });
   });
 
-  app.delete('/api/v1/registration-categories/:id', (req: Request, res: Response) => {
+  app.delete('/api/v1/registration-categories/:id', async (req: Request, res: Response) => {
     const id = Number(req.params.id);
+    if (mysqlPool) {
+      try {
+        await mysqlPool.query('DELETE FROM registration_categories WHERE id = ?', [id]);
+      } catch (err: any) {
+        console.error('[MySQL Delete Registration Category Error]:', err);
+        return res.status(500).json({ success: false, message: `Failed to delete category in MySQL: ${err.message}` });
+      }
+    }
     const index = db.categories.findIndex(c => c.id === id);
-    if (index === -1) return res.status(404).json({ success: false, message: 'Category not found' });
-    const removed = db.categories.splice(index, 1)[0];
-    db.addAuditLog('DELETE_REGISTRATION_CATEGORY', 'RegistrationCategory', String(id), `Deleted category: ${removed.name}`);
-    res.json({ success: true, message: 'Category deleted', data: removed });
+    const removed = index !== -1 ? db.categories.splice(index, 1)[0] : { id };
+    invalidatePublicCache();
+    db.addAuditLog('DELETE_REGISTRATION_CATEGORY', 'RegistrationCategory', String(id), `Deleted category: ${(removed as any).name || id}`);
+    res.json({ success: true, message: 'Category deleted successfully from MySQL', data: removed });
   });
 
   // 7. Registrations

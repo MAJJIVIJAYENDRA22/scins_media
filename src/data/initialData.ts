@@ -2668,9 +2668,9 @@ export const INITIAL_ORGANIZATION_INFO: OrganizationLocationInfo = {
   organization_name: 'SCINS Media International',
   headquarters_title: 'European Secretariat & Headquarters',
   headquarters_location: 'Estonia, Europe',
-  secretariat_email: 'secretariat@scinsmedia.com',
+  secretariat_email: 'scinsmedia@gmail.com',
   editorial_title: 'Editorial & Publications Secretariat',
   editorial_location: 'Estonia, Europe',
-  editorial_email: 'editorial@scinsmedia.com'
+  editorial_email: 'scinsmedia@gmail.com'
 };
 

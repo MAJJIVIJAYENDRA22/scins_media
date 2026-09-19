@@ -227,7 +227,7 @@ export const Footer: React.FC<FooterProps> = ({
                 <span className="text-[11px] text-slate-400 block">{orgInfo.headquarters_location || 'Estonia, Europe'}</span>
               </div>
               <div className="pt-1">
-                <span className="text-[11px] text-teal-400 font-mono">{orgInfo.secretariat_email || 'secretariat@scinsmedia.com'}</span>
+                <span className="text-[11px] text-teal-400 font-mono">{orgInfo.secretariat_email || 'scinsmedia@gmail.com'}</span>
               </div>
             </div>
           </div>
