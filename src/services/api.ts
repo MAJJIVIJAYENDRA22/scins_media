@@ -22,7 +22,8 @@ import {
   AdminUser,
   ApiResponse,
   ContactEnquiry,
-  NewsletterSubscriber
+  NewsletterSubscriber,
+  MediaAsset
 } from '../types';
 
 const API_BASE = '/api/v1';
@@ -527,6 +528,12 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(data)
     }),
+
+  // Media Library
+  getMediaLibrary: (category?: string) => {
+    const qs = category ? `?category=${encodeURIComponent(category)}` : '';
+    return fetchJson<{ success: boolean; data: MediaAsset[] }>(`${API_BASE}/media-library${qs}`);
+  },
 
   // Auth
   login: (credentials: { email: string; password: string }) =>

@@ -59,6 +59,17 @@ export interface Conference {
   // Program Flow Visual
   program_image?: string;
 
+  // Section Headings & CMS Customization (Steps 9 & 10)
+  committee_heading?: string;
+  committee_description?: string;
+  speakers_badge?: string;
+  speakers_heading?: string;
+  speakers_description?: string;
+
+  // Journals & Indexing Media (Step 13)
+  journal_logo_url?: string;
+  indexing_services?: { name: string; icon_url?: string }[];
+
   meta_title?: string;
   meta_description?: string;
   keywords?: string;
@@ -83,6 +94,14 @@ export interface Conference {
   speakers?: Speaker[];
   sessions?: Session[];
   testimonials?: Testimonial[];
+}
+
+export interface MediaAsset {
+  id: string | number;
+  url: string;
+  name: string;
+  category: 'sponsors' | 'partners' | 'journals' | 'speakers' | 'committee' | 'conferences' | 'general';
+  source?: string;
 }
 
 export interface ConferenceGalleryImage {

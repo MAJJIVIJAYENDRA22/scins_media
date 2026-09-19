@@ -1,7 +1,7 @@
 // =============================================================================
 // SCINSMEDIA — System Media & Image Upload Input Component
 // Supports Drag & Drop, File Validation (Type & Size), Server CDN Storage,
-// Automatic URL Generation, Replace/Remove Actions & Direct Preview
+// Automatic URL Generation, Replace/Remove Actions, Media Library Selector & Preview
 // =============================================================================
 
 import React, { useState, useRef } from 'react';
@@ -14,9 +14,11 @@ import {
   AlertCircle,
   RefreshCw,
   Eye,
-  Link as LinkIcon
+  Link as LinkIcon,
+  FolderOpen
 } from 'lucide-react';
 import { api } from '../../services/api';
+import { MediaLibraryModal } from './MediaLibraryModal';
 
 interface MediaUploadInputProps {
   label?: string;
@@ -29,6 +31,8 @@ interface MediaUploadInputProps {
   required?: boolean;
   category?: string;
   showUrlToggle?: boolean;
+  hideUrlInput?: boolean;
+  showMediaLibrary?: boolean;
 }
 
 export const MediaUploadInput: React.FC<MediaUploadInputProps> = ({
@@ -41,13 +45,16 @@ export const MediaUploadInput: React.FC<MediaUploadInputProps> = ({
   helperText,
   required = false,
   category = 'conference',
-  showUrlToggle = true
+  showUrlToggle = true,
+  hideUrlInput = false,
+  showMediaLibrary = true
 }) => {
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploadSuccess, setUploadSuccess] = useState<string | null>(null);
   const [showDirectUrlInput, setShowDirectUrlInput] = useState(false);
+  const [isMediaLibraryOpen, setIsMediaLibraryOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const acceptedMimeTypes =
@@ -88,12 +95,10 @@ export const MediaUploadInput: React.FC<MediaUploadInputProps> = ({
     setIsUploading(true);
 
     try {
-      // Read file to base64
       const reader = new FileReader();
       reader.onload = async (e) => {
         const fileData = e.target?.result as string;
         try {
-          // Upload through system backend API
           const response = await api.uploadMedia({
             fileData,
             fileName: file.name,
@@ -106,7 +111,6 @@ export const MediaUploadInput: React.FC<MediaUploadInputProps> = ({
           setUploadSuccess(`Uploaded "${file.name}" (${(file.size / 1024).toFixed(0)} KB)`);
           setIsUploading(false);
         } catch (err: any) {
-          // Fallback to client-side data URL for seamless preview & saving
           onChange(fileData);
           setUploadSuccess(`Uploaded "${file.name}"`);
           setIsUploading(false);
@@ -144,6 +148,7 @@ export const MediaUploadInput: React.FC<MediaUploadInputProps> = ({
   };
 
   const isPdfValue = value?.toLowerCase().includes('.pdf') || value?.startsWith('data:application/pdf');
+  const allowUrlMode = !hideUrlInput && showUrlToggle;
 
   return (
     <div className="space-y-2">
@@ -152,21 +157,33 @@ export const MediaUploadInput: React.FC<MediaUploadInputProps> = ({
           <label className="block text-xs font-bold text-slate-800">
             {label} {required && <span className="text-red-500">*</span>}
           </label>
-          {showUrlToggle && (
-            <button
-              type="button"
-              onClick={() => setShowDirectUrlInput(!showDirectUrlInput)}
-              className="text-[11px] text-teal-800 hover:text-teal-900 font-semibold flex items-center space-x-1"
-            >
-              <LinkIcon className="w-3 h-3" />
-              <span>{showDirectUrlInput ? 'Switch to Upload' : 'Direct URL'}</span>
-            </button>
-          )}
+          <div className="flex items-center space-x-2">
+            {showMediaLibrary && (
+              <button
+                type="button"
+                onClick={() => setIsMediaLibraryOpen(true)}
+                className="text-[11px] text-teal-800 hover:text-teal-900 font-semibold flex items-center space-x-1 cursor-pointer"
+              >
+                <FolderOpen className="w-3 h-3 text-teal-700" />
+                <span>Media Library</span>
+              </button>
+            )}
+            {allowUrlMode && (
+              <button
+                type="button"
+                onClick={() => setShowDirectUrlInput(!showDirectUrlInput)}
+                className="text-[11px] text-slate-500 hover:text-slate-800 font-semibold flex items-center space-x-1 cursor-pointer"
+              >
+                <LinkIcon className="w-3 h-3" />
+                <span>{showDirectUrlInput ? 'Switch to Upload' : 'Direct URL'}</span>
+              </button>
+            )}
+          </div>
         </div>
       )}
 
-      {/* Direct URL Input Mode */}
-      {showDirectUrlInput ? (
+      {/* Direct URL Input Mode (Only if not hidden) */}
+      {!hideUrlInput && showDirectUrlInput ? (
         <div className="space-y-1.5">
           <div className="relative">
             <input
@@ -180,7 +197,7 @@ export const MediaUploadInput: React.FC<MediaUploadInputProps> = ({
               <button
                 type="button"
                 onClick={() => onChange('')}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1"
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1 cursor-pointer"
                 title="Clear URL"
               >
                 <X className="w-3.5 h-3.5" />
@@ -190,7 +207,7 @@ export const MediaUploadInput: React.FC<MediaUploadInputProps> = ({
           {helperText && <p className="text-[11px] text-slate-400">{helperText}</p>}
         </div>
       ) : (
-        /* System Upload Zone & Preview */
+        /* System Upload Zone, Media Library Button & Preview */
         <div className="space-y-2">
           {/* Active Upload Preview Card */}
           {value ? (
@@ -201,11 +218,11 @@ export const MediaUploadInput: React.FC<MediaUploadInputProps> = ({
                     <FileText className="w-7 h-7" />
                   </div>
                 ) : (
-                  <div className="w-14 h-14 rounded-xl bg-white border border-slate-300 overflow-hidden shrink-0 shadow-xs flex items-center justify-center">
+                  <div className="w-14 h-14 rounded-xl bg-white border border-slate-300 overflow-hidden shrink-0 shadow-xs flex items-center justify-center p-0.5">
                     <img
                       src={value}
-                      alt="Uploaded preview"
-                      className="w-full h-full object-cover"
+                      alt="Selected preview"
+                      className="w-full h-full object-contain"
                       onError={(e) => {
                         (e.target as HTMLElement).style.display = 'none';
                       }}
@@ -215,25 +232,37 @@ export const MediaUploadInput: React.FC<MediaUploadInputProps> = ({
                 <div className="min-w-0">
                   <div className="flex items-center space-x-1.5">
                     <span className="text-[10px] font-bold uppercase tracking-wider text-teal-800 bg-teal-50 px-1.5 py-0.5 rounded border border-teal-200 font-mono">
-                      {isPdfValue ? 'PDF Document' : 'Photo Attached'}
+                      {isPdfValue ? 'PDF Document' : 'Image Selected'}
                     </span>
                     <span className="text-slate-400 text-[10px]">Preview Ready</span>
                   </div>
                   <div className="text-xs font-semibold text-slate-800 truncate max-w-xs sm:max-w-sm mt-1">
-                    {value.startsWith('data:') ? 'Local Stored / Ready to Save' : value}
+                    {value.startsWith('data:') ? 'Local Upload Attached' : value}
                   </div>
                 </div>
               </div>
 
               {/* Action Buttons */}
               <div className="flex items-center space-x-1.5 shrink-0">
+                {showMediaLibrary && (
+                  <button
+                    type="button"
+                    onClick={() => setIsMediaLibraryOpen(true)}
+                    className="px-2.5 py-1.5 bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 rounded-lg text-xs font-semibold flex items-center space-x-1 transition-colors cursor-pointer"
+                    title="Select another image from library"
+                  >
+                    <FolderOpen className="w-3 h-3 text-teal-700" />
+                    <span className="hidden sm:inline">Choose Media</span>
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
                   className="px-2.5 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-lg text-xs font-semibold flex items-center space-x-1 transition-colors cursor-pointer"
+                  title="Upload replacement from computer"
                 >
                   <RefreshCw className="w-3 h-3 text-slate-500" />
-                  <span>Replace</span>
+                  <span className="hidden sm:inline">Upload New</span>
                 </button>
                 <button
                   type="button"
@@ -243,49 +272,65 @@ export const MediaUploadInput: React.FC<MediaUploadInputProps> = ({
                     setUploadError(null);
                   }}
                   className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
-                  title="Remove uploaded file"
+                  title="Remove image"
                 >
                   <X className="w-4 h-4" />
                 </button>
               </div>
             </div>
           ) : (
-            /* Upload Drop Area */
-            <div
-              onDragOver={handleDragOver}
-              onDragLeave={handleDragLeave}
-              onDrop={handleDrop}
-              onClick={() => fileInputRef.current?.click()}
-              className={`border-2 border-dashed rounded-2xl p-4 sm:p-5 text-center cursor-pointer transition-all ${
-                isDragging
-                  ? 'border-teal-600 bg-teal-50/70'
-                  : 'border-slate-300 hover:border-teal-500 hover:bg-slate-50/70'
-              }`}
-            >
-              <div className="flex flex-col items-center justify-center space-y-2">
-                <div className="w-10 h-10 rounded-2xl bg-teal-50 text-teal-800 border border-teal-200 flex items-center justify-center">
-                  {isUploading ? (
-                    <RefreshCw className="w-5 h-5 animate-spin" />
-                  ) : accept === 'pdf' ? (
-                    <FileText className="w-5 h-5" />
-                  ) : (
-                    <Upload className="w-5 h-5" />
-                  )}
-                </div>
-
-                <div>
-                  <div className="text-xs font-bold text-slate-900">
-                    {isUploading
-                      ? 'Uploading to System CDN...'
-                      : `Click to Browse or Drag & Drop ${accept === 'pdf' ? 'PDF Flyer' : 'Image'}`}
+            /* Upload Drop Area + Direct Media Library Button */
+            <div className="space-y-2">
+              <div
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+                onClick={() => fileInputRef.current?.click()}
+                className={`border-2 border-dashed rounded-2xl p-4 text-center cursor-pointer transition-all ${
+                  isDragging
+                    ? 'border-teal-600 bg-teal-50/70'
+                    : 'border-slate-300 hover:border-teal-500 hover:bg-slate-50/70'
+                }`}
+              >
+                <div className="flex flex-col items-center justify-center space-y-2">
+                  <div className="w-10 h-10 rounded-2xl bg-teal-50 text-teal-800 border border-teal-200 flex items-center justify-center">
+                    {isUploading ? (
+                      <RefreshCw className="w-5 h-5 animate-spin" />
+                    ) : accept === 'pdf' ? (
+                      <FileText className="w-5 h-5" />
+                    ) : (
+                      <Upload className="w-5 h-5" />
+                    )}
                   </div>
-                  <p className="text-[11px] text-slate-500 mt-0.5">
-                    {accept === 'pdf'
-                      ? `Supports PDF document up to ${maxSizeMB}MB`
-                      : `Supports JPG, PNG, WEBP, SVG up to ${maxSizeMB}MB`}
-                  </p>
+
+                  <div>
+                    <div className="text-xs font-bold text-slate-900">
+                      {isUploading
+                        ? 'Uploading to System CDN...'
+                        : `Click to Browse or Drag & Drop ${accept === 'pdf' ? 'PDF File' : 'Image'}`}
+                    </div>
+                    <p className="text-[11px] text-slate-500 mt-0.5">
+                      {accept === 'pdf'
+                        ? `Supports PDF document up to ${maxSizeMB}MB`
+                        : `Supports JPG, PNG, WEBP, SVG up to ${maxSizeMB}MB`}
+                    </p>
+                  </div>
                 </div>
               </div>
+
+              {/* Media Library Trigger Option */}
+              {showMediaLibrary && (
+                <div className="flex items-center justify-center">
+                  <button
+                    type="button"
+                    onClick={() => setIsMediaLibraryOpen(true)}
+                    className="w-full py-2 px-3 bg-slate-50 hover:bg-teal-50 hover:text-teal-900 hover:border-teal-300 text-slate-700 border border-slate-200 rounded-xl text-xs font-semibold flex items-center justify-center space-x-2 transition-all cursor-pointer shadow-2xs"
+                  >
+                    <FolderOpen className="w-4 h-4 text-teal-700" />
+                    <span>Or Select Existing from Media Library</span>
+                  </button>
+                </div>
+              )}
             </div>
           )}
 
@@ -321,6 +366,22 @@ export const MediaUploadInput: React.FC<MediaUploadInputProps> = ({
             <p className="text-[11px] text-slate-400">{helperText}</p>
           )}
         </div>
+      )}
+
+      {/* Media Library Modal */}
+      {showMediaLibrary && (
+        <MediaLibraryModal
+          isOpen={isMediaLibraryOpen}
+          onClose={() => setIsMediaLibraryOpen(false)}
+          onSelect={(url) => {
+            onChange(url);
+            setUploadSuccess('Asset selected from Media Library');
+            setUploadError(null);
+          }}
+          title={`Select ${label || 'Media Asset'}`}
+          category={category}
+          currentValue={value}
+        />
       )}
     </div>
   );

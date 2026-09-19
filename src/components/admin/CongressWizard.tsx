@@ -50,12 +50,18 @@ import {
   Maximize2,
   Save,
   CreditCard,
-  Link as LinkIcon
+  Link as LinkIcon,
+  ArrowUp,
+  ArrowDown
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { MediaUploadInput } from './MediaUploadInput';
 import { LiveDesktopViewportPreview } from './LiveDesktopViewportPreview';
 import { ConferenceDetailsPage } from '../../pages/ConferenceDetailsPage';
+import { CommitteeMemberModal } from './CommitteeMemberModal';
+import { SpeakerEditModal } from './SpeakerEditModal';
+import { PublicCardPreviewModal } from './PublicCardPreviewModal';
+import { DeleteConfirmModal } from './DeleteConfirmModal';
 import { api } from '../../services/api';
 import {
   COMMITTEE_MEMBERS,
@@ -398,6 +404,12 @@ const buildInitialFormData = (conf?: Conference | null) => {
       ],
       journal_name: conf.journal_name || '',
       journal_issn: conf.journal_issn || '',
+      journal_logo_url: conf.journal_logo_url || '',
+      committee_heading: conf.committee_heading || 'Organizing Committee & Chairs',
+      committee_description: conf.committee_description || 'Distinguished scholars and experts guiding the scientific program and conference vision',
+      speakers_badge: conf.speakers_badge || 'Distinguished Lineup',
+      speakers_heading: conf.speakers_heading || 'Keynote Speakers',
+      speakers_description: conf.speakers_description || 'World-renowned experts delivering visionary insights and pioneering research findings',
       sponsors: (conf.sponsors && conf.sponsors.length > 0)
         ? conf.sponsors.map(s => ({ ...s }))
         : (SPONSORS.filter(s => s.conference_id === conf.id).length > 0
@@ -604,6 +616,12 @@ const buildInitialFormData = (conf?: Conference | null) => {
     ],
     journal_name: 'Journal of Quantum Materials & Solid-State Computing',
     journal_issn: 'ISSN 2831-9042 (Print) | 2831-9050 (Online)',
+    journal_logo_url: '',
+    committee_heading: 'Organizing Committee & Chairs',
+    committee_description: 'Distinguished scholars and experts guiding the scientific program and conference vision',
+    speakers_badge: 'Distinguished Lineup',
+    speakers_heading: 'Keynote Speakers',
+    speakers_description: 'World-renowned experts delivering visionary insights and pioneering research findings',
     sponsors: SPONSORS.slice(0, 4).map((s, idx) => ({ ...s, id: idx + 1, conference_id: 1 })),
     media_partners: MEDIA_PARTNERS.slice(0, 4).map((m, idx) => ({ ...m, id: idx + 1, conference_id: 1 })),
     schedule: SCHEDULE_ITEMS.filter(s => s.conference_id === 1).map((s, idx) => ({ ...s, id: idx + 1 }))
@@ -627,6 +645,23 @@ export const CongressWizard: React.FC<CongressWizardProps> = ({
   const [previewDevice, setPreviewDevice] = useState<'desktop' | 'tablet' | 'mobile'>('desktop');
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [publishedConference, setPublishedConference] = useState<Conference | null>(null);
+
+  // Step 9: Committee Management State
+  const [committeeFilterCategory, setCommitteeFilterCategory] = useState<string>('All');
+  const [editingCommitteeMember, setEditingCommitteeMember] = useState<Partial<CommitteeMember> | null>(null);
+  const [isCommitteeModalOpen, setIsCommitteeModalOpen] = useState(false);
+  const [deletingCommitteeMemberId, setDeletingCommitteeMemberId] = useState<number | null>(null);
+
+  // Step 10: Speaker Management State
+  const [speakerFilterType, setSpeakerFilterType] = useState<string>('All');
+  const [editingSpeaker, setEditingSpeaker] = useState<Partial<Speaker> | null>(null);
+  const [isSpeakerModalOpen, setIsSpeakerModalOpen] = useState(false);
+  const [deletingSpeakerId, setDeletingSpeakerId] = useState<number | null>(null);
+
+  // Public Card Preview State
+  const [previewCardType, setPreviewCardType] = useState<'committee' | 'speaker' | null>(null);
+  const [previewCardData, setPreviewCardData] = useState<any>(null);
+  const [isPreviewCardModalOpen, setIsPreviewCardModalOpen] = useState(false);
   
   const stepsNavRef = useRef<HTMLDivElement>(null);
   const stepButtonRefs = useRef<{ [key: number]: HTMLButtonElement | null }>({});
@@ -805,52 +840,134 @@ export const CongressWizard: React.FC<CongressWizardProps> = ({
   };
 
   // Step 9: Committee Handlers
-  const handleAddCommitteeMember = () => {
-    const newMember: any = {
-      id: Date.now(),
-      name: 'Dr. New Committee Member, Ph.D.',
-      designation: 'Professor of Science',
-      institution: 'University / Institute of Technology',
-      country: 'United States',
+  const handleOpenAddCommitteeMember = () => {
+    setEditingCommitteeMember({
+      id: 0,
+      conference_id: initialConference?.id || 1,
+      name: '',
+      designation: '',
+      institution: '',
+      country: '',
       committee_role: 'Scientific Committee',
-      photo_url: SPEAKER_PHOTO_PRESETS[Math.floor(Math.random() * SPEAKER_PHOTO_PRESETS.length)],
-      biography: 'Distinguished researcher with notable peer-reviewed publications and editorial contributions.',
-      display_order: formData.committee.length + 1
-    };
-    setFormData(prev => ({ ...prev, committee: [...prev.committee, newMember] }));
+      photo_url: '',
+      biography: '',
+      display_order: (formData.committee || []).length + 1,
+      is_published: true
+    });
+    setIsCommitteeModalOpen(true);
   };
 
-  const handleRemoveCommitteeMember = (id: number) => {
+  const handleEditCommitteeMember = (member: CommitteeMember) => {
+    setEditingCommitteeMember(member);
+    setIsCommitteeModalOpen(true);
+  };
+
+  const handleSaveCommitteeMember = (saved: CommitteeMember) => {
+    setFormData(prev => {
+      const exists = (prev.committee || []).some(m => m.id === saved.id);
+      let updated: CommitteeMember[];
+      if (exists) {
+        updated = (prev.committee || []).map(m => m.id === saved.id ? saved : m);
+      } else {
+        const nextId = saved.id || (Math.max(...(prev.committee || []).map(m => m.id), 0) + 1);
+        updated = [...(prev.committee || []), { ...saved, id: nextId }];
+      }
+      return { ...prev, committee: updated };
+    });
+  };
+
+  const handleMoveCommitteeMember = (index: number, direction: 'up' | 'down') => {
+    setFormData(prev => {
+      const list = [...(prev.committee || [])];
+      const targetIndex = direction === 'up' ? index - 1 : index + 1;
+      if (targetIndex < 0 || targetIndex >= list.length) return prev;
+      const temp = list[index];
+      list[index] = list[targetIndex];
+      list[targetIndex] = temp;
+      const reordered = list.map((m, idx) => ({ ...m, display_order: idx + 1 }));
+      return { ...prev, committee: reordered };
+    });
+  };
+
+  const handleConfirmDeleteCommitteeMember = () => {
+    if (deletingCommitteeMemberId === null) return;
     setFormData(prev => ({
       ...prev,
-      committee: prev.committee.filter(m => m.id !== id)
+      committee: (prev.committee || []).filter(m => m.id !== deletingCommitteeMemberId).map((m, idx) => ({ ...m, display_order: idx + 1 }))
     }));
+    setDeletingCommitteeMemberId(null);
   };
 
   // Step 10: Keynote Speaker Handlers
-  const handleAddSpeaker = () => {
-    const newSp: any = {
-      id: Date.now(),
-      name: 'Prof. New Speaker',
+  const handleOpenAddSpeaker = () => {
+    setEditingSpeaker({
+      id: 0,
+      conference_id: initialConference?.id || 1,
+      name: '',
       prefix: 'Prof.',
-      designation: 'Senior Faculty Investigator',
-      institution: 'Global Research University',
-      country: 'United States',
-      research_domain: formData.domain,
+      designation: '',
+      institution: '',
+      country: '',
       speaker_type: 'Keynote',
-      presentation_title: `Emerging Paradigms in ${formData.domain}`,
-      photo_url: SPEAKER_PHOTO_PRESETS[Math.floor(Math.random() * SPEAKER_PHOTO_PRESETS.length)],
-      biography: 'Leading expert in translational scientific methodologies.',
-      h_index: 45
-    };
-    setFormData(prev => ({ ...prev, speakers: [...prev.speakers, newSp] }));
+      presentation_title: '',
+      presentation_abstract: '',
+      research_domain: formData.domain || 'Scientific Research',
+      photo_url: '',
+      biography: '',
+      h_index: 35,
+      citations_count: 1500,
+      display_order: (formData.speakers || []).length + 1,
+      is_active: true
+    });
+    setIsSpeakerModalOpen(true);
   };
 
-  const handleRemoveSpeaker = (id: number) => {
+  const handleEditSpeaker = (speaker: Speaker) => {
+    setEditingSpeaker(speaker);
+    setIsSpeakerModalOpen(true);
+  };
+
+  const handleSaveSpeaker = (saved: Speaker) => {
+    setFormData(prev => {
+      const exists = (prev.speakers || []).some(s => s.id === saved.id);
+      let updated: Speaker[];
+      if (exists) {
+        updated = (prev.speakers || []).map(s => s.id === saved.id ? saved : s);
+      } else {
+        const nextId = saved.id || (Math.max(...(prev.speakers || []).map(s => s.id), 0) + 1);
+        updated = [...(prev.speakers || []), { ...saved, id: nextId }];
+      }
+      return { ...prev, speakers: updated };
+    });
+  };
+
+  const handleMoveSpeaker = (index: number, direction: 'up' | 'down') => {
+    setFormData(prev => {
+      const list = [...(prev.speakers || [])];
+      const targetIndex = direction === 'up' ? index - 1 : index + 1;
+      if (targetIndex < 0 || targetIndex >= list.length) return prev;
+      const temp = list[index];
+      list[index] = list[targetIndex];
+      list[targetIndex] = temp;
+      const reordered = list.map((s, idx) => ({ ...s, display_order: idx + 1 }));
+      return { ...prev, speakers: reordered };
+    });
+  };
+
+  const handleConfirmDeleteSpeaker = () => {
+    if (deletingSpeakerId === null) return;
     setFormData(prev => ({
       ...prev,
-      speakers: prev.speakers.filter(s => s.id !== id)
+      speakers: (prev.speakers || []).filter(s => s.id !== deletingSpeakerId).map((s, idx) => ({ ...s, display_order: idx + 1 }))
     }));
+    setDeletingSpeakerId(null);
+  };
+
+  // Preview Card Modal Handlers
+  const handleOpenCardPreview = (type: 'committee' | 'speaker', data: any) => {
+    setPreviewCardType(type);
+    setPreviewCardData(data);
+    setIsPreviewCardModalOpen(true);
   };
 
   // Step 11: Session Edit Handler
@@ -1207,6 +1324,12 @@ export const CongressWizard: React.FC<CongressWizardProps> = ({
         accent_color: formData.accent_color || 'teal',
         journal_name: formData.journal_name || '',
         journal_issn: formData.journal_issn || '',
+        journal_logo_url: formData.journal_logo_url || '',
+        committee_heading: formData.committee_heading || 'Organizing Committee & Chairs',
+        committee_description: formData.committee_description || 'Distinguished scholars and experts guiding the scientific program and conference vision',
+        speakers_badge: formData.speakers_badge || 'Distinguished Lineup',
+        speakers_heading: formData.speakers_heading || 'Keynote Speakers',
+        speakers_description: formData.speakers_description || 'World-renowned experts delivering visionary insights and pioneering research findings',
         indexing_partners: formData.indexing_partners || [
           'Elsevier ScienceDirect',
           'Scopus Indexed Proceedings',
@@ -2604,107 +2727,456 @@ export const CongressWizard: React.FC<CongressWizardProps> = ({
           )}
 
           {/* ========================================================================= */}
-          {/* STEP 9: Committee */}
+          {/* STEP 9: Committee (Full CMS Management) */}
           {/* ========================================================================= */}
           {currentStep === 9 && (
-            <div className="space-y-5 animate-in fade-in duration-200">
-              <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+            <div className="space-y-6 animate-in fade-in duration-200">
+              {/* Step Header */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-slate-100 gap-2">
                 <div>
                   <h3 className="text-base font-bold text-slate-900 font-display">
                     Step 9: Organizing Committee & Editorial Board
                   </h3>
-                  <p className="text-xs text-slate-500">Manage academic chairs, advisory members, and scientific peer reviewers ({formData.committee.length} members configured).</p>
+                  <p className="text-xs text-slate-500">
+                    Complete CMS control: edit every field, reorder members, manage categories, and upload portraits ({(formData.committee || []).length} members configured).
+                  </p>
                 </div>
                 <button
                   type="button"
-                  onClick={handleAddCommitteeMember}
-                  className="px-3 py-1.5 bg-teal-800 hover:bg-teal-900 text-white rounded-xl text-xs font-bold flex items-center space-x-1 shadow-2xs"
+                  onClick={handleOpenAddCommitteeMember}
+                  className="px-3 py-1.5 bg-teal-800 hover:bg-teal-900 text-white rounded-xl text-xs font-bold flex items-center space-x-1.5 shadow-2xs transition-all cursor-pointer self-start sm:self-auto"
                 >
                   <Plus className="w-3.5 h-3.5" />
-                  <span>Add Member</span>
+                  <span>Add Committee Member</span>
                 </button>
               </div>
 
+              {/* Section Heading & Description Customization */}
+              <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-3">
+                <div className="flex items-center space-x-2 text-xs font-bold text-slate-800">
+                  <Sliders className="w-3.5 h-3.5 text-teal-700" />
+                  <span>Public Section Customization (Headings & Labels)</span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">Section Heading Title</label>
+                    <input
+                      type="text"
+                      value={formData.committee_heading || ''}
+                      onChange={e => setFormData({ ...formData, committee_heading: e.target.value })}
+                      placeholder="e.g. Organizing Committee & Chairs"
+                      className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900 focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">Section Subtitle / Description</label>
+                    <input
+                      type="text"
+                      value={formData.committee_description || ''}
+                      onChange={e => setFormData({ ...formData, committee_description: e.target.value })}
+                      placeholder="e.g. Distinguished scholars and experts guiding the scientific program..."
+                      className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900 focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Category Filter Tabs */}
+              {(() => {
+                const allCategories = Array.from(
+                  new Set((formData.committee || []).map(m => m.committee_role).filter(Boolean))
+                );
+                return (
+                  <div className="flex flex-wrap items-center gap-1.5 pb-1">
+                    <span className="text-[11px] font-bold text-slate-500 mr-1">Filter:</span>
+                    {['All', ...allCategories].map(cat => (
+                      <button
+                        key={cat}
+                        type="button"
+                        onClick={() => setCommitteeFilterCategory(cat)}
+                        className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                          committeeFilterCategory === cat
+                            ? 'bg-teal-800 text-white shadow-2xs'
+                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200/70 hover:text-slate-800'
+                        }`}
+                      >
+                        {cat}
+                        {cat === 'All'
+                          ? ` (${(formData.committee || []).length})`
+                          : ` (${(formData.committee || []).filter(m => m.committee_role === cat).length})`}
+                      </button>
+                    ))}
+                  </div>
+                );
+              })()}
+
               {/* Committee Members List */}
-              <div className="space-y-2.5 max-h-[380px] overflow-y-auto pr-1">
-                {formData.committee.map(mem => (
-                  <div key={mem.id} className="p-3 bg-slate-50 border border-slate-200 rounded-2xl flex items-center justify-between gap-3">
-                    <div className="flex items-center space-x-3">
-                      <img src={mem.photo_url} alt={mem.name} className="w-10 h-10 rounded-xl object-cover border border-slate-200" />
-                      <div>
-                        <div className="font-bold text-xs text-slate-900">{mem.name}</div>
-                        <div className="text-[10px] text-teal-800 font-semibold">{mem.committee_role} • {mem.institution}</div>
-                        <div className="text-[10px] text-slate-500">{mem.country}</div>
+              <div className="space-y-3 max-h-[460px] overflow-y-auto pr-1">
+                {(formData.committee || [])
+                  .filter(m => committeeFilterCategory === 'All' || m.committee_role === committeeFilterCategory)
+                  .map((mem, index) => {
+                    const originalIndex = (formData.committee || []).findIndex(x => x.id === mem.id);
+                    const isFirst = originalIndex === 0;
+                    const isLast = originalIndex === (formData.committee || []).length - 1;
+
+                    return (
+                      <div
+                        key={mem.id}
+                        className="p-3.5 bg-slate-50 border border-slate-200 hover:border-slate-300 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition-all"
+                      >
+                        {/* Member Identity & Details */}
+                        <div className="flex items-center space-x-3.5 min-w-0">
+                          <div className="relative shrink-0">
+                            <img
+                              src={mem.photo_url || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80'}
+                              alt={mem.name}
+                              className="w-12 h-12 rounded-2xl object-cover border border-slate-200 bg-white shadow-2xs"
+                              onError={(e) => {
+                                (e.target as HTMLElement).style.display = 'none';
+                              }}
+                            />
+                            <span className="absolute -top-1.5 -left-1.5 w-5 h-5 rounded-full bg-slate-800 text-white text-[10px] font-bold flex items-center justify-center shadow-2xs">
+                              {mem.display_order || originalIndex + 1}
+                            </span>
+                          </div>
+
+                          <div className="min-w-0">
+                            <div className="flex items-center space-x-2 flex-wrap">
+                              <span className="font-bold text-xs text-slate-900 truncate">{mem.name}</span>
+                              <span className="text-[10px] font-bold px-2 py-0.5 bg-teal-100 text-teal-800 rounded-full border border-teal-200/60">
+                                {mem.committee_role}
+                              </span>
+                              {mem.is_published === false && (
+                                <span className="text-[10px] font-semibold px-1.5 py-0.2 bg-amber-100 text-amber-800 rounded">
+                                  Draft / Unpublished
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-[11px] text-slate-600 truncate mt-0.5">
+                              {mem.designation} • <span className="font-medium">{mem.institution}</span>
+                            </div>
+                            <div className="text-[10px] text-slate-400 mt-0.5 flex items-center space-x-2">
+                              <span>{mem.country}</span>
+                              {mem.research_interests && <span>• {mem.research_interests}</span>}
+                              {Boolean(mem.publications_count) && <span>• {mem.publications_count} publications</span>}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* CMS Action Buttons: Reorder, Edit, Preview, Delete */}
+                        <div className="flex items-center space-x-1 shrink-0 self-end sm:self-center pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-200/60 w-full sm:w-auto justify-end">
+                          {/* Move Up Button */}
+                          <button
+                            type="button"
+                            disabled={isFirst}
+                            onClick={() => handleMoveCommitteeMember(originalIndex, 'up')}
+                            className="p-1.5 text-slate-500 hover:text-teal-800 hover:bg-teal-50 disabled:opacity-30 disabled:hover:bg-transparent rounded-lg transition-colors cursor-pointer"
+                            title="Move Up"
+                          >
+                            <ArrowUp className="w-3.5 h-3.5" />
+                          </button>
+
+                          {/* Move Down Button */}
+                          <button
+                            type="button"
+                            disabled={isLast}
+                            onClick={() => handleMoveCommitteeMember(originalIndex, 'down')}
+                            className="p-1.5 text-slate-500 hover:text-teal-800 hover:bg-teal-50 disabled:opacity-30 disabled:hover:bg-transparent rounded-lg transition-colors cursor-pointer"
+                            title="Move Down"
+                          >
+                            <ArrowDown className="w-3.5 h-3.5" />
+                          </button>
+
+                          {/* Preview Public Card */}
+                          <button
+                            type="button"
+                            onClick={() => handleOpenCardPreview('committee', mem)}
+                            className="px-2 py-1 text-slate-600 hover:text-teal-900 hover:bg-teal-50 text-xs font-semibold rounded-lg flex items-center space-x-1 transition-colors cursor-pointer"
+                            title="Preview public website card"
+                          >
+                            <Eye className="w-3.5 h-3.5 text-slate-500" />
+                            <span className="hidden md:inline">Preview</span>
+                          </button>
+
+                          {/* Edit Member */}
+                          <button
+                            type="button"
+                            onClick={() => handleEditCommitteeMember(mem)}
+                            className="px-2.5 py-1 bg-white hover:bg-slate-100 text-teal-800 border border-slate-300 rounded-lg text-xs font-bold flex items-center space-x-1 transition-colors cursor-pointer shadow-2xs"
+                            title="Edit full member profile"
+                          >
+                            <Edit2 className="w-3 h-3 text-teal-700" />
+                            <span>Edit</span>
+                          </button>
+
+                          {/* Delete Member */}
+                          <button
+                            type="button"
+                            onClick={() => setDeletingCommitteeMemberId(mem.id)}
+                            className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+                            title="Delete Member"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       </div>
-                    </div>
+                    );
+                  })}
+
+                {(formData.committee || []).length === 0 && (
+                  <div className="p-8 text-center text-slate-400 bg-slate-50 border border-dashed border-slate-300 rounded-2xl space-y-2">
+                    <p className="text-xs font-semibold">No committee members configured yet.</p>
                     <button
                       type="button"
-                      onClick={() => handleRemoveCommitteeMember(mem.id)}
-                      className="p-2 text-slate-400 hover:text-red-600 transition-colors"
-                      title="Remove Member"
+                      onClick={handleOpenAddCommitteeMember}
+                      className="px-3 py-1.5 bg-teal-800 hover:bg-teal-900 text-white rounded-xl text-xs font-bold inline-flex items-center space-x-1 cursor-pointer"
                     >
-                      <Trash2 className="w-3.5 h-3.5" />
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>Add First Member</span>
                     </button>
                   </div>
-                ))}
+                )}
               </div>
             </div>
           )}
 
           {/* ========================================================================= */}
-          {/* STEP 10: Speakers */}
+          {/* STEP 10: Speakers (Full CMS Management) */}
           {/* ========================================================================= */}
           {currentStep === 10 && (
-            <div className="space-y-5 animate-in fade-in duration-200">
-              <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+            <div className="space-y-6 animate-in fade-in duration-200">
+              {/* Step Header */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-slate-100 gap-2">
                 <div>
                   <h3 className="text-base font-bold text-slate-900 font-display">
                     Step 10: Conference Speakers
                   </h3>
-                  <p className="text-xs text-slate-500">Configure conference speakers, presentation topics, and academic profiles.</p>
+                  <p className="text-xs text-slate-500">
+                    Full CMS speaker management: presentation titles, abstracts, speaker types, reordering, portraits, and academic metrics ({(formData.speakers || []).length} speakers configured).
+                  </p>
                 </div>
                 <button
                   type="button"
-                  onClick={handleAddSpeaker}
-                  className="px-3 py-1.5 bg-teal-800 hover:bg-teal-900 text-white rounded-xl text-xs font-bold flex items-center space-x-1 shadow-2xs"
+                  onClick={handleOpenAddSpeaker}
+                  className="px-3 py-1.5 bg-teal-800 hover:bg-teal-900 text-white rounded-xl text-xs font-bold flex items-center space-x-1.5 shadow-2xs transition-all cursor-pointer self-start sm:self-auto"
                 >
                   <Plus className="w-3.5 h-3.5" />
                   <span>Add Speaker</span>
                 </button>
               </div>
 
-              {/* Speakers List */}
-              <div className="space-y-3 max-h-[380px] overflow-y-auto pr-1">
-                {formData.speakers.map(sp => (
-                  <div key={sp.id} className="p-3.5 bg-slate-50 border border-slate-200 rounded-2xl space-y-2">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex items-center space-x-3">
-                        <img src={sp.photo_url} alt={sp.name} className="w-11 h-11 rounded-xl object-cover border border-slate-200" />
-                        <div>
-                          <div className="flex items-center space-x-2">
-                            <span className="font-bold text-xs text-slate-900">{sp.prefix} {sp.name}</span>
-                            <span className="text-[10px] font-bold px-1.5 py-0.2 bg-teal-100 text-teal-800 rounded">
-                              {sp.speaker_type}
-                            </span>
-                          </div>
-                          <div className="text-[10px] text-slate-600">{sp.designation} • {sp.institution}</div>
-                          <div className="text-[10px] text-slate-400">h-index: {sp.h_index} • {sp.country}</div>
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveSpeaker(sp.id)}
-                        className="p-1.5 text-slate-400 hover:text-red-600 transition-colors"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-
-                    <div className="bg-white p-2.5 rounded-xl border border-slate-200 text-xs">
-                      <span className="font-bold text-slate-700">Presentation Title:</span> {sp.presentation_title}
-                    </div>
+              {/* Section Heading & Badge Customization */}
+              <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-3">
+                <div className="flex items-center space-x-2 text-xs font-bold text-slate-800">
+                  <Sliders className="w-3.5 h-3.5 text-teal-700" />
+                  <span>Public Section Customization (Badge, Heading & Description)</span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">Section Badge</label>
+                    <input
+                      type="text"
+                      value={formData.speakers_badge || ''}
+                      onChange={e => setFormData({ ...formData, speakers_badge: e.target.value })}
+                      placeholder="e.g. Distinguished Lineup"
+                      className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900 focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600"
+                    />
                   </div>
-                ))}
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">Section Heading Title</label>
+                    <input
+                      type="text"
+                      value={formData.speakers_heading || ''}
+                      onChange={e => setFormData({ ...formData, speakers_heading: e.target.value })}
+                      placeholder="e.g. Keynote Speakers"
+                      className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900 focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">Section Subtitle / Description</label>
+                    <input
+                      type="text"
+                      value={formData.speakers_description || ''}
+                      onChange={e => setFormData({ ...formData, speakers_description: e.target.value })}
+                      placeholder="e.g. World-renowned experts delivering visionary insights..."
+                      className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900 focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Speaker Type Filter Tabs */}
+              {(() => {
+                const types = ['All', 'Keynote', 'Plenary', 'Featured', 'Invited Speaker', 'Oral Presenter'];
+                return (
+                  <div className="flex flex-wrap items-center gap-1.5 pb-1">
+                    <span className="text-[11px] font-bold text-slate-500 mr-1">Type:</span>
+                    {types.map(t => (
+                      <button
+                        key={t}
+                        type="button"
+                        onClick={() => setSpeakerFilterType(t)}
+                        className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                          speakerFilterType === t
+                            ? 'bg-teal-800 text-white shadow-2xs'
+                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200/70 hover:text-slate-800'
+                        }`}
+                      >
+                        {t}
+                        {t === 'All'
+                          ? ` (${(formData.speakers || []).length})`
+                          : ` (${(formData.speakers || []).filter(s => s.speaker_type === t).length})`}
+                      </button>
+                    ))}
+                  </div>
+                );
+              })()}
+
+              {/* Speakers List */}
+              <div className="space-y-3.5 max-h-[460px] overflow-y-auto pr-1">
+                {(formData.speakers || [])
+                  .filter(s => speakerFilterType === 'All' || s.speaker_type === speakerFilterType)
+                  .map((sp, index) => {
+                    const originalIndex = (formData.speakers || []).findIndex(x => x.id === sp.id);
+                    const isFirst = originalIndex === 0;
+                    const isLast = originalIndex === (formData.speakers || []).length - 1;
+
+                    return (
+                      <div
+                        key={sp.id}
+                        className="p-3.5 bg-slate-50 border border-slate-200 hover:border-slate-300 rounded-2xl space-y-2.5 transition-all"
+                      >
+                        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+                          {/* Speaker Identity */}
+                          <div className="flex items-center space-x-3.5 min-w-0">
+                            <div className="relative shrink-0">
+                              <img
+                                src={sp.photo_url || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80'}
+                                alt={sp.name}
+                                className="w-12 h-12 rounded-2xl object-cover border border-slate-200 bg-white shadow-2xs"
+                                onError={(e) => {
+                                  (e.target as HTMLElement).style.display = 'none';
+                                }}
+                              />
+                              <span className="absolute -top-1.5 -left-1.5 w-5 h-5 rounded-full bg-slate-800 text-white text-[10px] font-bold flex items-center justify-center shadow-2xs">
+                                {sp.display_order || originalIndex + 1}
+                              </span>
+                            </div>
+
+                            <div className="min-w-0">
+                              <div className="flex items-center space-x-2 flex-wrap">
+                                <span className="font-bold text-xs text-slate-900 truncate">
+                                  {sp.prefix ? `${sp.prefix} ` : ''}{sp.name}
+                                </span>
+                                <span className="text-[10px] font-bold px-2 py-0.5 bg-teal-100 text-teal-800 rounded-full border border-teal-200/60">
+                                  {sp.speaker_type || 'Keynote'}
+                                </span>
+                                {sp.is_active === false && (
+                                  <span className="text-[10px] font-semibold px-1.5 py-0.2 bg-amber-100 text-amber-800 rounded">
+                                    Inactive
+                                  </span>
+                                )}
+                              </div>
+                              <div className="text-[11px] text-slate-600 truncate mt-0.5">
+                                {sp.designation} • <span className="font-medium">{sp.institution}</span>
+                              </div>
+                              <div className="text-[10px] text-slate-400 mt-0.5 flex items-center space-x-2">
+                                <span>{sp.country}</span>
+                                {sp.h_index && <span>• h-index: {sp.h_index}</span>}
+                                {sp.citations_count && <span>• {sp.citations_count} citations</span>}
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* CMS Action Buttons: Reorder, Edit, Preview, Delete */}
+                          <div className="flex items-center space-x-1 shrink-0 self-end sm:self-auto justify-end">
+                            {/* Move Up */}
+                            <button
+                              type="button"
+                              disabled={isFirst}
+                              onClick={() => handleMoveSpeaker(originalIndex, 'up')}
+                              className="p-1.5 text-slate-500 hover:text-teal-800 hover:bg-teal-50 disabled:opacity-30 disabled:hover:bg-transparent rounded-lg transition-colors cursor-pointer"
+                              title="Move Up"
+                            >
+                              <ArrowUp className="w-3.5 h-3.5" />
+                            </button>
+
+                            {/* Move Down */}
+                            <button
+                              type="button"
+                              disabled={isLast}
+                              onClick={() => handleMoveSpeaker(originalIndex, 'down')}
+                              className="p-1.5 text-slate-500 hover:text-teal-800 hover:bg-teal-50 disabled:opacity-30 disabled:hover:bg-transparent rounded-lg transition-colors cursor-pointer"
+                              title="Move Down"
+                            >
+                              <ArrowDown className="w-3.5 h-3.5" />
+                            </button>
+
+                            {/* Preview Public Card */}
+                            <button
+                              type="button"
+                              onClick={() => handleOpenCardPreview('speaker', sp)}
+                              className="px-2 py-1 text-slate-600 hover:text-teal-900 hover:bg-teal-50 text-xs font-semibold rounded-lg flex items-center space-x-1 transition-colors cursor-pointer"
+                              title="Preview public card"
+                            >
+                              <Eye className="w-3.5 h-3.5 text-slate-500" />
+                              <span className="hidden md:inline">Preview</span>
+                            </button>
+
+                            {/* Edit Speaker */}
+                            <button
+                              type="button"
+                              onClick={() => handleEditSpeaker(sp)}
+                              className="px-2.5 py-1 bg-white hover:bg-slate-100 text-teal-800 border border-slate-300 rounded-lg text-xs font-bold flex items-center space-x-1 transition-colors cursor-pointer shadow-2xs"
+                              title="Edit full speaker profile"
+                            >
+                              <Edit2 className="w-3 h-3 text-teal-700" />
+                              <span>Edit</span>
+                            </button>
+
+                            {/* Delete Speaker */}
+                            <button
+                              type="button"
+                              onClick={() => setDeletingSpeakerId(sp.id)}
+                              className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+                              title="Delete Speaker"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Presentation Title Box */}
+                        {sp.presentation_title && (
+                          <div className="bg-white p-2.5 rounded-xl border border-slate-200 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                            <div>
+                              <span className="font-bold text-teal-800 uppercase text-[10px] mr-1">Talk:</span>
+                              <span className="font-semibold text-slate-800">{sp.presentation_title}</span>
+                            </div>
+                            {sp.presentation_abstract && (
+                              <span className="text-[10px] text-slate-400 italic shrink-0">
+                                Abstract provided
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+
+                {(formData.speakers || []).length === 0 && (
+                  <div className="p-8 text-center text-slate-400 bg-slate-50 border border-dashed border-slate-300 rounded-2xl space-y-2">
+                    <p className="text-xs font-semibold">No keynote speakers added yet.</p>
+                    <button
+                      type="button"
+                      onClick={handleOpenAddSpeaker}
+                      className="px-3 py-1.5 bg-teal-800 hover:bg-teal-900 text-white rounded-xl text-xs font-bold inline-flex items-center space-x-1 cursor-pointer"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>Add First Speaker</span>
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -3355,7 +3827,7 @@ export const CongressWizard: React.FC<CongressWizardProps> = ({
                 </div>
               </div>
 
-              {/* Journal Info */}
+              {/* Journal Info & Logo */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-bold text-slate-800 mb-1">Associated Special Issue Journal</label>
@@ -3376,6 +3848,21 @@ export const CongressWizard: React.FC<CongressWizardProps> = ({
                     className="w-full bg-white border border-slate-300 rounded-xl px-3.5 py-2.5 text-xs text-slate-900 font-mono focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600"
                   />
                 </div>
+
+                {/* Journal Logo / Cover Media Selection */}
+                <div className="sm:col-span-2 p-3 bg-slate-50 border border-slate-200 rounded-2xl space-y-1.5">
+                  <label className="block text-xs font-bold text-slate-800">
+                    Associated Journal Cover / Logo (Media Library)
+                  </label>
+                  <MediaUploadInput
+                    value={formData.journal_logo_url || ''}
+                    onChange={url => setFormData({ ...formData, journal_logo_url: url })}
+                    category="partners"
+                    hideUrlInput={true}
+                    showMediaLibrary={true}
+                    helperText="Select or upload the official special issue journal cover or emblem."
+                  />
+                </div>
               </div>
 
               {/* Sponsors Section */}
@@ -3393,9 +3880,9 @@ export const CongressWizard: React.FC<CongressWizardProps> = ({
                     <span>Add Sponsor</span>
                   </button>
                 </div>
-                <div className="space-y-2.5 max-h-[260px] overflow-y-auto pr-1">
+                <div className="space-y-3 max-h-[380px] overflow-y-auto pr-1">
                   {(formData.sponsors || []).map((sp, sIdx) => (
-                    <div key={sIdx} className="p-3 bg-slate-50 border border-slate-200 rounded-2xl space-y-2 text-xs">
+                    <div key={sIdx} className="p-3.5 bg-slate-50 border border-slate-200 rounded-2xl space-y-3 text-xs">
                       <div className="flex items-center justify-between gap-2">
                         <input
                           type="text"
@@ -3406,7 +3893,7 @@ export const CongressWizard: React.FC<CongressWizardProps> = ({
                             setFormData({ ...formData, sponsors: updated });
                           }}
                           placeholder="Sponsor Name"
-                          className="font-bold text-slate-900 bg-white border border-slate-300 rounded-lg px-2.5 py-1 text-xs flex-1"
+                          className="font-bold text-slate-900 bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs flex-1"
                         />
                         <input
                           type="text"
@@ -3417,7 +3904,7 @@ export const CongressWizard: React.FC<CongressWizardProps> = ({
                             setFormData({ ...formData, sponsors: updated });
                           }}
                           placeholder="Tier (e.g. Platinum Sponsor)"
-                          className="text-teal-800 bg-white border border-slate-300 rounded-lg px-2.5 py-1 text-xs w-36"
+                          className="text-teal-800 bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs w-36 font-semibold"
                         />
                         <input
                           type="text"
@@ -3428,7 +3915,7 @@ export const CongressWizard: React.FC<CongressWizardProps> = ({
                             setFormData({ ...formData, sponsors: updated });
                           }}
                           placeholder="Booth (e.g. Booth A-01)"
-                          className="text-slate-600 font-mono bg-white border border-slate-300 rounded-lg px-2.5 py-1 text-xs w-32"
+                          className="text-slate-600 font-mono bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs w-32"
                         />
                         <button
                           type="button"
@@ -3439,39 +3926,38 @@ export const CongressWizard: React.FC<CongressWizardProps> = ({
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
                       </div>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                        <div className="flex items-center space-x-2">
-                          <input
-                            type="text"
+
+                      {/* Sponsor Logo via Media Library (No URL Input) */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-center">
+                        <div className="space-y-1">
+                          <label className="block text-[11px] font-bold text-slate-700">Sponsor Logo (Media Library)</label>
+                          <MediaUploadInput
                             value={sp.logo_url || ''}
-                            onChange={e => {
+                            onChange={url => {
                               const updated = [...formData.sponsors];
-                              updated[sIdx] = { ...updated[sIdx], logo_url: e.target.value };
+                              updated[sIdx] = { ...updated[sIdx], logo_url: url };
                               setFormData({ ...formData, sponsors: updated });
                             }}
-                            placeholder="Logo CDN URL (e.g. https://...)"
-                            className="flex-1 bg-white border border-slate-300 rounded-lg px-2.5 py-1 text-xs text-slate-600 font-mono"
+                            category="sponsors"
+                            hideUrlInput={true}
+                            showMediaLibrary={true}
                           />
-                          {sp.logo_url ? (
-                            <img
-                              src={sp.logo_url}
-                              alt={sp.name}
-                              className="w-7 h-7 rounded object-contain border border-slate-200 bg-white shrink-0 p-0.5"
-                              onError={(e) => { (e.target as HTMLElement).style.display = 'none'; }}
-                            />
-                          ) : null}
                         </div>
-                        <input
-                          type="text"
-                          value={sp.website || ''}
-                          onChange={e => {
-                            const updated = [...formData.sponsors];
-                            updated[sIdx] = { ...updated[sIdx], website: e.target.value };
-                            setFormData({ ...formData, sponsors: updated });
-                          }}
-                          placeholder="Website URL (e.g. https://...)"
-                          className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1 text-xs text-slate-600 font-mono"
-                        />
+
+                        <div>
+                          <label className="block text-[11px] font-bold text-slate-700 mb-1">Company Website</label>
+                          <input
+                            type="text"
+                            value={sp.website || ''}
+                            onChange={e => {
+                              const updated = [...formData.sponsors];
+                              updated[sIdx] = { ...updated[sIdx], website: e.target.value };
+                              setFormData({ ...formData, sponsors: updated });
+                            }}
+                            placeholder="Website URL (https://...)"
+                            className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-2 text-xs text-slate-600 font-mono"
+                          />
+                        </div>
                       </div>
                     </div>
                   ))}
@@ -3493,23 +3979,23 @@ export const CongressWizard: React.FC<CongressWizardProps> = ({
                     <span>Add Media Partner</span>
                   </button>
                 </div>
-                <div className="space-y-2.5 max-h-[260px] overflow-y-auto pr-1">
+                <div className="space-y-3 max-h-[380px] overflow-y-auto pr-1">
                   {(formData.media_partners || []).map((media, mIdx) => (
-                    <div key={mIdx} className="p-3 bg-slate-50 border border-slate-200 rounded-2xl space-y-2 text-xs">
+                    <div key={mIdx} className="p-3.5 bg-slate-50 border border-slate-200 rounded-2xl space-y-3 text-xs">
                       <div className="flex items-center justify-between gap-2">
                         <input
                           type="text"
                           value={media.name}
                           onChange={e => handleUpdateMediaPartner(mIdx, 'name', e.target.value)}
                           placeholder="Media Partner Name (e.g. BioWorld Journal)"
-                          className="font-bold text-slate-900 bg-white border border-slate-300 rounded-lg px-2.5 py-1 text-xs flex-1"
+                          className="font-bold text-slate-900 bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs flex-1"
                         />
                         <input
                           type="text"
                           value={media.website || ''}
                           onChange={e => handleUpdateMediaPartner(mIdx, 'website', e.target.value)}
                           placeholder="Website (https://...)"
-                          className="text-slate-600 font-mono bg-white border border-slate-300 rounded-lg px-2.5 py-1 text-xs w-48"
+                          className="text-slate-600 font-mono bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs w-48"
                         />
                         <button
                           type="button"
@@ -3520,22 +4006,17 @@ export const CongressWizard: React.FC<CongressWizardProps> = ({
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
                       </div>
-                      <div className="flex items-center space-x-2">
-                        <input
-                          type="text"
+
+                      {/* Media Partner Logo via Media Library (No URL Input) */}
+                      <div className="space-y-1">
+                        <label className="block text-[11px] font-bold text-slate-700">Media Partner Logo (Media Library)</label>
+                        <MediaUploadInput
                           value={media.logo_url || ''}
-                          onChange={e => handleUpdateMediaPartner(mIdx, 'logo_url', e.target.value)}
-                          placeholder="Partner Logo URL (e.g. https://...)"
-                          className="flex-1 bg-white border border-slate-300 rounded-lg px-2.5 py-1 text-xs text-slate-600 font-mono"
+                          onChange={url => handleUpdateMediaPartner(mIdx, 'logo_url', url)}
+                          category="partners"
+                          hideUrlInput={true}
+                          showMediaLibrary={true}
                         />
-                        {media.logo_url ? (
-                          <img
-                            src={media.logo_url}
-                            alt={media.name}
-                            className="w-7 h-7 rounded object-contain border border-slate-200 bg-white shrink-0 p-0.5"
-                            onError={(e) => { (e.target as HTMLElement).style.display = 'none'; }}
-                          />
-                        ) : null}
                       </div>
                     </div>
                   ))}
@@ -3861,6 +4342,49 @@ export const CongressWizard: React.FC<CongressWizardProps> = ({
           </div>
         </div>
       )}
+
+      {/* Committee Member Edit/Add Modal */}
+      <CommitteeMemberModal
+        isOpen={isCommitteeModalOpen}
+        onClose={() => setIsCommitteeModalOpen(false)}
+        member={editingCommitteeMember}
+        onSave={handleSaveCommitteeMember}
+      />
+
+      {/* Speaker Edit/Add Modal */}
+      <SpeakerEditModal
+        isOpen={isSpeakerModalOpen}
+        onClose={() => setIsSpeakerModalOpen(false)}
+        speaker={editingSpeaker}
+        onSave={handleSaveSpeaker}
+        conferenceDomain={formData.domain}
+      />
+
+      {/* Delete Confirmation Modal for Committee */}
+      <DeleteConfirmModal
+        isOpen={deletingCommitteeMemberId !== null}
+        onClose={() => setDeletingCommitteeMemberId(null)}
+        onConfirm={handleConfirmDeleteCommitteeMember}
+        title="Delete Committee Member"
+        message="Are you sure you want to remove this committee member from the conference? This action will remove their profile upon saving."
+      />
+
+      {/* Delete Confirmation Modal for Speakers */}
+      <DeleteConfirmModal
+        isOpen={deletingSpeakerId !== null}
+        onClose={() => setDeletingSpeakerId(null)}
+        onConfirm={handleConfirmDeleteSpeaker}
+        title="Delete Conference Speaker"
+        message="Are you sure you want to remove this speaker from the conference program? This action will remove their keynote entry upon saving."
+      />
+
+      {/* Live Public Website Card Preview Modal */}
+      <PublicCardPreviewModal
+        isOpen={isPreviewCardModalOpen}
+        onClose={() => setIsPreviewCardModalOpen(false)}
+        type={previewCardType || 'committee'}
+        data={previewCardData}
+      />
     </div>
   );
 };

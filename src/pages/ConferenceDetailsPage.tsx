@@ -742,10 +742,10 @@ export const ConferenceDetailsPage: React.FC<ConferenceDetailsPageProps> = ({
         <div className="flex flex-col sm:flex-row sm:items-end justify-between mb-10">
           <div>
             <h2 className="text-3xl font-bold text-slate-900 font-display mt-2">
-              Organizing Committee & Chairs
+              {conference.committee_heading || 'Organizing Committee & Chairs'}
             </h2>
             <p className="text-xs text-slate-500 mt-1">
-              Distinguished faculty overseeing peer review, sessions, and academic proceedings.
+              {conference.committee_description || 'Distinguished faculty overseeing peer review, sessions, and academic proceedings.'}
             </p>
           </div>
         </div>
@@ -797,13 +797,13 @@ export const ConferenceDetailsPage: React.FC<ConferenceDetailsPageProps> = ({
             <div className="flex flex-col sm:flex-row sm:items-end justify-between mb-10">
               <div>
                 <span className="text-xs font-bold uppercase tracking-wider text-[#0E7490] bg-teal-50 px-3 py-1 rounded-full border border-teal-100 inline-block mb-2">
-                  Distinguished Faculty
+                  {conference.speakers_badge || 'Distinguished Faculty'}
                 </span>
                 <h2 className="text-3xl font-bold text-slate-900 font-display">
-                  Keynote Speakers
+                  {conference.speakers_heading || 'Keynote Speakers'}
                 </h2>
                 <p className="text-xs text-slate-500 mt-1">
-                  World-leading scientists, clinical investigators, and industry pioneers delivering keynote addresses.
+                  {conference.speakers_description || 'World-leading scientists, clinical investigators, and industry pioneers delivering keynote addresses.'}
                 </p>
               </div>
             </div>
@@ -1054,10 +1054,19 @@ export const ConferenceDetailsPage: React.FC<ConferenceDetailsPageProps> = ({
             {(conference.journal_name || conference.indexing_partners || conference.cme_credits_eligible) && (
               <div className="mt-3 pt-3 border-t border-slate-200/70 flex flex-wrap items-center gap-3 text-xs text-slate-600">
                 {conference.journal_name && (
-                  <div className="flex items-center gap-1.5">
-                    <span className="font-semibold text-slate-800">Official Journal:</span>
-                    <span className="text-[#0E7490] font-medium">{conference.journal_name}</span>
-                    {conference.journal_issn && <span className="text-slate-400 font-mono">(ISSN: {conference.journal_issn})</span>}
+                  <div className="flex items-center gap-2">
+                    {conference.journal_logo_url && (
+                      <img
+                        src={conference.journal_logo_url}
+                        alt={conference.journal_name}
+                        className="h-6 w-auto max-w-[80px] object-contain rounded bg-white p-0.5 border border-slate-200 shadow-xs"
+                      />
+                    )}
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-semibold text-slate-800">Official Journal:</span>
+                      <span className="text-[#0E7490] font-medium">{conference.journal_name}</span>
+                      {conference.journal_issn && <span className="text-slate-400 font-mono">(ISSN: {conference.journal_issn})</span>}
+                    </div>
                   </div>
                 )}
                 {conference.indexing_partners && (

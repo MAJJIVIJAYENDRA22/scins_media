@@ -217,8 +217,28 @@ async function seedInitialConferencesToMysql() {
   }
 }
 
+async function ensureConferenceColumns() {
+  if (!mysqlPool) return;
+  const cols = [
+    { name: 'committee_heading', type: 'VARCHAR(255) NULL' },
+    { name: 'committee_description', type: 'TEXT NULL' },
+    { name: 'speakers_badge', type: 'VARCHAR(100) NULL' },
+    { name: 'speakers_heading', type: 'VARCHAR(255) NULL' },
+    { name: 'speakers_description', type: 'TEXT NULL' },
+    { name: 'journal_logo_url', type: 'VARCHAR(255) NULL' }
+  ];
+  for (const col of cols) {
+    try {
+      await mysqlPool.query(`ALTER TABLE conferences ADD COLUMN ${col.name} ${col.type}`);
+    } catch (e: any) {
+      // Column likely already exists
+    }
+  }
+}
+
 async function loadDatabaseFromMysql() {
   if (!mysqlPool) return;
+  await ensureConferenceColumns();
   try {
     const [rows]: any = await mysqlPool.query(
       'SELECT * FROM conferences ORDER BY start_date ASC'
@@ -284,6 +304,12 @@ async function loadDatabaseFromMysql() {
         journal_name: r.journal_name || '',
         journal_issn: r.journal_issn || '',
         indexing_partners: parseJsonSafe<string[]>(r.indexing_partners, []),
+        committee_heading: r.committee_heading || '',
+        committee_description: r.committee_description || '',
+        speakers_badge: r.speakers_badge || '',
+        speakers_heading: r.speakers_heading || '',
+        speakers_description: r.speakers_description || '',
+        journal_logo_url: r.journal_logo_url || '',
         created_at: r.created_at ? new Date(r.created_at).toISOString() : new Date().toISOString()
       }));
 
@@ -314,6 +340,42 @@ async function loadDatabaseFromMysql() {
         }
       } catch (err: any) {
         console.warn('[MySQL Hydration] committee_members table notice:', err.message);
+      }
+
+      try {
+        const [spkRows]: any = await mysqlPool.query(`
+          SELECT s.*, sc.conference_id, sc.speaker_type, sc.presentation_title, sc.presentation_abstract, sc.display_order as conf_display_order
+          FROM speakers s
+          LEFT JOIN speaker_conferences sc ON s.id = sc.speaker_id
+          ORDER BY COALESCE(sc.display_order, s.id) ASC, s.id ASC
+        `);
+        if (Array.isArray(spkRows) && spkRows.length > 0) {
+          db.speakers = spkRows.map((sp: any) => ({
+            id: Number(sp.id),
+            conference_id: sp.conference_id ? Number(sp.conference_id) : undefined,
+            name: sp.name || '',
+            prefix: sp.prefix || 'Dr.',
+            designation: sp.designation || '',
+            institution: sp.institution || '',
+            country: sp.country || '',
+            research_domain: sp.research_domain || '',
+            photo_url: sp.photo_url || '',
+            biography: sp.biography || '',
+            h_index: Number(sp.h_index || 25),
+            citations_count: Number(sp.citations_count || 1200),
+            speaker_type: sp.speaker_type || 'Keynote',
+            presentation_title: sp.presentation_title || '',
+            presentation_abstract: sp.presentation_abstract || '',
+            linkedin_url: sp.linkedin_url || '',
+            google_scholar: sp.google_scholar || '',
+            website: sp.website || '',
+            display_order: Number(sp.conf_display_order || sp.id || 1),
+            is_active: true,
+            status: 'active'
+          }));
+        }
+      } catch (err: any) {
+        console.warn('[MySQL Hydration] speakers table notice:', err.message);
       }
 
       try {
@@ -916,6 +978,66 @@ const adminLoginRateLimiter = rateLimit({
     }
   });
 
+  // Media Library Aggregation Endpoint
+  app.get('/api/v1/media-library', (req: Request, res: Response) => {
+    const assets: Array<{ id: string | number; url: string; name: string; category: string; source: string }> = [];
+    const seen = new Set<string>();
+
+    const addAsset = (url: string | undefined, name: string, category: string, source: string) => {
+      if (!url || typeof url !== 'string' || url.trim().length === 0) return;
+      const cleanUrl = url.trim();
+      if (seen.has(cleanUrl)) return;
+      seen.add(cleanUrl);
+      assets.push({
+        id: `media-${seen.size}`,
+        url: cleanUrl,
+        name: name || 'Media Asset',
+        category,
+        source
+      });
+    };
+
+    // 1. Corporate Sponsors
+    db.sponsors.forEach(s => {
+      addAsset(s.logo_url, s.name || s.company_name || 'Sponsor Logo', 'sponsors', 'Sponsors');
+    });
+
+    // 2. Global Media Partners
+    db.mediaPartners.forEach(m => {
+      addAsset(m.logo_url, m.name || 'Media Partner Logo', 'partners', 'Media Partners');
+    });
+
+    // 3. Conference Assets
+    db.conferences.forEach(c => {
+      addAsset(c.logo_url, `${c.short_title || c.title} Logo`, 'conferences', 'Conference');
+      addAsset(c.hero_image, `${c.short_title || c.title} Hero Banner`, 'conferences', 'Conference Banner');
+      addAsset(c.journal_logo_url, `${c.journal_name || 'Journal'} Logo`, 'partners', 'Partner Journal');
+      if (Array.isArray(c.gallery_images)) {
+        c.gallery_images.forEach((img, gIdx) => {
+          addAsset(img, `${c.short_title || 'Conference'} Gallery ${gIdx + 1}`, 'conferences', 'Gallery');
+        });
+      }
+    });
+
+    // 4. Speakers
+    db.speakers.forEach(sp => {
+      addAsset(sp.photo_url, sp.name || 'Speaker Photo', 'speakers', 'Speakers');
+    });
+
+    // 5. Committee
+    db.committee.forEach(cm => {
+      addAsset(cm.photo_url, cm.name || 'Committee Photo', 'committee', 'Committee');
+    });
+
+    const categoryParam = req.query.category as string;
+    let result = assets;
+    if (categoryParam && categoryParam !== 'all') {
+      result = assets.filter(a => a.category === categoryParam);
+    }
+
+    res.json({ success: true, count: result.length, data: result });
+  });
+
   // Auto-invalidate public read cache on any conference mutations
   app.use('/api/v1/conferences', (req, res, next) => {
     if (req.method !== 'GET') {
@@ -1178,6 +1300,44 @@ const adminLoginRateLimiter = rateLimit({
             is_published: Boolean(m.is_published)
           }));
         }
+
+        try {
+          const [spkRows]: any = await mysqlPool.query(`
+            SELECT s.*, sc.conference_id, sc.speaker_type, sc.presentation_title, sc.presentation_abstract, sc.display_order as conf_display_order
+            FROM speakers s
+            JOIN speaker_conferences sc ON s.id = sc.speaker_id
+            WHERE sc.conference_id = ?
+            ORDER BY COALESCE(sc.display_order, s.id) ASC, s.id ASC
+          `, [conf.id]);
+          if (Array.isArray(spkRows) && spkRows.length > 0) {
+            confSpeakers = spkRows.map((sp: any) => ({
+              id: Number(sp.id),
+              conference_id: Number(conf.id),
+              name: sp.name || '',
+              prefix: sp.prefix || 'Dr.',
+              designation: sp.designation || '',
+              institution: sp.institution || '',
+              country: sp.country || '',
+              research_domain: sp.research_domain || '',
+              photo_url: sp.photo_url || '',
+              biography: sp.biography || '',
+              h_index: Number(sp.h_index || 25),
+              citations_count: Number(sp.citations_count || 1200),
+              speaker_type: sp.speaker_type || 'Keynote',
+              presentation_title: sp.presentation_title || '',
+              presentation_abstract: sp.presentation_abstract || '',
+              linkedin_url: sp.linkedin_url || '',
+              google_scholar: sp.google_scholar || '',
+              website: sp.website || '',
+              display_order: Number(sp.conf_display_order || sp.id || 1),
+              is_active: true,
+              status: 'active'
+            }));
+          }
+        } catch (spkNotice: any) {
+          console.warn('[MySQL Conf Details Speakers Notice]:', spkNotice.message);
+        }
+
         const [sRows]: any = await mysqlPool.query('SELECT * FROM sessions WHERE conference_id = ? ORDER BY display_order ASC, id ASC', [conf.id]);
         if (Array.isArray(sRows) && sRows.length > 0) {
           confSessions = sRows.map((s: any) => ({
@@ -1318,7 +1478,13 @@ const adminLoginRateLimiter = rateLimit({
       accent_color: body.accent_color || 'teal',
       journal_name: body.journal_name || '',
       journal_issn: body.journal_issn || '',
-      indexing_partners: Array.isArray(body.indexing_partners) ? body.indexing_partners : []
+      indexing_partners: Array.isArray(body.indexing_partners) ? body.indexing_partners : [],
+      committee_heading: body.committee_heading || '',
+      committee_description: body.committee_description || '',
+      speakers_badge: body.speakers_badge || '',
+      speakers_heading: body.speakers_heading || '',
+      speakers_description: body.speakers_description || '',
+      journal_logo_url: body.journal_logo_url || ''
     };
 
     let assignedId = Math.max(...db.conferences.map(c => c.id), 0) + 1;
@@ -1348,6 +1514,15 @@ const adminLoginRateLimiter = rateLimit({
         assignedId = Number(insertRes.insertId);
         console.log(`[MySQL Insert Conference] Created conference with persistent ID ${assignedId}`);
 
+        try {
+          await mysqlPool.query(
+            `UPDATE conferences SET committee_heading = ?, committee_description = ?, speakers_badge = ?, speakers_heading = ?, speakers_description = ?, journal_logo_url = ? WHERE id = ?`,
+            [confData.committee_heading, confData.committee_description, confData.speakers_badge, confData.speakers_heading, confData.speakers_description, confData.journal_logo_url, assignedId]
+          );
+        } catch (uhErr: any) {
+          console.warn('[MySQL Optional Headings Update Notice]:', uhErr.message);
+        }
+
         // Insert child records into MySQL
         if (Array.isArray(body.committee) && body.committee.length > 0) {
           for (let idx = 0; idx < body.committee.length; idx++) {
@@ -1368,6 +1543,54 @@ const adminLoginRateLimiter = rateLimit({
               );
             } catch (ce: any) {
               console.warn('[MySQL Insert Committee Member Notice]:', ce.message);
+            }
+          }
+        }
+
+        // Insert speakers into MySQL
+        if (Array.isArray(body.speakers) && body.speakers.length > 0) {
+          for (let spIdx = 0; spIdx < body.speakers.length; spIdx++) {
+            const sp = body.speakers[spIdx];
+            try {
+              let speakerId = sp.id;
+              if (speakerId) {
+                const [existing]: any = await mysqlPool.query('SELECT id FROM speakers WHERE id = ?', [speakerId]);
+                if (!existing || existing.length === 0) {
+                  const [ins]: any = await mysqlPool.query(
+                    `INSERT INTO speakers (name, prefix, designation, institution, country, research_domain, photo_url, biography, h_index, citations_count, linkedin_url, google_scholar, website)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                    [
+                      sp.name || 'Speaker', sp.prefix || 'Dr.', sp.designation || '', sp.institution || '', sp.country || 'Global',
+                      sp.research_domain || 'General', sp.photo_url || '', sp.biography || '', Number(sp.h_index || 25),
+                      Number(sp.citations_count || 1200), sp.linkedin_url || '', sp.google_scholar || '', sp.website || ''
+                    ]
+                  );
+                  speakerId = ins.insertId;
+                }
+              } else {
+                const [ins]: any = await mysqlPool.query(
+                  `INSERT INTO speakers (name, prefix, designation, institution, country, research_domain, photo_url, biography, h_index, citations_count, linkedin_url, google_scholar, website)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                  [
+                    sp.name || 'Speaker', sp.prefix || 'Dr.', sp.designation || '', sp.institution || '', sp.country || 'Global',
+                    sp.research_domain || 'General', sp.photo_url || '', sp.biography || '', Number(sp.h_index || 25),
+                    Number(sp.citations_count || 1200), sp.linkedin_url || '', sp.google_scholar || '', sp.website || ''
+                  ]
+                );
+                speakerId = ins.insertId;
+              }
+
+              await mysqlPool.query(
+                `INSERT INTO speaker_conferences (speaker_id, conference_id, speaker_type, presentation_title, presentation_abstract, display_order)
+                 VALUES (?, ?, ?, ?, ?, ?)
+                 ON DUPLICATE KEY UPDATE speaker_type = VALUES(speaker_type), presentation_title = VALUES(presentation_title), presentation_abstract = VALUES(presentation_abstract), display_order = VALUES(display_order)`,
+                [
+                  speakerId, assignedId, sp.speaker_type || 'Keynote', sp.presentation_title || 'Conference Presentation',
+                  sp.presentation_abstract || '', Number(sp.display_order || spIdx + 1)
+                ]
+              );
+            } catch (spe: any) {
+              console.warn('[MySQL Insert Speaker Notice]:', spe.message);
             }
           }
         }
@@ -1600,6 +1823,15 @@ const adminLoginRateLimiter = rateLimit({
           ]
         );
 
+        try {
+          await mysqlPool.query(
+            `UPDATE conferences SET committee_heading = ?, committee_description = ?, speakers_badge = ?, speakers_heading = ?, speakers_description = ?, journal_logo_url = ? WHERE id = ?`,
+            [updatedConf.committee_heading || '', updatedConf.committee_description || '', updatedConf.speakers_badge || '', updatedConf.speakers_heading || '', updatedConf.speakers_description || '', updatedConf.journal_logo_url || '', id]
+          );
+        } catch (uhErr: any) {
+          console.warn('[MySQL Optional Headings Update Notice on PUT]:', uhErr.message);
+        }
+
         // Synchronize child entities in MySQL if passed
         if (Array.isArray(req.body.committee)) {
           await mysqlPool.query('DELETE FROM committee_members WHERE conference_id = ?', [id]);
@@ -1618,6 +1850,66 @@ const adminLoginRateLimiter = rateLimit({
                 m.orcid_url || '', m.google_scholar_url || '', Number(m.display_order || idx + 1), m.is_published !== false
               ]
             );
+          }
+        }
+
+        // Synchronize speakers in MySQL
+        if (Array.isArray(req.body.speakers)) {
+          try {
+            await mysqlPool.query('DELETE FROM speaker_conferences WHERE conference_id = ?', [id]);
+            for (let spIdx = 0; spIdx < req.body.speakers.length; spIdx++) {
+              const sp = req.body.speakers[spIdx];
+              let speakerId = sp.id;
+              if (speakerId) {
+                const [existing]: any = await mysqlPool.query('SELECT id FROM speakers WHERE id = ?', [speakerId]);
+                if (!existing || existing.length === 0) {
+                  const [ins]: any = await mysqlPool.query(
+                    `INSERT INTO speakers (name, prefix, designation, institution, country, research_domain, photo_url, biography, h_index, citations_count, linkedin_url, google_scholar, website)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                    [
+                      sp.name || 'Speaker', sp.prefix || 'Dr.', sp.designation || '', sp.institution || '', sp.country || 'Global',
+                      sp.research_domain || 'General', sp.photo_url || '', sp.biography || '', Number(sp.h_index || 25),
+                      Number(sp.citations_count || 1200), sp.linkedin_url || '', sp.google_scholar || '', sp.website || ''
+                    ]
+                  );
+                  speakerId = ins.insertId;
+                } else {
+                  await mysqlPool.query(
+                    `UPDATE speakers SET name=?, prefix=?, designation=?, institution=?, country=?, research_domain=?, photo_url=?, biography=?, h_index=?, citations_count=?, linkedin_url=?, google_scholar=?, website=?
+                     WHERE id = ?`,
+                    [
+                      sp.name || 'Speaker', sp.prefix || 'Dr.', sp.designation || '', sp.institution || '', sp.country || 'Global',
+                      sp.research_domain || 'General', sp.photo_url || '', sp.biography || '', Number(sp.h_index || 25),
+                      Number(sp.citations_count || 1200), sp.linkedin_url || '', sp.google_scholar || '', sp.website || '',
+                      speakerId
+                    ]
+                  );
+                }
+              } else {
+                const [ins]: any = await mysqlPool.query(
+                  `INSERT INTO speakers (name, prefix, designation, institution, country, research_domain, photo_url, biography, h_index, citations_count, linkedin_url, google_scholar, website)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                  [
+                    sp.name || 'Speaker', sp.prefix || 'Dr.', sp.designation || '', sp.institution || '', sp.country || 'Global',
+                    sp.research_domain || 'General', sp.photo_url || '', sp.biography || '', Number(sp.h_index || 25),
+                    Number(sp.citations_count || 1200), sp.linkedin_url || '', sp.google_scholar || '', sp.website || ''
+                  ]
+                );
+                speakerId = ins.insertId;
+              }
+
+              await mysqlPool.query(
+                `INSERT INTO speaker_conferences (speaker_id, conference_id, speaker_type, presentation_title, presentation_abstract, display_order)
+                 VALUES (?, ?, ?, ?, ?, ?)
+                 ON DUPLICATE KEY UPDATE speaker_type = VALUES(speaker_type), presentation_title = VALUES(presentation_title), presentation_abstract = VALUES(presentation_abstract), display_order = VALUES(display_order)`,
+                [
+                  speakerId, id, sp.speaker_type || 'Keynote', sp.presentation_title || 'Conference Presentation',
+                  sp.presentation_abstract || '', Number(sp.display_order || spIdx + 1)
+                ]
+              );
+            }
+          } catch (spkNotice: any) {
+            console.warn('[MySQL PUT Speakers Sync Notice]:', spkNotice.message);
           }
         }
 
