@@ -4,36 +4,22 @@
 // =============================================================================
 import fs from 'fs';
 import path from 'path';
-import { spawn, execSync } from 'child_process';
+import { spawn } from 'child_process';
 import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const isCloudOrProd =
-  process.env.NODE_ENV === 'production' ||
-  Boolean(process.env.PORT) ||
-  Boolean(process.env.RENDER) ||
-  Boolean(process.env.RAILWAY_STATIC_URL) ||
-  Boolean(process.env.DYNO) ||
-  Boolean(process.env.KUBERNETES_SERVICE_HOST);
-
 const distServer = path.join(__dirname, 'dist', 'server.cjs');
 
 async function main() {
-  if (isCloudOrProd || fs.existsSync(distServer)) {
-    // In cloud or production environments, run the compiled production bundle
-    if (!fs.existsSync(distServer)) {
-      console.log('[start-dev] Production build missing. Building bundle via build.js...');
-      execSync('node build.js', { stdio: 'inherit', cwd: __dirname });
-    }
-    console.log('[start-dev] Starting compiled enterprise server...');
+  if (fs.existsSync(distServer)) {
+    console.log('[start-dev] Starting compiled enterprise server (dist/server.cjs)...');
     await import('./dist/server.cjs');
     return;
   }
 
-  // Local development mode: run server.ts using tsx
-  console.log('[start-dev] Starting local development server with tsx...');
+  console.log('[start-dev] dist/server.cjs missing, launching local dev server with tsx...');
   const localTsxPath = path.join(__dirname, 'node_modules', 'tsx', 'dist', 'cli.mjs');
 
   if (fs.existsSync(localTsxPath)) {
