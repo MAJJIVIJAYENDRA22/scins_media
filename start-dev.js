@@ -1,5 +1,6 @@
+#!/usr/bin/env node
 // =============================================================================
-// SCINSMEDIA — Universal Development & Cloud Startup Runner
+// SCINSMEDIA — Universal Development & Cloud Startup Runner / tsx Shim
 // =============================================================================
 import fs from 'fs';
 import path from 'path';
@@ -14,7 +15,8 @@ const isCloudOrProd =
   Boolean(process.env.PORT) ||
   Boolean(process.env.RENDER) ||
   Boolean(process.env.RAILWAY_STATIC_URL) ||
-  Boolean(process.env.DYNO);
+  Boolean(process.env.DYNO) ||
+  Boolean(process.env.KUBERNETES_SERVICE_HOST);
 
 const distServer = path.join(__dirname, 'dist', 'server.cjs');
 

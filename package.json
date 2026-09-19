@@ -3,8 +3,12 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "bin": {
+    "tsx": "./start-dev.js"
+  },
   "scripts": {
     "dev": "node start-dev.js",
+    "tsx": "node start-dev.js",
     "build": "node build.js",
     "postinstall": "node build.js",
     "start": "node dist/server.cjs",
