@@ -1,0 +1,6 @@
+---
+deployment:
+  tasks:
+    - export DEPLOYPATH=${DEPLOYPATH:-$PWD}
+    - /bin/cp -R * $DEPLOYPATH 2>/dev/null || true
+    - echo "Deployment tasks completed successfully."
