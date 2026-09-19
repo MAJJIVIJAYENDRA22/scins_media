@@ -3572,10 +3572,19 @@ const adminLoginRateLimiter = rateLimit({
 
   // Support GoDaddy cPanel Phusion Passenger, Cloud Containers, and Localhost
   let server: any;
+  const isPassenger =
+    typeof (global as any).PhusionPassenger !== 'undefined' ||
+    Boolean(process.env.PASSENGER_APP_ENV) ||
+    process.env.PORT === 'passenger';
   const rawPort = process.env.PORT ? String(process.env.PORT).trim() : '';
 
-  if (rawPort && (rawPort === 'passenger' || rawPort.startsWith('/') || isNaN(Number(rawPort)))) {
-    // GoDaddy cPanel Phusion Passenger Unix domain socket
+  if (isPassenger || rawPort === 'passenger') {
+    // GoDaddy cPanel Phusion Passenger gateway
+    server = app.listen('passenger', () => {
+      console.log('[Scinsmedia Enterprise Engine] Listening on GoDaddy Phusion Passenger gateway');
+    });
+  } else if (rawPort && (rawPort.startsWith('/') || isNaN(Number(rawPort)))) {
+    // GoDaddy cPanel Unix domain socket
     server = app.listen(rawPort, () => {
       console.log(`[Scinsmedia Enterprise Engine] Listening on GoDaddy Passenger socket: ${rawPort}`);
     });

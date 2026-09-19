@@ -33,20 +33,20 @@ __export(server_exports, {
 });
 module.exports = __toCommonJS(server_exports);
 var import_config = require("dotenv/config");
-var import_express = __toESM(require("express"), 1);
-var import_cors = __toESM(require("cors"), 1);
+var import_express = __toESM(require("express"));
+var import_cors = __toESM(require("cors"));
 var import_express_rate_limit = require("express-rate-limit");
-var import_bcrypt = __toESM(require("bcrypt"), 1);
-var import_cookie_parser = __toESM(require("cookie-parser"), 1);
-var import_csurf = __toESM(require("csurf"), 1);
-var import_helmet = __toESM(require("helmet"), 1);
+var import_bcrypt = __toESM(require("bcrypt"));
+var import_cookie_parser = __toESM(require("cookie-parser"));
+var import_csurf = __toESM(require("csurf"));
+var import_helmet = __toESM(require("helmet"));
 var import_file_type = require("file-type");
 var import_vite = require("vite");
-var import_promise = __toESM(require("mysql2/promise"), 1);
-var import_stripe = __toESM(require("stripe"), 1);
-var import_crypto = __toESM(require("crypto"), 1);
-var import_fs = __toESM(require("fs"), 1);
-var import_path = __toESM(require("path"), 1);
+var import_promise = __toESM(require("mysql2/promise"));
+var import_stripe = __toESM(require("stripe"));
+var import_crypto = __toESM(require("crypto"));
+var import_fs = __toESM(require("fs"));
+var import_path = __toESM(require("path"));
 
 // src/data/initialData.ts
 var INITIAL_CONFERENCES = [
@@ -6142,8 +6142,13 @@ async function startServer() {
     app.use(vite.middlewares);
   }
   let server;
+  const isPassenger = typeof global.PhusionPassenger !== "undefined" || Boolean(process.env.PASSENGER_APP_ENV) || process.env.PORT === "passenger";
   const rawPort = process.env.PORT ? String(process.env.PORT).trim() : "";
-  if (rawPort && (rawPort === "passenger" || rawPort.startsWith("/") || isNaN(Number(rawPort)))) {
+  if (isPassenger || rawPort === "passenger") {
+    server = app.listen("passenger", () => {
+      console.log("[Scinsmedia Enterprise Engine] Listening on GoDaddy Phusion Passenger gateway");
+    });
+  } else if (rawPort && (rawPort.startsWith("/") || isNaN(Number(rawPort)))) {
     server = app.listen(rawPort, () => {
       console.log(`[Scinsmedia Enterprise Engine] Listening on GoDaddy Passenger socket: ${rawPort}`);
     });

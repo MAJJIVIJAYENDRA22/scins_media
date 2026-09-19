@@ -1,6 +1,9 @@
-import { build as viteBuild } from 'vite';
-import { build as esbuildBuild } from 'esbuild';
-import fs from 'fs';
+// =============================================================================
+// SCINSMEDIA — Universal Build Script (CommonJS & ESM compatible)
+// =============================================================================
+const fs = require('fs');
+const path = require('path');
+const { build: esbuildBuild } = require('esbuild');
 
 async function run() {
   const hasPrebuilt =
@@ -12,16 +15,16 @@ async function run() {
     Boolean(process.env.RENDER) ||
     Boolean(process.env.RAILWAY_STATIC_URL) ||
     Boolean(process.env.CI) ||
+    Boolean(process.env.PASSENGER_APP_ENV) ||
     process.env.NODE_ENV === 'production';
 
-  // If pre-built assets already exist in git and we are in cloud or FORCE_BUILD is not enabled,
-  // skip heavy Vite compilation to prevent 512MB RAM Out-Of-Memory (SIGKILL) crashes on Render free tier.
   if (hasPrebuilt && (isCloudOrProd || process.env.FORCE_BUILD !== 'true')) {
-    console.log('[build] Verified pre-built production assets in dist/. Skipping heavy memory compilation for fast, reliable cloud deployment.');
+    console.log('[build] Verified pre-built production assets in dist/. Skipping heavy memory compilation for fast, reliable deployment.');
     return;
   }
 
   console.log('[build] Compiling client application with Vite...');
+  const { build: viteBuild } = await import('vite');
   await viteBuild();
 
   console.log('[build] Bundling server application with esbuild...');
