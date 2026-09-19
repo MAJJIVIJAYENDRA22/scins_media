@@ -480,14 +480,9 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
           </button>
           <div className="h-7 w-px bg-slate-200 hidden sm:block" />
           <div>
-            <div className="flex items-center space-x-2">
-              <h1 className="text-sm sm:text-base font-bold text-slate-900 font-display">
-                Operations Management Portal
-              </h1>
-              <span className="text-[10px] font-bold uppercase bg-teal-50 text-teal-800 border border-teal-200 px-2 py-0.5 rounded-full">
-                Super Admin
-              </span>
-            </div>
+            <h1 className="text-sm sm:text-base font-bold text-slate-900 font-display">
+              Operations Management Portal
+            </h1>
             <p className="text-xs text-slate-500">
               Authenticated Workspace • cPanel MySQL Relational Active • Administrator: {currentUser.name} ({currentUser.email})
             </p>

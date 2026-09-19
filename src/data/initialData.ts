@@ -2435,8 +2435,6 @@ export const INITIAL_ADMIN_USER: AdminUser = {
   id: 1,
   name: 'Dr. Alexander Vance',
   email: 'admin@scinsmedia.com',
-  role: 'super_admin',
-  role_display: 'Super Administrator',
   avatar_url: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&q=80',
   token: undefined
 };

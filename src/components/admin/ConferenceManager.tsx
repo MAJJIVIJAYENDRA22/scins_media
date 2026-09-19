@@ -19,9 +19,6 @@ import {
   X,
   Save,
   Check,
-  AlertCircle,
-  ArrowUp,
-  ArrowDown,
   Layers,
   FileText,
   Image as ImageIcon,
@@ -33,6 +30,7 @@ import {
   Users,
   CreditCard
 } from 'lucide-react';
+import { parseConferenceDate } from '../../utils/dateUtils';
 import { Conference, ConferenceMode, ConferenceStatus, CommitteeMember, Sponsor, MediaPartner, ScheduleItem, RegistrationCategory } from '../../types';
 import { COMMITTEE_MEMBERS, SPONSORS, MEDIA_PARTNERS, SCHEDULE_ITEMS, REGISTRATION_CATEGORIES } from '../../data/initialData';
 import { api } from '../../services/api';
@@ -67,7 +65,7 @@ export const ConferenceManager: React.FC<ConferenceManagerProps> = ({
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('All');
   const [domainFilter, setDomainFilter] = useState<string>('All');
-  const [sortBy, setSortBy] = useState<'order' | 'date' | 'title' | 'status'>('order');
+  const [sortBy, setSortBy] = useState<'date_asc' | 'date_desc' | 'title' | 'status'>('date_asc');
 
   // Modal States
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -129,14 +127,15 @@ export const ConferenceManager: React.FC<ConferenceManagerProps> = ({
     });
 
     list.sort((a, b) => {
-      if (sortBy === 'order') {
-        const orderA = a.display_order ?? 999;
-        const orderB = b.display_order ?? 999;
-        if (orderA !== orderB) return orderA - orderB;
-      }
       if (sortBy === 'title') return a.title.localeCompare(b.title);
       if (sortBy === 'status') return a.status.localeCompare(b.status);
-      return new Date(b.start_date || '').getTime() - new Date(a.start_date || '').getTime();
+      const timeA = parseConferenceDate(a.start_date);
+      const timeB = parseConferenceDate(b.start_date);
+      if (sortBy === 'date_desc') {
+        return timeB - timeA;
+      }
+      // Default: 'date_asc' (Earliest upcoming conference first)
+      return timeA - timeB;
     });
 
     return list;
@@ -158,41 +157,6 @@ export const ConferenceManager: React.FC<ConferenceManagerProps> = ({
     }
   };
 
-  // Reorder Handler (Move Up or Down in Priority)
-  const handleMoveOrder = async (conf: Conference, direction: 'up' | 'down') => {
-    const sorted = [...conferences].sort((a, b) => (a.display_order ?? 999) - (b.display_order ?? 999));
-    const currentIndex = sorted.findIndex(c => c.id === conf.id);
-    if (currentIndex === -1) return;
-
-    const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
-    if (targetIndex < 0 || targetIndex >= sorted.length) return;
-
-    const targetConf = sorted[targetIndex];
-    const currentOrder = conf.display_order ?? (currentIndex + 1);
-    const targetOrder = targetConf.display_order ?? (targetIndex + 1);
-
-    // Swap display order values
-    const newCurrentOrder = targetOrder === currentOrder ? (direction === 'up' ? targetOrder : targetOrder + 1) : targetOrder;
-    const newTargetOrder = currentOrder;
-
-    const updatedList = conferences.map(c => {
-      if (c.id === conf.id) return { ...c, display_order: newCurrentOrder };
-      if (c.id === targetConf.id) return { ...c, display_order: newTargetOrder };
-      return c;
-    });
-
-    onConferencesChange(updatedList);
-
-    try {
-      await Promise.all([
-        api.updateConferenceOrder ? api.updateConferenceOrder(conf.id, newCurrentOrder) : api.updateConference(conf.id, { display_order: newCurrentOrder }),
-        api.updateConferenceOrder ? api.updateConferenceOrder(targetConf.id, newTargetOrder) : api.updateConference(targetConf.id, { display_order: newTargetOrder })
-      ]);
-      showToast(`Reordered "${conf.short_title || conf.title}" to position #${newCurrentOrder}`);
-    } catch {
-      showToast(`Order updated locally`);
-    }
-  };
 
   // Duplicate Conference Handler
   const handleDuplicate = async (conf: Conference) => {
@@ -721,7 +685,7 @@ export const ConferenceManager: React.FC<ConferenceManagerProps> = ({
             <div>
               <h2 className="text-lg font-bold text-slate-900 font-display">Conference Management Portal</h2>
               <p className="text-xs text-slate-500">
-                Manage live conference content, sections, display order, and publishing lifecycle
+                Manage live conference content, schedules, scientific tracks, and publishing lifecycle
               </p>
             </div>
           </div>
@@ -805,8 +769,8 @@ export const ConferenceManager: React.FC<ConferenceManagerProps> = ({
               onChange={e => setSortBy(e.target.value as any)}
               className="bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs text-slate-800 focus:outline-none focus:border-teal-500 cursor-pointer font-semibold"
             >
-              <option value="order">Display Order (#)</option>
-              <option value="date">Start Date</option>
+              <option value="date_asc">Conference Date: Earliest First</option>
+              <option value="date_desc">Conference Date: Latest First</option>
               <option value="title">Alphabetical</option>
               <option value="status">Lifecycle Status</option>
             </select>
@@ -836,7 +800,6 @@ export const ConferenceManager: React.FC<ConferenceManagerProps> = ({
             <table className="w-full text-left text-xs border-collapse">
               <thead>
                 <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold uppercase tracking-wider text-[10px]">
-                  <th className="p-4 w-20 text-center">Order</th>
                   <th className="p-4">Conference Details</th>
                   <th className="p-4">Dates & Venue</th>
                   <th className="p-4">Publishing Status</th>
@@ -849,31 +812,6 @@ export const ConferenceManager: React.FC<ConferenceManagerProps> = ({
                     key={conf.id}
                     className="hover:bg-slate-50/70 transition-colors group"
                   >
-                    {/* Display Order with Up/Down Controls */}
-                    <td className="p-4 align-middle text-center">
-                      <div className="inline-flex flex-col items-center justify-center space-y-0.5">
-                        <button
-                          title="Move Up"
-                          disabled={index === 0}
-                          onClick={() => handleMoveOrder(conf, 'up')}
-                          className="p-1 text-slate-400 hover:text-teal-700 hover:bg-teal-50 rounded disabled:opacity-20 disabled:hover:bg-transparent disabled:cursor-not-allowed transition-colors"
-                        >
-                          <ArrowUp className="w-3.5 h-3.5" />
-                        </button>
-                        <span className="w-7 h-7 rounded-lg bg-slate-100 border border-slate-200 text-slate-800 font-mono font-bold flex items-center justify-center text-xs">
-                          {conf.display_order ?? index + 1}
-                        </span>
-                        <button
-                          title="Move Down"
-                          disabled={index === filteredConferences.length - 1}
-                          onClick={() => handleMoveOrder(conf, 'down')}
-                          className="p-1 text-slate-400 hover:text-teal-700 hover:bg-teal-50 rounded disabled:opacity-20 disabled:hover:bg-transparent disabled:cursor-not-allowed transition-colors"
-                        >
-                          <ArrowDown className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </td>
-
                     {/* Conference Thumbnail + Title + Metadata */}
                     <td className="p-4 align-top">
                       <div className="flex items-start space-x-3 max-w-md">
@@ -1070,7 +1008,7 @@ export const ConferenceManager: React.FC<ConferenceManagerProps> = ({
                 { id: 'about', label: '2. About & Highlights', icon: FileText },
                 { id: 'carousel', label: '3. Welcome & Exhibitors Carousel', icon: MessageSquare },
                 { id: 'deadlines', label: '4. Deadlines & Program Flow', icon: Clock },
-                { id: 'publishing', label: '5. Publishing & Order', icon: SlidersHorizontal },
+                { id: 'publishing', label: '5. Publishing & Lifecycle', icon: SlidersHorizontal },
                 { id: 'committee', label: '6. Organizing Committee & Chairs', icon: Users },
                 { id: 'corporate_partners', label: '7. Corporate & Industrial Partners', icon: Building },
                 { id: 'media_partners', label: '8. Global Media Partners', icon: Globe },
@@ -1943,10 +1881,10 @@ export const ConferenceManager: React.FC<ConferenceManagerProps> = ({
                 <div className="space-y-5 animate-in fade-in duration-150">
                   <div className="p-4 bg-teal-50/50 border border-teal-100 rounded-2xl">
                     <h4 className="text-xs font-bold text-teal-900 uppercase tracking-wider">
-                      Publishing Lifecycle & Priority Order
+                      Publishing Lifecycle & Visibility
                     </h4>
                     <p className="text-[11px] text-teal-700 mt-0.5">
-                      Control visibility on the public portal and set the sequence priority across the homepage and conference directory.
+                      Control visibility on the public portal and set lifecycle status across the scientific directory.
                     </p>
                   </div>
 
@@ -1965,26 +1903,6 @@ export const ConferenceManager: React.FC<ConferenceManagerProps> = ({
                         <option value="draft">Draft (Private / Testing / Admin Only)</option>
                         <option value="archived">Archived (Past Proceedings)</option>
                       </select>
-                    </div>
-
-                    {/* Display Order */}
-                    <div className="space-y-1">
-                      <label className="text-xs font-bold text-slate-700">
-                        Display Order Priority (Lower numbers appear first)
-                      </label>
-                      <input
-                        type="number"
-                        min={1}
-                        max={999}
-                        value={editingConference.display_order ?? 1}
-                        onChange={e =>
-                          setEditingConference({
-                            ...editingConference,
-                            display_order: parseInt(e.target.value) || 1
-                          })
-                        }
-                        className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono font-bold text-slate-900 focus:bg-white focus:outline-none focus:border-teal-500"
-                      />
                     </div>
 
                     {/* Featured Badge */}

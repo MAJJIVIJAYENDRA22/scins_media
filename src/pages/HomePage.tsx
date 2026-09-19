@@ -5,6 +5,7 @@ import {
   Sparkles,
   CheckCircle2
 } from 'lucide-react';
+import { parseConferenceDate } from '../utils/dateUtils';
 import { HeroVisual } from '../components/HeroVisual';
 import { ConferenceCard } from '../components/ConferenceCard';
 import { Conference, Speaker, Testimonial } from '../types';
@@ -37,14 +38,14 @@ export const HomePage: React.FC<HomePageProps> = ({
   const [selectedMode, setSelectedMode] = useState<string>('All');
   const [searchQuery, setSearchQuery] = useState<string>('');
 
-  // Filter conferences to show only upcoming, published ones sorted by display_order
+  // Filter conferences to show only upcoming, published ones sorted chronologically by start_date
   const filteredConferences = conferences
     .filter(c => {
       const isPublished = c.status === 'published' || !c.status;
       const today = new Date();
       today.setHours(0, 0, 0, 0);
-      const confDate = c.start_date ? new Date(`${c.start_date}T00:00:00`) : null;
-      const isUpcoming = !confDate || confDate >= today;
+      const confTime = parseConferenceDate(c.start_date);
+      const isUpcoming = confTime === Infinity || confTime >= today.getTime();
 
       if (!isPublished || !isUpcoming) return false;
 
@@ -58,10 +59,7 @@ export const HomePage: React.FC<HomePageProps> = ({
       return matchDomain && matchCountry && matchMode && matchQuery;
     })
     .sort((a, b) => {
-      const orderA = a.display_order ?? 999;
-      const orderB = b.display_order ?? 999;
-      if (orderA !== orderB) return orderA - orderB;
-      return new Date(a.start_date || '').getTime() - new Date(b.start_date || '').getTime();
+      return parseConferenceDate(a.start_date) - parseConferenceDate(b.start_date);
     });
 
   return (

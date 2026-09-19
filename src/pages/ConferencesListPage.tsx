@@ -3,6 +3,7 @@ import { Search } from 'lucide-react';
 import { Conference } from '../types';
 import { INITIAL_CONFERENCES } from '../data/initialData';
 import { ConferenceCard } from '../components/ConferenceCard';
+import { parseConferenceDate } from '../utils/dateUtils';
 
 interface ConferencesListPageProps {
   conferences?: Conference[];
@@ -45,10 +46,7 @@ export const ConferencesListPage: React.FC<ConferencesListPageProps> = ({
       return matchesStatus && matchDomain && matchCountry && matchMode && matchQuery && matchYear;
     })
     .sort((a, b) => {
-      const orderA = a.display_order ?? 999;
-      const orderB = b.display_order ?? 999;
-      if (orderA !== orderB) return orderA - orderB;
-      return new Date(a.start_date || '').getTime() - new Date(b.start_date || '').getTime();
+      return parseConferenceDate(a.start_date) - parseConferenceDate(b.start_date);
     });
 
   return (

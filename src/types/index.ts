@@ -495,10 +495,10 @@ export interface AdminUser {
   id: number;
   name: string;
   email: string;
-  role: 'super_admin' | 'conference_manager' | 'content_manager' | 'reviewer' | 'finance_manager';
-  role_display: string;
   avatar_url?: string;
   token?: string;
+  role?: string;
+  role_display?: string;
 }
 
 export interface ApiResponse<T = any> {
