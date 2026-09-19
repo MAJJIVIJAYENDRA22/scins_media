@@ -1,3 +1,18 @@
-// Production application entry point
-// Bridges root startup requests to the compiled distribution server
-import './dist/server.cjs';
+// =============================================================================
+// SCINSMEDIA — Production Node.js Server Entry Point
+// =============================================================================
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import { execSync } from 'child_process';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const distServer = path.join(__dirname, 'dist', 'server.cjs');
+
+if (!fs.existsSync(distServer)) {
+  console.log('[server.js] Pre-compiling production bundle...');
+  execSync('node build.js', { stdio: 'inherit', cwd: __dirname });
+}
+
+import('./dist/server.cjs');
