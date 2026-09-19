@@ -1,0 +1,24 @@
+# =============================================================================
+# SCINSMEDIA — GoDaddy cPanel Apache & Phusion Passenger Configuration
+# =============================================================================
+
+# Enable URL Rewriting
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+
+  # Ensure HTTPS in production
+  RewriteCond %{HTTPS} off
+  RewriteCond %{HTTP_HOST} !^localhost
+  RewriteCond %{HTTP_HOST} !^127\.0\.0\.1
+  RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+</IfModule>
+
+# Phusion Passenger configuration for GoDaddy cPanel Node.js Selector
+<IfModule mod_passenger.c>
+  PassengerAppType node
+  PassengerStartupFile app.js
+  PassengerAppRoot .
+</IfModule>
+
+# Prevent directory listings
+Options -Indexes

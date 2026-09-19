@@ -451,8 +451,6 @@ async function syncToMysql(query: string, params: any[] = []) {
 
 async function startServer() {
   const app = express();
-  const rawPort = process.env.PORT ? String(process.env.PORT).trim() : '3000';
-  const PORT = parseInt(rawPort, 10) || 3000;
   const JWT_SECRET = process.env.JWT_SECRET || 'scinsmedia_secure_jwt_secret_2026';
   const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || 'admin@scinsmedia.com').toLowerCase();
   const ADMIN_PASSWORD_HASH = process.env.ADMIN_PASSWORD_HASH || '$2b$10$8SP.2YRdAvta0d9Yp/WSwuP7O9PQNkE23RMvdNhgMA8TiBd9mtjj.';
@@ -3572,11 +3570,27 @@ const adminLoginRateLimiter = rateLimit({
     app.use(vite.middlewares);
   }
 
-  // Bind immediately to PORT on all network interfaces (0.0.0.0 for cloud container ingress)
-  const HOST = process.env.HOST || '0.0.0.0';
-  const server = app.listen(PORT, HOST, () => {
-    console.log(`[Scinsmedia Enterprise Engine] Listening on ${HOST}:${PORT} (ready for cloud traffic)`);
-  });
+  // Support GoDaddy cPanel Phusion Passenger, Cloud Containers, and Localhost
+  let server: any;
+  const rawPort = process.env.PORT ? String(process.env.PORT).trim() : '';
+
+  if (rawPort && (rawPort === 'passenger' || rawPort.startsWith('/') || isNaN(Number(rawPort)))) {
+    // GoDaddy cPanel Phusion Passenger Unix domain socket
+    server = app.listen(rawPort, () => {
+      console.log(`[Scinsmedia Enterprise Engine] Listening on GoDaddy Passenger socket: ${rawPort}`);
+    });
+  } else if (rawPort && !isNaN(Number(rawPort))) {
+    const portNum = parseInt(rawPort, 10);
+    server = app.listen(portNum, () => {
+      console.log(`[Scinsmedia Enterprise Engine] Listening on assigned port ${portNum} (ready for traffic)`);
+    });
+  } else {
+    const defaultPort = 3000;
+    const HOST = process.env.HOST || '0.0.0.0';
+    server = app.listen(defaultPort, HOST, () => {
+      console.log(`[Scinsmedia Enterprise Engine] Listening on http://${HOST}:${defaultPort}`);
+    });
+  }
 
   // Hydrate MySQL asynchronously without blocking or delaying port detection probes
   initMysqlPool().catch(err => {
