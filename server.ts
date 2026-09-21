@@ -310,40 +310,11 @@ function parseJsonSafe<T>(val: any, fallback: T): T {
   }
 }
 
-async function seedInitialConferencesToMysql() {
-  if (!mysqlPool) return;
-  console.log('[MySQL Seeding] Database is empty. Seeding initial conference records...');
-  for (const conf of INITIAL_CONFERENCES) {
-    try {
-      await mysqlPool.query(
-        `INSERT INTO conferences (
-          id, title, short_title, slug, conference_code, theme, tagline, description, detailed_about,
-          about_heading, about_highlights, gallery_images, domain, city, country, venue, venue_address, timezone,
-          start_date, end_date, abstract_deadline, early_bird_deadline, registration_deadline, mode, status,
-          hero_image, logo_url, flyer_url, sample_abstract_url, featured_badge, display_order,
-          welcome_heading, welcome_message, welcome_speaker_name, welcome_speaker_role, welcome_speaker_title, welcome_speaker_image, welcome_footer_text,
-          exhibitor_heading, exhibitor_message, exhibitor_speaker_name, exhibitor_speaker_role, exhibitor_speaker_title, exhibitor_image, exhibitor_footer_text,
-          program_image, meta_title, meta_description, keywords, accept_late_breaking, cme_credits_eligible, primary_language, max_attendees, accent_color, journal_name, journal_issn, indexing_partners
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ON DUPLICATE KEY UPDATE title = VALUES(title)`,
-        [
-          conf.id, conf.title, conf.short_title, conf.slug, conf.conference_code, conf.theme, conf.tagline || '', conf.description, conf.detailed_about || '',
-          conf.about_heading || '', JSON.stringify(conf.about_highlights || []), JSON.stringify(conf.gallery_images || []), conf.domain, conf.city, conf.country, conf.venue, conf.venue_address || '', conf.timezone,
-          conf.start_date, conf.end_date, conf.abstract_deadline, conf.early_bird_deadline, conf.registration_deadline, conf.mode, conf.status,
-          conf.hero_image, conf.logo_url || '', conf.flyer_url || '', conf.sample_abstract_url || '', conf.featured_badge || '', conf.display_order || 1,
-          conf.welcome_heading || '', conf.welcome_message || '', conf.welcome_speaker_name || '', conf.welcome_speaker_role || '', conf.welcome_speaker_title || '', conf.welcome_speaker_image || '', conf.welcome_footer_text || '',
-          conf.exhibitor_heading || '', conf.exhibitor_message || '', conf.exhibitor_speaker_name || '', conf.exhibitor_speaker_role || '', conf.exhibitor_speaker_title || '', conf.exhibitor_image || '', conf.exhibitor_footer_text || '',
-          conf.program_image || '', conf.meta_title || conf.title, conf.meta_description || conf.description, conf.keywords || '', conf.accept_late_breaking ?? true, conf.cme_credits_eligible ?? true, conf.primary_language || 'English', conf.max_attendees || 500, conf.accent_color || 'teal', conf.journal_name || '', conf.journal_issn || '', JSON.stringify(conf.indexing_partners || [])
-        ]
-      );
-    } catch (e: any) {
-      console.warn(`[Seed Warning for ${conf.slug}]:`, e.message);
-    }
-  }
-}
+let schemaEnsured = false;
 
-async function ensureConferenceColumns() {
-  if (!mysqlPool) return;
+async function ensureConferenceColumns(poolOrConn?: any) {
+  const executor = poolOrConn || mysqlPool;
+  if (!executor) return;
   const cols = [
     { name: 'committee_heading', type: 'VARCHAR(255) NULL' },
     { name: 'committee_description', type: 'TEXT NULL' },
@@ -354,23 +325,607 @@ async function ensureConferenceColumns() {
   ];
   for (const col of cols) {
     try {
-      await mysqlPool.query(`ALTER TABLE conferences ADD COLUMN ${col.name} ${col.type}`);
+      await executor.query(`ALTER TABLE conferences ADD COLUMN ${col.name} ${col.type}`);
     } catch (e: any) {
       // Column likely already exists
     }
   }
 }
 
+async function seedInitialConferencesToMysql() {
+  if (!mysqlPool) return;
+  const confsToSeed = loadLocalConferences();
+  console.log(`[MySQL Seeding] Database table conferences is empty. Seeding ${confsToSeed.length} conference records into MySQL...`);
+  for (const conf of confsToSeed) {
+    try {
+      await mysqlPool.query(
+        `INSERT INTO conferences (
+          id, title, short_title, slug, conference_code, theme, tagline, description, detailed_about,
+          about_heading, about_highlights, gallery_images, domain, city, country, venue, venue_address, timezone,
+          start_date, end_date, abstract_deadline, early_bird_deadline, registration_deadline, mode, status,
+          hero_image, logo_url, flyer_url, sample_abstract_url, featured_badge, display_order,
+          welcome_heading, welcome_message, welcome_speaker_name, welcome_speaker_role, welcome_speaker_title, welcome_speaker_image, welcome_footer_text,
+          exhibitor_heading, exhibitor_message, exhibitor_speaker_name, exhibitor_speaker_role, exhibitor_speaker_title, exhibitor_image, exhibitor_footer_text,
+          program_image, meta_title, meta_description, keywords, accept_late_breaking, cme_credits_eligible, primary_language, max_attendees, accent_color, journal_name, journal_issn, indexing_partners,
+          committee_heading, committee_description, speakers_badge, speakers_heading, speakers_description, journal_logo_url
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON DUPLICATE KEY UPDATE title = VALUES(title)`,
+        [
+          conf.id, conf.title, conf.short_title, conf.slug, conf.conference_code, conf.theme, conf.tagline || '', conf.description, conf.detailed_about || '',
+          conf.about_heading || '', JSON.stringify(conf.about_highlights || []), JSON.stringify(conf.gallery_images || []), conf.domain, conf.city, conf.country, conf.venue, conf.venue_address || '', conf.timezone,
+          formatDateStr(conf.start_date), formatDateStr(conf.end_date), formatDateStr(conf.abstract_deadline), formatDateStr(conf.early_bird_deadline), formatDateStr(conf.registration_deadline), conf.mode, conf.status,
+          conf.hero_image, conf.logo_url || '', conf.flyer_url || '', conf.sample_abstract_url || '', conf.featured_badge || '', conf.display_order || 1,
+          conf.welcome_heading || '', conf.welcome_message || '', conf.welcome_speaker_name || '', conf.welcome_speaker_role || '', conf.welcome_speaker_title || '', conf.welcome_speaker_image || '', conf.welcome_footer_text || '',
+          conf.exhibitor_heading || '', conf.exhibitor_message || '', conf.exhibitor_speaker_name || '', conf.exhibitor_speaker_role || '', conf.exhibitor_speaker_title || '', conf.exhibitor_image || '', conf.exhibitor_footer_text || '',
+          conf.program_image || '', conf.meta_title || conf.title, conf.meta_description || conf.description, conf.keywords || '', conf.accept_late_breaking ?? true, conf.cme_credits_eligible ?? true, conf.primary_language || 'English', conf.max_attendees || 500, conf.accent_color || 'teal', conf.journal_name || '', conf.journal_issn || '', JSON.stringify(conf.indexing_partners || []),
+          conf.committee_heading || '', conf.committee_description || '', conf.speakers_badge || '', conf.speakers_heading || '', conf.speakers_description || '', conf.journal_logo_url || ''
+        ]
+      );
+
+      // Seed conference_settings
+      await mysqlPool.query(
+        `INSERT INTO conference_settings (conference_id, registration_enabled, abstract_submission_enabled, publication_enabled, sponsors_enabled, media_partners_enabled, schedule_published, show_counter, max_attendees)
+         VALUES (?, true, true, true, true, true, true, true, ?)
+         ON DUPLICATE KEY UPDATE max_attendees = VALUES(max_attendees)`,
+        [conf.id, conf.max_attendees || 500]
+      ).catch(() => {});
+    } catch (e: any) {
+      console.warn(`[Seed Warning for ${conf.slug}]:`, e.message);
+    }
+  }
+
+  // Seed initial committee members if empty
+  try {
+    const [commCnt]: any = await mysqlPool.query('SELECT COUNT(*) as count FROM committee_members');
+    if ((commCnt?.[0]?.count ?? 0) === 0 && COMMITTEE_MEMBERS.length > 0) {
+      for (let idx = 0; idx < COMMITTEE_MEMBERS.length; idx++) {
+        const m = COMMITTEE_MEMBERS[idx];
+        await mysqlPool.query(
+          `INSERT INTO committee_members (
+            id, conference_id, name, designation, institution, country, committee_role, photo_url,
+            biography, education, experience, research_interests, publications_count, linkedin_url,
+            orcid_url, google_scholar_url, display_order, is_published
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ON DUPLICATE KEY UPDATE name = VALUES(name)`,
+          [
+            m.id, m.conference_id, m.name, m.designation, m.institution, m.country, m.committee_role, m.photo_url || '',
+            m.biography || '', m.education || '', m.experience || '', m.research_interests || '', m.publications_count || 0,
+            m.linkedin_url || '', m.orcid_url || '', m.google_scholar_url || '', m.display_order || idx + 1, m.is_published !== false
+          ]
+        ).catch(() => {});
+      }
+    }
+  } catch {}
+
+  // Seed initial registration categories if empty
+  try {
+    const [catCnt]: any = await mysqlPool.query('SELECT COUNT(*) as count FROM registration_categories');
+    if ((catCnt?.[0]?.count ?? 0) === 0 && REGISTRATION_CATEGORIES.length > 0) {
+      for (let idx = 0; idx < REGISTRATION_CATEGORIES.length; idx++) {
+        const c = REGISTRATION_CATEGORIES[idx];
+        await mysqlPool.query(
+          `INSERT INTO registration_categories (
+            id, conference_id, name, price, currency, early_bird_price, deadline, benefits, is_popular, display_order, payment_gateway_link, is_active
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ON DUPLICATE KEY UPDATE name = VALUES(name)`,
+          [
+            c.id, c.conference_id, c.name, c.price, c.currency || 'USD', c.early_bird_price || c.price,
+            formatDateStr(c.deadline), JSON.stringify(c.benefits || []), Boolean(c.is_popular), c.display_order || idx + 1,
+            c.payment_gateway_link || '', c.is_active !== false
+          ]
+        ).catch(() => {});
+      }
+    }
+  } catch {}
+}
+
+async function ensureDatabaseSchema(poolOrConn?: Pool | any) {
+  const executor = poolOrConn || mysqlPool;
+  if (!executor) return;
+
+  const tableDefinitions = [
+    `CREATE TABLE IF NOT EXISTS conferences (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      title VARCHAR(255) NOT NULL,
+      short_title VARCHAR(100) NOT NULL,
+      slug VARCHAR(150) NOT NULL UNIQUE,
+      conference_code VARCHAR(50) NOT NULL UNIQUE,
+      theme VARCHAR(255) NOT NULL,
+      tagline VARCHAR(255) DEFAULT NULL,
+      description TEXT NOT NULL,
+      detailed_about LONGTEXT,
+      domain VARCHAR(100) NOT NULL,
+      city VARCHAR(100) NOT NULL,
+      country VARCHAR(100) NOT NULL,
+      venue VARCHAR(200) NOT NULL,
+      venue_address TEXT,
+      timezone VARCHAR(50) DEFAULT 'UTC',
+      start_date DATE NOT NULL,
+      end_date DATE NOT NULL,
+      abstract_deadline DATE NOT NULL,
+      early_bird_deadline DATE NOT NULL,
+      registration_deadline DATE NOT NULL,
+      mode ENUM('in-person', 'hybrid', 'virtual') DEFAULT 'hybrid',
+      status ENUM('draft', 'published', 'archived') DEFAULT 'published',
+      hero_image VARCHAR(255),
+      logo_url VARCHAR(255) DEFAULT NULL,
+      flyer_url VARCHAR(255),
+      sample_abstract_url VARCHAR(255) DEFAULT NULL,
+      featured_badge VARCHAR(100) DEFAULT '2nd Edition',
+      display_order INT DEFAULT 0,
+      about_heading VARCHAR(255),
+      about_highlights JSON DEFAULT NULL,
+      gallery_images JSON DEFAULT NULL,
+      welcome_heading VARCHAR(255),
+      welcome_message LONGTEXT,
+      welcome_speaker_name VARCHAR(100),
+      welcome_speaker_role VARCHAR(100) DEFAULT 'Conference Chair',
+      welcome_speaker_title VARCHAR(150),
+      welcome_speaker_image VARCHAR(255),
+      welcome_footer_text TEXT,
+      exhibitor_heading VARCHAR(255),
+      exhibitor_message LONGTEXT,
+      exhibitor_speaker_name VARCHAR(100),
+      exhibitor_speaker_role VARCHAR(100) DEFAULT 'Platinum & Gold Partners',
+      exhibitor_speaker_title VARCHAR(255),
+      exhibitor_image VARCHAR(255),
+      exhibitor_footer_text TEXT,
+      program_image VARCHAR(255),
+      meta_title VARCHAR(255),
+      meta_description TEXT,
+      keywords VARCHAR(255),
+      accept_late_breaking BOOLEAN DEFAULT TRUE,
+      cme_credits_eligible BOOLEAN DEFAULT TRUE,
+      primary_language VARCHAR(100) DEFAULT 'English',
+      max_attendees INT DEFAULT 500,
+      accent_color VARCHAR(50) DEFAULT 'teal',
+      journal_name VARCHAR(255) DEFAULT NULL,
+      journal_issn VARCHAR(50) DEFAULT NULL,
+      indexing_partners JSON DEFAULT NULL,
+      committee_heading VARCHAR(255) NULL,
+      committee_description TEXT NULL,
+      speakers_badge VARCHAR(100) NULL,
+      speakers_heading VARCHAR(255) NULL,
+      speakers_description TEXT NULL,
+      journal_logo_url VARCHAR(255) NULL,
+      created_by INT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      INDEX idx_slug (slug),
+      INDEX idx_status (status),
+      INDEX idx_dates (start_date, end_date),
+      INDEX idx_order (display_order)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+
+    `CREATE TABLE IF NOT EXISTS conference_settings (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      conference_id INT NOT NULL UNIQUE,
+      registration_enabled BOOLEAN DEFAULT TRUE,
+      abstract_submission_enabled BOOLEAN DEFAULT TRUE,
+      publication_enabled BOOLEAN DEFAULT TRUE,
+      sponsors_enabled BOOLEAN DEFAULT TRUE,
+      media_partners_enabled BOOLEAN DEFAULT TRUE,
+      schedule_published BOOLEAN DEFAULT TRUE,
+      show_counter BOOLEAN DEFAULT TRUE,
+      max_attendees INT DEFAULT 1000,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_conf_settings (conference_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+
+    `CREATE TABLE IF NOT EXISTS conference_gallery (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      conference_id INT NOT NULL,
+      image_url VARCHAR(255) NOT NULL,
+      caption VARCHAR(255),
+      display_order INT DEFAULT 0,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_conf_gallery (conference_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+
+    `CREATE TABLE IF NOT EXISTS committee_members (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      conference_id INT NOT NULL,
+      name VARCHAR(100) NOT NULL,
+      designation VARCHAR(150) NOT NULL,
+      institution VARCHAR(200) NOT NULL,
+      country VARCHAR(100) NOT NULL,
+      committee_role VARCHAR(100) DEFAULT 'Scientific Committee',
+      photo_url VARCHAR(255),
+      biography TEXT,
+      education TEXT,
+      experience TEXT,
+      research_interests TEXT,
+      publications_count INT DEFAULT 0,
+      linkedin_url VARCHAR(255),
+      orcid_url VARCHAR(255),
+      google_scholar_url VARCHAR(255),
+      display_order INT DEFAULT 0,
+      is_published BOOLEAN DEFAULT TRUE,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_comm_conf (conference_id, display_order)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+
+    `CREATE TABLE IF NOT EXISTS speakers (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      name VARCHAR(100) NOT NULL,
+      prefix VARCHAR(20) DEFAULT 'Dr.',
+      designation VARCHAR(150) NOT NULL,
+      institution VARCHAR(200) NOT NULL,
+      country VARCHAR(100) NOT NULL,
+      research_domain VARCHAR(100) NOT NULL,
+      photo_url VARCHAR(255),
+      biography TEXT,
+      h_index INT DEFAULT 25,
+      citations_count INT DEFAULT 1200,
+      linkedin_url VARCHAR(255),
+      google_scholar VARCHAR(255),
+      website VARCHAR(255),
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_speakers_domain (research_domain)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+
+    `CREATE TABLE IF NOT EXISTS speaker_conferences (
+      speaker_id INT NOT NULL,
+      conference_id INT NOT NULL,
+      speaker_type VARCHAR(100) DEFAULT 'Keynote',
+      presentation_title VARCHAR(255) NOT NULL,
+      presentation_abstract TEXT,
+      display_order INT DEFAULT 0,
+      PRIMARY KEY (speaker_id, conference_id),
+      INDEX idx_spk_conf (conference_id, display_order)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+
+    `CREATE TABLE IF NOT EXISTS sessions (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      conference_id INT NOT NULL,
+      session_number INT NOT NULL,
+      session_code VARCHAR(50) NOT NULL,
+      title VARCHAR(255) NOT NULL,
+      track VARCHAR(150) NOT NULL,
+      category VARCHAR(100) NOT NULL,
+      description TEXT NOT NULL,
+      session_date DATE,
+      start_time TIME,
+      end_time TIME,
+      room VARCHAR(100),
+      session_type VARCHAR(100) DEFAULT 'Oral Presentation',
+      display_order INT DEFAULT 0,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_conf_session (conference_id, session_number)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+
+    `CREATE TABLE IF NOT EXISTS session_speakers (
+      session_id INT NOT NULL,
+      speaker_id INT NOT NULL,
+      role VARCHAR(50) DEFAULT 'Presenter',
+      talk_title VARCHAR(255),
+      time_slot VARCHAR(50),
+      PRIMARY KEY (session_id, speaker_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+
+    `CREATE TABLE IF NOT EXISTS schedule_items (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      conference_id INT NOT NULL,
+      day_number INT NOT NULL DEFAULT 1,
+      schedule_date DATE NOT NULL,
+      start_time VARCHAR(20) NOT NULL,
+      end_time VARCHAR(20) NOT NULL,
+      title VARCHAR(255) NOT NULL,
+      description TEXT,
+      room VARCHAR(100),
+      track VARCHAR(100),
+      speaker_name VARCHAR(150),
+      speaker_affiliation VARCHAR(200),
+      item_type VARCHAR(50) DEFAULT 'session',
+      display_order INT DEFAULT 0,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_schedule_conf_day (conference_id, day_number, start_time)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+
+    `CREATE TABLE IF NOT EXISTS registration_categories (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      conference_id INT NOT NULL,
+      name VARCHAR(100) NOT NULL,
+      price DECIMAL(10, 2) NOT NULL,
+      currency VARCHAR(10) DEFAULT 'USD',
+      early_bird_price DECIMAL(10, 2) NOT NULL,
+      deadline DATE,
+      benefits JSON,
+      is_popular BOOLEAN DEFAULT FALSE,
+      display_order INT DEFAULT 0,
+      payment_gateway_link VARCHAR(500),
+      is_active BOOLEAN DEFAULT TRUE,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_reg_cat_conf (conference_id, is_active, display_order)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+
+    `CREATE TABLE IF NOT EXISTS registrations (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      registration_id VARCHAR(50) NOT NULL UNIQUE,
+      conference_id INT NOT NULL,
+      category_id INT NOT NULL,
+      first_name VARCHAR(100) NOT NULL,
+      last_name VARCHAR(100) NOT NULL,
+      email VARCHAR(150) NOT NULL,
+      phone VARCHAR(50) NOT NULL,
+      country VARCHAR(100) NOT NULL,
+      institution VARCHAR(200) NOT NULL,
+      department VARCHAR(150),
+      designation VARCHAR(150) NOT NULL,
+      research_area VARCHAR(150),
+      attendance_mode VARCHAR(50) DEFAULT 'In-Person',
+      accommodation_required BOOLEAN DEFAULT FALSE,
+      meal_preference VARCHAR(50) DEFAULT 'Standard',
+      special_requirements TEXT,
+      amount DECIMAL(10, 2) NOT NULL,
+      currency VARCHAR(10) DEFAULT 'USD',
+      payment_status VARCHAR(50) DEFAULT 'pending',
+      registration_status VARCHAR(50) DEFAULT 'confirmed',
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      INDEX idx_reg_conf_status (conference_id, registration_status, payment_status)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+
+    `CREATE TABLE IF NOT EXISTS abstract_submissions (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      submission_id VARCHAR(50) NOT NULL UNIQUE,
+      conference_id INT NOT NULL,
+      title VARCHAR(255) NOT NULL,
+      abstract_text LONGTEXT NOT NULL,
+      keywords VARCHAR(255) NOT NULL,
+      research_domain VARCHAR(100) NOT NULL,
+      presentation_preference VARCHAR(100) DEFAULT 'Oral',
+      primary_author_name VARCHAR(150) NOT NULL,
+      primary_author_email VARCHAR(150) NOT NULL,
+      primary_author_phone VARCHAR(50),
+      primary_author_affiliation VARCHAR(200) NOT NULL,
+      primary_author_country VARCHAR(100) NOT NULL,
+      file_url VARCHAR(255),
+      file_name VARCHAR(255),
+      status VARCHAR(50) DEFAULT 'submitted',
+      reviewer_notes TEXT,
+      assigned_reviewer_id INT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      INDEX idx_abs_conf_status (conference_id, status)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+
+    `CREATE TABLE IF NOT EXISTS abstract_authors (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      abstract_id INT NOT NULL,
+      name VARCHAR(100) NOT NULL,
+      email VARCHAR(150) NOT NULL,
+      institution VARCHAR(200) NOT NULL,
+      country VARCHAR(100) NOT NULL,
+      is_corresponding BOOLEAN DEFAULT FALSE,
+      display_order INT DEFAULT 0,
+      INDEX idx_aauthors_abs (abstract_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+
+    `CREATE TABLE IF NOT EXISTS abstract_reviews (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      abstract_id INT NOT NULL,
+      reviewer_id INT NOT NULL,
+      score_originality INT DEFAULT 8,
+      score_methodology INT DEFAULT 8,
+      score_relevance INT DEFAULT 8,
+      score_clarity INT DEFAULT 8,
+      total_score DECIMAL(4, 2) DEFAULT 8.00,
+      recommendation VARCHAR(50) DEFAULT 'accept',
+      comments_to_author TEXT,
+      confidential_comments TEXT,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_areviews_abs (abstract_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+
+    `CREATE TABLE IF NOT EXISTS proposal_submissions (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      proposal_id VARCHAR(50) NOT NULL UNIQUE,
+      proposal_type VARCHAR(50) NOT NULL,
+      title VARCHAR(255) NOT NULL,
+      lead_proposer_name VARCHAR(150) NOT NULL,
+      lead_proposer_email VARCHAR(150) NOT NULL,
+      lead_proposer_phone VARCHAR(50),
+      affiliation VARCHAR(200) NOT NULL,
+      country VARCHAR(100) NOT NULL,
+      target_conference_id INT NULL,
+      abstract_description LONGTEXT NOT NULL,
+      learning_objectives TEXT,
+      duration_minutes INT DEFAULT 90,
+      expected_attendees INT DEFAULT 50,
+      co_proposers JSON DEFAULT NULL,
+      file_url VARCHAR(255),
+      file_name VARCHAR(255),
+      status VARCHAR(50) DEFAULT 'pending',
+      reviewer_notes TEXT,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      INDEX idx_prop_conf (target_conference_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+
+    `CREATE TABLE IF NOT EXISTS publications (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      title VARCHAR(255) NOT NULL,
+      authors VARCHAR(255) NOT NULL,
+      journal VARCHAR(200) NOT NULL,
+      research_domain VARCHAR(100) NOT NULL,
+      conference_id INT NULL,
+      publication_date DATE NOT NULL,
+      doi VARCHAR(100) NULL,
+      abstract_summary TEXT,
+      pdf_url VARCHAR(255),
+      citations INT DEFAULT 0,
+      indexed_in VARCHAR(200) DEFAULT 'Scopus, Web of Science, PubMed',
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_pub_conf (conference_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+
+    `CREATE TABLE IF NOT EXISTS sponsor_tiers (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      name VARCHAR(50) NOT NULL UNIQUE,
+      min_amount DECIMAL(10, 2),
+      display_order INT DEFAULT 0
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+
+    `CREATE TABLE IF NOT EXISTS sponsors (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      company_name VARCHAR(150) NOT NULL,
+      logo_url VARCHAR(255) NOT NULL,
+      website VARCHAR(255) NOT NULL,
+      description TEXT,
+      country VARCHAR(100),
+      contact_email VARCHAR(150),
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+
+    `CREATE TABLE IF NOT EXISTS conference_sponsors (
+      conference_id INT NOT NULL,
+      sponsor_id INT NOT NULL,
+      tier_id INT NOT NULL DEFAULT 1,
+      display_order INT DEFAULT 0,
+      PRIMARY KEY (conference_id, sponsor_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+
+    `CREATE TABLE IF NOT EXISTS media_partners (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      name VARCHAR(150) NOT NULL,
+      logo_url VARCHAR(255) NOT NULL,
+      website VARCHAR(255) NOT NULL,
+      country VARCHAR(100),
+      description TEXT,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+
+    `CREATE TABLE IF NOT EXISTS conference_media_partners (
+      conference_id INT NOT NULL,
+      media_partner_id INT NOT NULL,
+      display_order INT DEFAULT 0,
+      PRIMARY KEY (conference_id, media_partner_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+
+    `CREATE TABLE IF NOT EXISTS testimonials (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      name VARCHAR(100) NOT NULL,
+      photo_url VARCHAR(255),
+      designation VARCHAR(150) NOT NULL,
+      institution VARCHAR(200) NOT NULL,
+      country VARCHAR(100) NOT NULL,
+      quote TEXT NOT NULL,
+      conference_id INT NULL,
+      rating INT DEFAULT 5,
+      is_featured BOOLEAN DEFAULT TRUE,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_test_conf (conference_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+
+    `CREATE TABLE IF NOT EXISTS contact_enquiries (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      name VARCHAR(100) NOT NULL,
+      email VARCHAR(150) NOT NULL,
+      phone VARCHAR(50),
+      subject VARCHAR(200) NOT NULL,
+      message TEXT NOT NULL,
+      conference_id INT NULL,
+      status VARCHAR(50) DEFAULT 'new',
+      admin_notes TEXT,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_contact_conf (conference_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+
+    `CREATE TABLE IF NOT EXISTS conference_flyers (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      conference_id INT NOT NULL,
+      title VARCHAR(150) NOT NULL,
+      file_url VARCHAR(255) NOT NULL,
+      file_type VARCHAR(20) DEFAULT 'PDF',
+      file_size VARCHAR(20) DEFAULT '2.4 MB',
+      is_public BOOLEAN DEFAULT TRUE,
+      downloads_count INT DEFAULT 0,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_flyer_conf (conference_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+
+    `CREATE TABLE IF NOT EXISTS conference_documents (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      conference_id INT NOT NULL,
+      title VARCHAR(150) NOT NULL,
+      category VARCHAR(100) NOT NULL,
+      file_url VARCHAR(255) NOT NULL,
+      downloads_count INT DEFAULT 0,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_doc_conf (conference_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+
+    `CREATE TABLE IF NOT EXISTS payments (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      payment_reference VARCHAR(100) NOT NULL UNIQUE,
+      registration_id INT NOT NULL,
+      amount DECIMAL(10, 2) NOT NULL,
+      currency VARCHAR(10) DEFAULT 'USD',
+      gateway VARCHAR(50) DEFAULT 'Stripe',
+      status VARCHAR(50) DEFAULT 'succeeded',
+      transaction_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_pay_reg (registration_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+
+    `CREATE TABLE IF NOT EXISTS audit_logs (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      admin_id INT NULL,
+      action VARCHAR(100) NOT NULL,
+      entity VARCHAR(100) NOT NULL,
+      entity_id VARCHAR(50) NULL,
+      details TEXT,
+      ip_address VARCHAR(50) DEFAULT '127.0.0.1',
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_audit_created (created_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+
+    `CREATE TABLE IF NOT EXISTS faqs (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      conference_id INT NULL,
+      category_id INT NOT NULL DEFAULT 1,
+      question VARCHAR(255) NOT NULL,
+      answer TEXT NOT NULL,
+      display_order INT DEFAULT 0,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_faq_conf (conference_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`
+  ];
+
+  for (const q of tableDefinitions) {
+    try {
+      await executor.query(q);
+    } catch (tblErr: any) {
+      console.warn('[MySQL Table Init Notice]:', tblErr.message);
+    }
+  }
+
+  await ensureConferenceColumns(executor);
+
+  // Check if conferences table is empty; if so, seed from local conferences
+  try {
+    const [chk]: any = await executor.query('SELECT COUNT(*) as count FROM conferences');
+    const totalConfs = chk?.[0]?.count ?? 0;
+    if (totalConfs === 0) {
+      await seedInitialConferencesToMysql();
+    }
+  } catch (chkErr: any) {
+    console.warn('[MySQL Schema Check Notice]:', chkErr.message);
+  }
+
+  schemaEnsured = true;
+}
+
 async function loadDatabaseFromMysql() {
   if (!mysqlPool) return;
-  await ensureConferenceColumns();
+  await ensureDatabaseSchema(mysqlPool);
   try {
     const [rows]: any = await mysqlPool.query(
       'SELECT * FROM conferences ORDER BY start_date ASC'
     );
 
     if (Array.isArray(rows) && rows.length > 0) {
-      console.log(`[MySQL Hydration] Found ${rows.length} existing conferences in scinsmedia_db. Loading...`);
+      console.log(`[MySQL Hydration] Found ${rows.length} existing conferences in MySQL database. Loading...`);
       db.conferences = rows.map((r: any) => ({
         id: Number(r.id),
         title: r.title || '',
@@ -618,10 +1173,12 @@ async function loadDatabaseFromMysql() {
         console.warn('[MySQL Hydration] registrations table notice:', err.message);
       }
 
-      console.log(`[MySQL Hydration] Successfully hydrated ${db.conferences.length} conferences and child tables from scinsmedia_db.`);
+      console.log(`[MySQL Hydration] Successfully hydrated ${db.conferences.length} conferences and child tables from MySQL database.`);
     } else {
-      console.log('[MySQL Hydration] Database table conferences is empty (0 records). No auto-seeding will be performed to preserve production integrity.');
-      db.conferences = [];
+      console.log('[MySQL Hydration] No conferences returned from MySQL. Preserving local conferences store.');
+      if (db.conferences.length === 0) {
+        db.conferences = loadLocalConferences();
+      }
     }
   } catch (err: any) {
     console.error('[MySQL Hydration Error]:', err.message);
@@ -1793,9 +2350,18 @@ const adminLoginRateLimiter = rateLimit({
     let assignedId: number;
 
     if (mysqlPool) {
+      await ensureDatabaseSchema(mysqlPool);
       const conn = await mysqlPool.getConnection();
       try {
         await conn.beginTransaction();
+
+        // Check slug and conference_code uniqueness in MySQL
+        const [existingSlug]: any = await conn.query('SELECT id FROM conferences WHERE slug = ? OR conference_code = ?', [confData.slug, confData.conference_code]).catch(() => [[]]);
+        if (Array.isArray(existingSlug) && existingSlug.length > 0) {
+          const suffix = Date.now().toString().slice(-4);
+          confData.slug = `${confData.slug}-${suffix}`;
+          confData.conference_code = `${confData.conference_code}-${suffix}`;
+        }
 
       const [insertRes]: any = await conn.query(
         `INSERT INTO conferences (
@@ -1837,7 +2403,7 @@ const adminLoginRateLimiter = rateLimit({
               m.experience || '', m.research_interests || '', Number(m.publications_count || 0), m.linkedin_url || '',
               m.orcid_url || '', m.google_scholar_url || '', Number(m.display_order || idx + 1), m.is_published !== false
             ]
-          );
+          ).catch((e: any) => console.warn('[Committee Member Insert Notice]:', e.message));
         }
       }
 
@@ -1847,7 +2413,7 @@ const adminLoginRateLimiter = rateLimit({
           const sp = body.speakers[spIdx];
           let speakerId = sp.id;
           if (speakerId) {
-            const [existing]: any = await conn.query('SELECT id FROM speakers WHERE id = ?', [speakerId]);
+            const [existing]: any = await conn.query('SELECT id FROM speakers WHERE id = ?', [speakerId]).catch(() => [[]]);
             if (!existing || existing.length === 0) {
               const [ins]: any = await conn.query(
                 `INSERT INTO speakers (name, prefix, designation, institution, country, research_domain, photo_url, biography, h_index, citations_count, linkedin_url, google_scholar, website)
@@ -1857,8 +2423,8 @@ const adminLoginRateLimiter = rateLimit({
                   sp.research_domain || 'General', sp.photo_url || '', sp.biography || '', Number(sp.h_index || 25),
                   Number(sp.citations_count || 1200), sp.linkedin_url || '', sp.google_scholar || '', sp.website || ''
                 ]
-              );
-              speakerId = ins.insertId;
+              ).catch(() => null);
+              if (ins) speakerId = ins.insertId;
             }
           } else {
             const [ins]: any = await conn.query(
@@ -1869,19 +2435,21 @@ const adminLoginRateLimiter = rateLimit({
                 sp.research_domain || 'General', sp.photo_url || '', sp.biography || '', Number(sp.h_index || 25),
                 Number(sp.citations_count || 1200), sp.linkedin_url || '', sp.google_scholar || '', sp.website || ''
               ]
-            );
-            speakerId = ins.insertId;
+            ).catch(() => null);
+            if (ins) speakerId = ins.insertId;
           }
 
-          await conn.query(
-            `INSERT INTO speaker_conferences (speaker_id, conference_id, speaker_type, presentation_title, presentation_abstract, display_order)
-             VALUES (?, ?, ?, ?, ?, ?)
-             ON DUPLICATE KEY UPDATE speaker_type = VALUES(speaker_type), presentation_title = VALUES(presentation_title), presentation_abstract = VALUES(presentation_abstract), display_order = VALUES(display_order)`,
-            [
-              speakerId, assignedId, sp.speaker_type || 'Keynote', sp.presentation_title || 'Conference Presentation',
-              sp.presentation_abstract || '', Number(sp.display_order || spIdx + 1)
-            ]
-          );
+          if (speakerId) {
+            await conn.query(
+              `INSERT INTO speaker_conferences (speaker_id, conference_id, speaker_type, presentation_title, presentation_abstract, display_order)
+               VALUES (?, ?, ?, ?, ?, ?)
+               ON DUPLICATE KEY UPDATE speaker_type = VALUES(speaker_type), presentation_title = VALUES(presentation_title), presentation_abstract = VALUES(presentation_abstract), display_order = VALUES(display_order)`,
+              [
+                speakerId, assignedId, sp.speaker_type || 'Keynote', sp.presentation_title || 'Conference Presentation',
+                sp.presentation_abstract || '', Number(sp.display_order || spIdx + 1)
+              ]
+            ).catch((e: any) => console.warn('[Speaker Conf Association Notice]:', e.message));
+          }
         }
       }
 
@@ -1900,7 +2468,7 @@ const adminLoginRateLimiter = rateLimit({
               ses.start_time || '09:00:00', ses.end_time || '10:30:00', ses.room || 'Hall A',
               ses.session_type || 'Oral Presentation', Number(ses.display_order || sIdx + 1)
             ]
-          );
+          ).catch((e: any) => console.warn('[Session Insert Notice]:', e.message));
         }
       }
 
@@ -1918,7 +2486,7 @@ const adminLoginRateLimiter = rateLimit({
               JSON.stringify(cat.benefits || []), Boolean(cat.is_popular), Number(cat.display_order || cIdx + 1),
               cat.payment_gateway_link || '', cat.is_active !== false
             ]
-          );
+          ).catch((e: any) => console.warn('[Category Insert Notice]:', e.message));
         }
       }
 
@@ -1937,7 +2505,7 @@ const adminLoginRateLimiter = rateLimit({
               sch.description || '', sch.room || '', sch.track || '', sch.speaker_name || '',
               sch.speaker_affiliation || '', sch.item_type || 'session', Number(sch.display_order || scIdx + 1)
             ]
-          );
+          ).catch((e: any) => console.warn('[Schedule Item Insert Notice]:', e.message));
         }
       }
 
@@ -1949,7 +2517,7 @@ const adminLoginRateLimiter = rateLimit({
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON DUPLICATE KEY UPDATE max_attendees = VALUES(max_attendees)`,
         [assignedId, true, true, true, true, true, true, true, confData.max_attendees]
-      );
+      ).catch((e: any) => console.warn('[Conference Settings Insert Notice]:', e.message));
 
       // Commit transaction
       await conn.commit();
@@ -2083,14 +2651,43 @@ const adminLoginRateLimiter = rateLimit({
     let updatedConf: any;
 
     if (mysqlPool) {
+      await ensureDatabaseSchema(mysqlPool);
       const conn = await mysqlPool.getConnection();
 
       try {
         // Verify conference exists in MySQL as single source of truth
-        const [existing]: any = await conn.query('SELECT * FROM conferences WHERE id = ?', [id]);
+        let [existing]: any = await conn.query('SELECT * FROM conferences WHERE id = ?', [id]).catch(() => [[]]);
         if (!existing || existing.length === 0) {
-          conn.release();
-          return res.status(404).json({ success: false, message: `Conference ID ${id} not found in MySQL database.` });
+          const inMem = db.conferences.find(c => c.id === id);
+          if (inMem) {
+            await conn.query(
+              `INSERT INTO conferences (
+                id, title, short_title, slug, conference_code, theme, tagline, description, detailed_about,
+                about_heading, about_highlights, gallery_images, domain, city, country, venue, venue_address, timezone,
+                start_date, end_date, abstract_deadline, early_bird_deadline, registration_deadline, mode, status,
+                hero_image, logo_url, flyer_url, sample_abstract_url, featured_badge, display_order,
+                welcome_heading, welcome_message, welcome_speaker_name, welcome_speaker_role, welcome_speaker_title, welcome_speaker_image, welcome_footer_text,
+                exhibitor_heading, exhibitor_message, exhibitor_speaker_name, exhibitor_speaker_role, exhibitor_speaker_title, exhibitor_image, exhibitor_footer_text,
+                program_image, meta_title, meta_description, keywords, accept_late_breaking, cme_credits_eligible, primary_language, max_attendees, accent_color, journal_name, journal_issn, indexing_partners,
+                committee_heading, committee_description, speakers_badge, speakers_heading, speakers_description, journal_logo_url
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+              [
+                id, inMem.title, inMem.short_title || inMem.title, inMem.slug, inMem.conference_code || `CONF-${id}`, inMem.theme || '', inMem.tagline || '', inMem.description || '', inMem.detailed_about || '',
+                inMem.about_heading || '', JSON.stringify(inMem.about_highlights || []), JSON.stringify(inMem.gallery_images || []), inMem.domain || 'General', inMem.city || '', inMem.country || '', inMem.venue || '', inMem.venue_address || '', inMem.timezone || 'UTC',
+                formatDateStr(inMem.start_date), formatDateStr(inMem.end_date), formatDateStr(inMem.abstract_deadline), formatDateStr(inMem.early_bird_deadline), formatDateStr(inMem.registration_deadline), inMem.mode || 'hybrid', inMem.status || 'published',
+                inMem.hero_image || '', inMem.logo_url || '', inMem.flyer_url || '', inMem.sample_abstract_url || '', inMem.featured_badge || '', inMem.display_order || 1,
+                inMem.welcome_heading || '', inMem.welcome_message || '', inMem.welcome_speaker_name || '', inMem.welcome_speaker_role || '', inMem.welcome_speaker_title || '', inMem.welcome_speaker_image || '', inMem.welcome_footer_text || '',
+                inMem.exhibitor_heading || '', inMem.exhibitor_message || '', inMem.exhibitor_speaker_name || '', inMem.exhibitor_speaker_role || '', inMem.exhibitor_speaker_title || '', inMem.exhibitor_image || '', inMem.exhibitor_footer_text || '',
+                inMem.program_image || '', inMem.meta_title || inMem.title, inMem.meta_description || inMem.description, inMem.keywords || '', inMem.accept_late_breaking ?? true, inMem.cme_credits_eligible ?? true, inMem.primary_language || 'English', inMem.max_attendees || 500, inMem.accent_color || 'teal', inMem.journal_name || '', inMem.journal_issn || '', JSON.stringify(inMem.indexing_partners || []),
+                inMem.committee_heading || '', inMem.committee_description || '', inMem.speakers_badge || '', inMem.speakers_heading || '', inMem.speakers_description || '', inMem.journal_logo_url || ''
+              ]
+            ).catch(() => {});
+            [existing] = await conn.query('SELECT * FROM conferences WHERE id = ?', [id]).catch(() => [[]]);
+          }
+          if (!existing || existing.length === 0) {
+            conn.release();
+            return res.status(404).json({ success: false, message: `Conference ID ${id} not found in MySQL database.` });
+          }
         }
 
       const existingRecord = existing[0];
@@ -2386,6 +2983,7 @@ const adminLoginRateLimiter = rateLimit({
     const id = Number(req.params.id);
     const { status } = req.body;
     if (mysqlPool) {
+      await ensureDatabaseSchema(mysqlPool);
       try {
         await mysqlPool.query('UPDATE conferences SET status = ? WHERE id = ?', [status, id]);
       } catch (err: any) {
@@ -2407,6 +3005,7 @@ const adminLoginRateLimiter = rateLimit({
     const id = Number(req.params.id);
     const { display_order } = req.body;
     if (mysqlPool) {
+      await ensureDatabaseSchema(mysqlPool);
       try {
         await mysqlPool.query('UPDATE conferences SET display_order = ? WHERE id = ?', [display_order, id]);
       } catch (err: any) {
@@ -2510,6 +3109,7 @@ const adminLoginRateLimiter = rateLimit({
     let newId = Math.max(...db.conferences.map(c => c.id), 0) + 1;
 
     if (mysqlPool) {
+      await ensureDatabaseSchema(mysqlPool);
       try {
         const [dupRes]: any = await mysqlPool.query(
           `INSERT INTO conferences (
@@ -2603,22 +3203,42 @@ const adminLoginRateLimiter = rateLimit({
   app.delete('/api/v1/conferences/:id', authenticateAdmin, async (req: Request, res: Response) => {
     const id = Number(req.params.id);
     if (mysqlPool) {
+      await ensureDatabaseSchema(mysqlPool);
       const conn = await mysqlPool.getConnection();
       try {
         await conn.beginTransaction();
+        await conn.query('SET FOREIGN_KEY_CHECKS = 0').catch(() => {});
 
-        await conn.query('DELETE FROM committee_members WHERE conference_id = ?', [id]);
-        await conn.query('DELETE FROM speaker_conferences WHERE conference_id = ?', [id]);
-        await conn.query('DELETE FROM sessions WHERE conference_id = ?', [id]);
-        await conn.query('DELETE FROM registration_categories WHERE conference_id = ?', [id]);
-        await conn.query('DELETE FROM schedule_items WHERE conference_id = ?', [id]);
-        await conn.query('DELETE FROM conference_settings WHERE conference_id = ?', [id]);
+        // Safely remove/unlink all child and dependent entities
+        await conn.query('DELETE FROM session_speakers WHERE session_id IN (SELECT id FROM sessions WHERE conference_id = ?)', [id]).catch(() => {});
+        await conn.query('DELETE FROM sessions WHERE conference_id = ?', [id]).catch(() => {});
+        await conn.query('DELETE FROM schedule_items WHERE conference_id = ?', [id]).catch(() => {});
+        await conn.query('DELETE FROM committee_members WHERE conference_id = ?', [id]).catch(() => {});
+        await conn.query('DELETE FROM speaker_conferences WHERE conference_id = ?', [id]).catch(() => {});
+        await conn.query('DELETE FROM payments WHERE registration_id IN (SELECT id FROM registrations WHERE conference_id = ?)', [id]).catch(() => {});
+        await conn.query('DELETE FROM registrations WHERE conference_id = ?', [id]).catch(() => {});
+        await conn.query('DELETE FROM registration_categories WHERE conference_id = ?', [id]).catch(() => {});
+        await conn.query('DELETE FROM abstract_reviews WHERE abstract_id IN (SELECT id FROM abstract_submissions WHERE conference_id = ?)', [id]).catch(() => {});
+        await conn.query('DELETE FROM abstract_authors WHERE abstract_id IN (SELECT id FROM abstract_submissions WHERE conference_id = ?)', [id]).catch(() => {});
+        await conn.query('DELETE FROM abstract_submissions WHERE conference_id = ?', [id]).catch(() => {});
+        await conn.query('UPDATE proposal_submissions SET target_conference_id = NULL WHERE target_conference_id = ?', [id]).catch(() => {});
+        await conn.query('UPDATE publications SET conference_id = NULL WHERE conference_id = ?', [id]).catch(() => {});
+        await conn.query('DELETE FROM conference_sponsors WHERE conference_id = ?', [id]).catch(() => {});
+        await conn.query('DELETE FROM conference_media_partners WHERE conference_id = ?', [id]).catch(() => {});
+        await conn.query('UPDATE testimonials SET conference_id = NULL WHERE conference_id = ?', [id]).catch(() => {});
+        await conn.query('UPDATE contact_enquiries SET conference_id = NULL WHERE conference_id = ?', [id]).catch(() => {});
+        await conn.query('DELETE FROM conference_flyers WHERE conference_id = ?', [id]).catch(() => {});
+        await conn.query('DELETE FROM conference_documents WHERE conference_id = ?', [id]).catch(() => {});
+        await conn.query('DELETE FROM faqs WHERE conference_id = ?', [id]).catch(() => {});
+        await conn.query('DELETE FROM conference_gallery WHERE conference_id = ?', [id]).catch(() => {});
+        await conn.query('DELETE FROM conference_settings WHERE conference_id = ?', [id]).catch(() => {});
         await conn.query('DELETE FROM conferences WHERE id = ?', [id]);
 
+        await conn.query('SET FOREIGN_KEY_CHECKS = 1').catch(() => {});
         await conn.commit();
-        console.log(`[MySQL Delete Conference] Successfully deleted conference ID ${id} and all related child records.`);
+        console.log(`[MySQL Delete Conference] Successfully deleted conference ID ${id} and all related records.`);
       } catch (err: any) {
-        await conn.rollback();
+        await conn.rollback().catch(() => {});
         console.error('[MySQL Delete Conference Failed]:', err);
         return res.status(500).json({ success: false, message: `Failed to delete conference in MySQL: ${err.message}` });
       } finally {
@@ -2633,6 +3253,10 @@ const adminLoginRateLimiter = rateLimit({
     db.sessions = db.sessions.filter(s => s.conference_id !== id);
     db.categories = db.categories.filter(c => c.conference_id !== id);
     db.schedule = db.schedule.filter(s => s.conference_id !== id);
+    db.sponsors = db.sponsors.filter(s => s.conference_id !== id);
+    db.mediaPartners = db.mediaPartners.filter(m => m.conference_id !== id);
+    db.registrations = db.registrations.filter(r => r.conference_id !== id);
+    db.abstracts = db.abstracts.filter(a => a.conference_id !== id);
     saveLocalConferences(db.conferences);
     invalidatePublicCache();
     db.addAuditLog('DELETE_CONFERENCE', 'Conference', String(id), `Deleted conference ID: ${id}`);

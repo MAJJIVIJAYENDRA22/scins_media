@@ -64,13 +64,14 @@ export const Footer: React.FC<FooterProps> = ({
     }
   };
 
-  const handleLink = (e: React.MouseEvent, path: string) => {
-    if (!e.ctrlKey && !e.metaKey && e.button === 0) {
-      e.preventDefault();
-      onNavigate(path);
-      if (!path.includes('#')) {
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-      }
+  const handleLink = (eOrPath: React.MouseEvent | string, maybePath?: string) => {
+    const path = typeof eOrPath === 'string' ? eOrPath : (maybePath || '');
+    if (typeof eOrPath !== 'string' && eOrPath && !eOrPath.ctrlKey && !eOrPath.metaKey && eOrPath.button === 0) {
+      eOrPath.preventDefault();
+    }
+    onNavigate(path);
+    if (!path.includes('#')) {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     }
   };
 
