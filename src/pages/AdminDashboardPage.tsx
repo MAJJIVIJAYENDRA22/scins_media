@@ -30,7 +30,8 @@ import {
   Send,
   Presentation,
   Database,
-  LogOut
+  LogOut,
+  Bookmark
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -56,7 +57,8 @@ import {
   Sponsor,
   ContactEnquiry,
   NewsletterSubscriber,
-  AdminUser
+  AdminUser,
+  Publication
 } from '../types';
 import {
   INITIAL_CONFERENCES,
@@ -72,7 +74,8 @@ import {
   INITIAL_CONTACT_ENQUIRIES,
   INITIAL_SUBSCRIBERS,
   INITIAL_ORGANIZATION_INFO,
-  OrganizationLocationInfo
+  OrganizationLocationInfo,
+  PUBLICATIONS
 } from '../data/initialData';
 import { api, getStoredAdminToken, isTokenValid, clearAdminSession } from '../services/api';
 import { CongressWizard } from '../components/admin/CongressWizard';
@@ -84,7 +87,9 @@ import { SponsorManager } from '../components/admin/SponsorManager';
 import { ContactManager } from '../components/admin/ContactManager';
 import { SubscriberManager } from '../components/admin/SubscriberManager';
 import { ProposalManager } from '../components/admin/ProposalManager';
+import { RegistrationManager } from '../components/admin/RegistrationManager';
 import { DatabaseManager } from '../components/admin/DatabaseManager';
+import { PublicationManager } from '../components/admin/PublicationManager';
 import { AdminLoginPage } from './AdminLoginPage';
 
 interface AdminDashboardPageProps {
@@ -185,6 +190,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
   const [proposals, setProposals] = useState<ProposalSubmission[]>([...INITIAL_PROPOSALS]);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([...AUDIT_LOGS]);
   const [sponsors, setSponsors] = useState<Sponsor[]>([...SPONSORS]);
+  const [publications, setPublications] = useState<Publication[]>([...PUBLICATIONS]);
   const [contactSubmissions, setContactSubmissions] = useState<ContactEnquiry[]>([...INITIAL_CONTACT_ENQUIRIES]);
   const [subscribers, setSubscribers] = useState<NewsletterSubscriber[]>([...INITIAL_SUBSCRIBERS]);
 
@@ -194,7 +200,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
     let mounted = true;
     async function loadData() {
       try {
-        const [c, com, spk, ses, spo, abs, propsData, reg, logs, conSub, subs] = await Promise.all([
+        const [c, com, spk, ses, spo, abs, propsData, reg, logs, conSub, subs, pubs] = await Promise.all([
           api.getConferences().catch(() => INITIAL_CONFERENCES),
           api.getCommitteeMembers().catch(() => COMMITTEE_MEMBERS),
           api.getSpeakers().catch(() => SPEAKERS),
@@ -205,7 +211,8 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
           api.getRegistrations().catch(() => INITIAL_REGISTRATIONS),
           api.getAuditLogs().catch(() => AUDIT_LOGS),
           api.getContactSubmissions().catch(() => INITIAL_CONTACT_ENQUIRIES),
-          api.getSubscribers().catch(() => INITIAL_SUBSCRIBERS)
+          api.getSubscribers().catch(() => INITIAL_SUBSCRIBERS),
+          api.getPublications().catch(() => PUBLICATIONS)
         ]);
         if (mounted) {
           if (c && c.length) setConferences(c);
@@ -219,6 +226,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
           if (logs && logs.length) setAuditLogs(logs);
           if (conSub && conSub.length) setContactSubmissions(conSub);
           if (subs && subs.length) setSubscribers(subs);
+          if (pubs && pubs.length) setPublications(pubs);
         }
       } catch (err) {
         console.warn('Backend initial fetch error, using local state:', err);
@@ -234,6 +242,23 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
   const [reviewingAbstract, setReviewingAbstract] = useState<AbstractSubmission | null>(null);
   const [reviewerNotes, setReviewerNotes] = useState('');
   const [reviewerStatus, setReviewerStatus] = useState<string>('accepted');
+  const [isExportingAbstracts, setIsExportingAbstracts] = useState(false);
+
+  const handleExportAbstracts = async () => {
+    setIsExportingAbstracts(true);
+    try {
+      await api.downloadExport('abstracts', undefined, `scinsmedia-abstracts-${Date.now()}.csv`);
+    } catch (err) {
+      console.warn('Backend export failed, falling back to local abstracts dataset:', err);
+      const header = 'SubmissionID,Title,PrimaryAuthor,Email,Country,Affiliation,Domain,Status,Date\n';
+      const rows = abstracts.map(a =>
+        `"${a.submission_id}","${(a.title || '').replace(/"/g, '""')}","${a.primary_author_name}","${a.primary_author_email}","${a.primary_author_country}","${a.primary_author_affiliation}","${a.research_domain}","${a.status}","${a.created_at}"`
+      ).join('\n');
+      api.downloadCsvFile(header + rows, `scinsmedia-abstracts-${Date.now()}.csv`);
+    } finally {
+      setIsExportingAbstracts(false);
+    }
+  };
 
 
 
@@ -376,12 +401,17 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
   const handleWizardConferenceCreated = (created: Conference) => {
     setConferences(prev => {
       const idx = prev.findIndex(c => c.id === created.id);
+      let updated: Conference[];
       if (idx >= 0) {
-        const copy = [...prev];
-        copy[idx] = created;
-        return copy;
+        updated = [...prev];
+        updated[idx] = created;
+      } else {
+        updated = [created, ...prev];
       }
-      return [created, ...prev];
+      try {
+        window.dispatchEvent(new CustomEvent('scinsmedia:conferences_updated', { detail: { conferences: updated } }));
+      } catch {}
+      return updated;
     });
     if (onConferenceCreated) {
       onConferenceCreated(created);
@@ -401,7 +431,13 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
   };
 
   const handleWizardConferenceUpdated = (updated: Conference) => {
-    setConferences(prev => prev.map(c => c.id === updated.id ? updated : c));
+    setConferences(prev => {
+      const list = prev.map(c => c.id === updated.id ? updated : c);
+      try {
+        window.dispatchEvent(new CustomEvent('scinsmedia:conferences_updated', { detail: { conferences: list } }));
+      } catch {}
+      return list;
+    });
   };
 
   // Update Abstract Status
@@ -541,6 +577,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
             { id: 'abstracts', label: `Abstracts Review (${pendingAbstractsCount})`, icon: FileCheck2 },
             { id: 'proposals', label: `Proposals (${proposals.length})`, icon: Presentation, badge: 'Global' },
             { id: 'registrations', label: `Registrations (${registrations.length})`, icon: CreditCard },
+            { id: 'publications', label: `Publications (${publications.length})`, icon: Bookmark },
             { id: 'committee', label: `Committee (${committee.length})`, icon: Users },
             { id: 'speakers', label: `Speakers (${speakers.length})`, icon: Mic },
             { id: 'sessions', label: `Program / Schedule (${sessions.length})`, icon: BookOpen },
@@ -929,14 +966,20 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                   </h3>
                   <p className="text-xs text-slate-500">Single-blind peer evaluation and acceptance decisions</p>
                 </div>
-                <a
-                  href="/api/v1/exports/abstracts"
-                  download
-                  className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 rounded-xl text-xs font-semibold flex items-center space-x-1.5"
+                <button
+                  type="button"
+                  onClick={handleExportAbstracts}
+                  disabled={isExportingAbstracts || abstracts.length === 0}
+                  className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 rounded-xl text-xs font-semibold flex items-center space-x-1.5 cursor-pointer disabled:opacity-60 transition-colors"
+                  title="Export scientific abstracts to CSV"
                 >
-                  <Download className="w-3.5 h-3.5 text-teal-700" />
-                  <span>Export CSV</span>
-                </a>
+                  {isExportingAbstracts ? (
+                    <div className="w-3.5 h-3.5 border-2 border-teal-700 border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <Download className="w-3.5 h-3.5 text-teal-700" />
+                  )}
+                  <span>{isExportingAbstracts ? 'Exporting...' : 'Export CSV'}</span>
+                </button>
               </div>
 
               <div className="space-y-3">
@@ -1003,63 +1046,21 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
 
           {/* TAB 5: REGISTRATIONS & EXPORTS */}
           {activeTab === 'registrations' && (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-base font-bold text-slate-900 font-display">
-                    Delegate Registrations & Badges
-                  </h3>
-                  <p className="text-xs text-slate-500">Complete participant manifest & receipts</p>
-                </div>
-                <a
-                  href="/api/v1/exports/registrations"
-                  download
-                  className="px-3.5 py-2 bg-teal-800 hover:bg-teal-900 text-white font-bold rounded-xl text-xs flex items-center space-x-1.5 shadow-xs"
-                >
-                  <Download className="w-3.5 h-3.5" />
-                  <span>Download Manifest (CSV)</span>
-                </a>
-              </div>
+            <RegistrationManager
+              registrations={registrations}
+              conferences={conferences}
+              onRegistrationsChange={setRegistrations}
+              onConferencesChange={setConferences}
+            />
+          )}
 
-              <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-xs">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs">
-                    <thead className="bg-slate-50 text-slate-600 uppercase text-[10px] font-mono border-b border-slate-200">
-                      <tr>
-                        <th className="p-3.5">Registration ID</th>
-                        <th className="p-3.5">Delegate Name</th>
-                        <th className="p-3.5">Institution / Country</th>
-                        <th className="p-3.5">Category</th>
-                        <th className="p-3.5">Amount</th>
-                        <th className="p-3.5">Payment</th>
-                        <th className="p-3.5">Status</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100 text-slate-800">
-                      {registrations.map(r => (
-                        <tr key={r.id} className="hover:bg-slate-50/80">
-                          <td className="p-3.5 font-mono text-teal-800 font-bold">{r.registration_id}</td>
-                          <td className="p-3.5 font-semibold text-slate-900">{r.first_name} {r.last_name}</td>
-                          <td className="p-3.5 text-slate-500">{r.institution} ({r.country})</td>
-                          <td className="p-3.5">{r.category_name}</td>
-                          <td className="p-3.5 font-mono text-slate-900 font-bold">${r.amount} USD</td>
-                          <td className="p-3.5">
-                            <span className="text-[10px] uppercase font-bold bg-teal-50 text-teal-800 border border-teal-200 px-2 py-0.5 rounded">
-                              {r.payment_status}
-                            </span>
-                          </td>
-                          <td className="p-3.5">
-                            <span className="text-[10px] uppercase font-bold bg-slate-100 text-slate-700 border border-slate-200 px-2 py-0.5 rounded">
-                              {r.registration_status}
-                            </span>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
+          {/* TAB: PUBLICATIONS CRUD MANAGER */}
+          {activeTab === 'publications' && (
+            <PublicationManager
+              publications={publications}
+              conferences={conferences}
+              onPublicationsChange={setPublications}
+            />
           )}
 
           {/* TAB 6: COMMITTEE MEMBERS CRUD MANAGER */}

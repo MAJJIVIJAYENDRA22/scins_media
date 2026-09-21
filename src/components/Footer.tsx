@@ -64,10 +64,13 @@ export const Footer: React.FC<FooterProps> = ({
     }
   };
 
-  const handleLink = (path: string) => {
-    onNavigate(path);
-    if (!path.includes('#')) {
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+  const handleLink = (e: React.MouseEvent, path: string) => {
+    if (!e.ctrlKey && !e.metaKey && e.button === 0) {
+      e.preventDefault();
+      onNavigate(path);
+      if (!path.includes('#')) {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
     }
   };
 
@@ -130,40 +133,40 @@ export const Footer: React.FC<FooterProps> = ({
             </h4>
             <ul className="space-y-2 text-xs text-slate-300">
               <li>
-                <button
-                  type="button"
-                  onClick={() => handleLink('/conferences')}
-                  className="hover:text-teal-300 transition-colors text-left cursor-pointer"
+                <a
+                  href="/conferences"
+                  onClick={(e) => handleLink(e, '/conferences')}
+                  className="hover:text-teal-300 transition-colors text-left cursor-pointer inline-block"
                 >
                   All Conferences 2026
-                </button>
+                </a>
               </li>
               <li>
-                <button
-                  type="button"
-                  onClick={() => handleLink('/speakers')}
-                  className="hover:text-teal-300 transition-colors text-left cursor-pointer"
+                <a
+                  href="/speakers"
+                  onClick={(e) => handleLink(e, '/speakers')}
+                  className="hover:text-teal-300 transition-colors text-left cursor-pointer inline-block"
                 >
                   Distinguished Keynotes
-                </button>
+                </a>
               </li>
               <li>
-                <button
-                  type="button"
-                  onClick={() => handleLink('/conferences')}
-                  className="hover:text-teal-300 transition-colors text-left cursor-pointer"
+                <a
+                  href="/conferences"
+                  onClick={(e) => handleLink(e, '/conferences')}
+                  className="hover:text-teal-300 transition-colors text-left cursor-pointer inline-block"
                 >
                   Call for Abstracts
-                </button>
+                </a>
               </li>
               <li>
-                <button
-                  type="button"
-                  onClick={() => handleLink('/about')}
-                  className="hover:text-teal-300 transition-colors text-left cursor-pointer"
+                <a
+                  href="/about"
+                  onClick={(e) => handleLink(e, '/about')}
+                  className="hover:text-teal-300 transition-colors text-left cursor-pointer inline-block"
                 >
                   Scientific Advisory Board
-                </button>
+                </a>
               </li>
             </ul>
           </div>
@@ -176,41 +179,41 @@ export const Footer: React.FC<FooterProps> = ({
             </h4>
             <ul className="space-y-2 text-xs text-slate-300">
               <li>
-                <button
-                  type="button"
-                  onClick={() => handleLink(`/conferences/${upcomingConferenceSlug}#registration-section`)}
+                <a
+                  href={`/conferences/${upcomingConferenceSlug}#registration-section`}
+                  onClick={(e) => handleLink(e, `/conferences/${upcomingConferenceSlug}#registration-section`)}
                   className="hover:text-teal-300 transition-colors text-left cursor-pointer flex items-center space-x-1"
                 >
                   <span>Conference Registration</span>
                   <span className="text-[10px] bg-teal-900 text-teal-300 px-1.5 py-0.5 rounded font-mono">Live</span>
-                </button>
+                </a>
               </li>
               <li>
-                <button
-                  type="button"
-                  onClick={() => handleLink('/publications')}
-                  className="hover:text-teal-300 transition-colors text-left cursor-pointer"
+                <a
+                  href="/publications"
+                  onClick={(e) => handleLink(e, '/publications')}
+                  className="hover:text-teal-300 transition-colors text-left cursor-pointer inline-block"
                 >
                   Peer-Reviewed Journals & Articles
-                </button>
+                </a>
               </li>
               <li>
-                <button
-                  type="button"
-                  onClick={() => handleLink('/contact')}
-                  className="hover:text-teal-300 transition-colors text-left cursor-pointer"
+                <a
+                  href="/contact"
+                  onClick={(e) => handleLink(e, '/contact')}
+                  className="hover:text-teal-300 transition-colors text-left cursor-pointer inline-block"
                 >
                   Visa Support Letters
-                </button>
+                </a>
               </li>
               <li>
-                <button
-                  type="button"
-                  onClick={() => handleLink('/contact')}
-                  className="hover:text-teal-300 transition-colors text-left cursor-pointer"
+                <a
+                  href="/contact"
+                  onClick={(e) => handleLink(e, '/contact')}
+                  className="hover:text-teal-300 transition-colors text-left cursor-pointer inline-block"
                 >
                   Institutional Bank Transfer / Invoice
-                </button>
+                </a>
               </li>
             </ul>
           </div>

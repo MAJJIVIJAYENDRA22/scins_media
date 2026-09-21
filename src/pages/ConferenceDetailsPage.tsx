@@ -565,16 +565,18 @@ export const ConferenceDetailsPage: React.FC<ConferenceDetailsPageProps> = ({
           </div>
 
           {(() => {
-            const gallery = (conference.gallery_images && conference.gallery_images.length >= 4)
-              ? conference.gallery_images
-              : (conference.gallery && conference.gallery.length >= 4)
+            const fallbackGallery = [
+              'https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?auto=format&fit=crop&w=600&q=80',
+              'https://images.unsplash.com/photo-1532094349884-543bc11b234d?auto=format&fit=crop&w=600&q=80',
+              'https://images.unsplash.com/photo-1507668077129-56e32842fceb?auto=format&fit=crop&w=600&q=80',
+              'https://images.unsplash.com/photo-1524178232363-1fb2b075b655?auto=format&fit=crop&w=600&q=80'
+            ];
+            const legacyGallery = (conference.gallery && conference.gallery.length > 0)
               ? conference.gallery.map(g => g.image_url)
-              : [
-                  'https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?auto=format&fit=crop&w=600&q=80',
-                  'https://images.unsplash.com/photo-1532094349884-543bc11b234d?auto=format&fit=crop&w=600&q=80',
-                  'https://images.unsplash.com/photo-1507668077129-56e32842fceb?auto=format&fit=crop&w=600&q=80',
-                  'https://images.unsplash.com/photo-1524178232363-1fb2b075b655?auto=format&fit=crop&w=600&q=80'
-                ];
+              : [];
+            const gallery = [0, 1, 2, 3].map(i => {
+              return conference.gallery_images?.[i] || legacyGallery[i] || fallbackGallery[i];
+            });
             return (
               <div className="lg:col-span-5 grid grid-cols-2 gap-3">
                 <img

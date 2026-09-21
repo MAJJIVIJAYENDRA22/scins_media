@@ -90,20 +90,20 @@ export const MediaLibraryModal: React.FC<MediaLibraryModalProps> = ({
             category: activeCategory !== 'all' ? activeCategory : 'general'
           });
 
-          if (resp.success && resp.data?.url) {
+          if (resp && resp.url) {
             const newAsset: MediaAsset = {
               id: Date.now(),
-              url: resp.data.url,
-              name: resp.data.fileName || file.name,
+              url: resp.url,
+              name: resp.fileName || file.name,
               category: (activeCategory !== 'all' ? activeCategory : 'general') as any,
               source: 'Upload'
             };
             setAssets(prev => [newAsset, ...prev]);
-            setSelectedAssetUrl(resp.data.url);
-            onSelect(resp.data.url, newAsset.name);
+            setSelectedAssetUrl(resp.url);
+            onSelect(resp.url, newAsset.name);
             onClose();
           } else {
-            setUploadError(resp.message || 'Upload failed. Please try again.');
+            setUploadError('Upload failed. Please try again.');
           }
         } catch (uploadErr: any) {
           setUploadError(uploadErr.message || 'Error occurred while uploading.');

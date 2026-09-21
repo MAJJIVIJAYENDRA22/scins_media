@@ -94,7 +94,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
           p.title.toLowerCase().includes(q) ||
           p.authors.toLowerCase().includes(q) ||
           p.journal.toLowerCase().includes(q) ||
-          p.doi.toLowerCase().includes(q)
+          (p.research_domain && p.research_domain.toLowerCase().includes(q))
       )
     : publications.slice(0, 3);
 
@@ -114,7 +114,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
           <input
             id={searchInputId}
             type="text"
-            placeholder="Search conferences, speakers, scientific sessions, tracks, DOIs..."
+            placeholder="Search conferences, speakers, scientific sessions, tracks, publications..."
             value={query}
             onChange={e => setQuery(e.target.value)}
             autoFocus
@@ -283,7 +283,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
                   className="p-3 rounded-xl hover:bg-slate-50 border border-transparent hover:border-slate-200 transition-all cursor-pointer"
                 >
                   <div className="flex items-center justify-between text-xs text-slate-400">
-                    <span className="font-mono text-teal-700 font-medium">{pub.doi}</span>
+                    <span className="font-mono text-teal-700 font-medium">{pub.research_domain || 'Publication'}</span>
                     <span>{pub.citations} Citations</span>
                   </div>
                   <h4 className="text-sm font-medium text-slate-900 mt-1 line-clamp-1">{pub.title}</h4>

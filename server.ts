@@ -76,22 +76,122 @@ import {
   AdminUser,
   Sponsor,
   ContactEnquiry,
-  NewsletterSubscriber
+  NewsletterSubscriber,
+  Publication
 } from './src/types/index.ts';
 
 // In-Memory Data Store (Synchronized with MySQL schema when DB credentials are configured)
+const LOCAL_CONFERENCES_FILE = path.join(process.cwd(), 'database', 'local_conferences.json');
+
+function loadLocalConferences(): Conference[] {
+  try {
+    if (fs.existsSync(LOCAL_CONFERENCES_FILE)) {
+      const content = fs.readFileSync(LOCAL_CONFERENCES_FILE, 'utf8');
+      const parsed = JSON.parse(content);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        const seen = new Set<string>();
+        const deduped: Conference[] = [];
+        for (const c of parsed) {
+          const key = (c.slug || c.title || String(c.id)).toLowerCase();
+          if (!seen.has(key)) {
+            seen.add(key);
+            deduped.push(c);
+          }
+        }
+        return deduped;
+      }
+    }
+  } catch (e) {
+    console.warn('[Local Conferences Storage] Notice:', e);
+  }
+  return [...INITIAL_CONFERENCES];
+}
+
+function saveLocalConferences(confs: Conference[]): void {
+  try {
+    const dir = path.dirname(LOCAL_CONFERENCES_FILE);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    const seen = new Set<string>();
+    const deduped: Conference[] = [];
+    for (const c of confs) {
+      const key = (c.slug || c.title || String(c.id)).toLowerCase();
+      if (!seen.has(key)) {
+        seen.add(key);
+        deduped.push(c);
+      }
+    }
+    fs.writeFileSync(LOCAL_CONFERENCES_FILE, JSON.stringify(deduped, null, 2), 'utf8');
+  } catch (e) {
+    console.warn('[Local Conferences Save] Notice:', e);
+  }
+}
+
+const LOCAL_REGISTRATIONS_FILE = path.join(process.cwd(), 'database', 'local_registrations.json');
+
+function loadLocalRegistrations(): Registration[] {
+  try {
+    if (fs.existsSync(LOCAL_REGISTRATIONS_FILE)) {
+      const content = fs.readFileSync(LOCAL_REGISTRATIONS_FILE, 'utf8');
+      const parsed = JSON.parse(content);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed;
+      }
+    }
+  } catch (e) {
+    console.warn('[Local Registrations Storage] Notice:', e);
+  }
+  return [...INITIAL_REGISTRATIONS];
+}
+
+function saveLocalRegistrations(regs: Registration[]): void {
+  try {
+    const dir = path.dirname(LOCAL_REGISTRATIONS_FILE);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(LOCAL_REGISTRATIONS_FILE, JSON.stringify(regs, null, 2), 'utf8');
+  } catch (e) {
+    console.warn('[Local Registrations Save] Notice:', e);
+  }
+}
+
+const LOCAL_PUBLICATIONS_FILE = path.join(process.cwd(), 'database', 'local_publications.json');
+
+function loadLocalPublications(): Publication[] {
+  try {
+    if (fs.existsSync(LOCAL_PUBLICATIONS_FILE)) {
+      const content = fs.readFileSync(LOCAL_PUBLICATIONS_FILE, 'utf8');
+      const parsed = JSON.parse(content);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed;
+      }
+    }
+  } catch (e) {
+    console.warn('[Local Publications Storage] Notice:', e);
+  }
+  return [...PUBLICATIONS];
+}
+
+function saveLocalPublications(pubs: Publication[]): void {
+  try {
+    const dir = path.dirname(LOCAL_PUBLICATIONS_FILE);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(LOCAL_PUBLICATIONS_FILE, JSON.stringify(pubs, null, 2), 'utf8');
+  } catch (e) {
+    console.warn('[Local Publications Save] Notice:', e);
+  }
+}
+
 class DatabaseStore {
-  conferences: Conference[] = [...INITIAL_CONFERENCES];
+  conferences: Conference[] = loadLocalConferences();
   committee: CommitteeMember[] = [...COMMITTEE_MEMBERS];
   speakers: Speaker[] = [...SPEAKERS];
   sessions: Session[] = [...SESSIONS_20];
   schedule: ScheduleItem[] = [...SCHEDULE_ITEMS];
   categories = [...REGISTRATION_CATEGORIES];
-  registrations: Registration[] = [...INITIAL_REGISTRATIONS];
+  registrations: Registration[] = loadLocalRegistrations();
   payments: any[] = [];
   abstracts: AbstractSubmission[] = [...INITIAL_ABSTRACTS];
   proposals: ProposalSubmission[] = [...INITIAL_PROPOSALS];
-  publications = [...PUBLICATIONS];
+  publications: Publication[] = loadLocalPublications();
   sponsors = [...SPONSORS];
   mediaPartners = [...MEDIA_PARTNERS];
   testimonials = [...TESTIMONIALS];
@@ -478,6 +578,46 @@ async function loadDatabaseFromMysql() {
         console.warn('[MySQL Hydration] schedule_items table notice:', err.message);
       }
 
+      try {
+        const [regRows]: any = await mysqlPool.query(`
+          SELECT r.*, c.title as conference_title, rc.name as category_name
+          FROM registrations r
+          LEFT JOIN conferences c ON r.conference_id = c.id
+          LEFT JOIN registration_categories rc ON r.category_id = rc.id
+          ORDER BY r.id DESC
+        `);
+        if (Array.isArray(regRows) && regRows.length > 0) {
+          db.registrations = regRows.map((r: any) => ({
+            id: Number(r.id),
+            registration_id: r.registration_id || '',
+            conference_id: Number(r.conference_id),
+            conference_title: r.conference_title || '',
+            category_id: Number(r.category_id),
+            category_name: r.category_name || '',
+            first_name: r.first_name || '',
+            last_name: r.last_name || '',
+            email: r.email || '',
+            phone: r.phone || '',
+            country: r.country || '',
+            institution: r.institution || '',
+            department: r.department || '',
+            designation: r.designation || '',
+            research_area: r.research_area || '',
+            attendance_mode: r.attendance_mode || 'In-Person',
+            accommodation_required: Boolean(r.accommodation_required),
+            meal_preference: r.meal_preference || 'Standard',
+            special_requirements: r.special_requirements || '',
+            amount: Number(r.amount || 0),
+            currency: r.currency || 'USD',
+            payment_status: r.payment_status || 'pending',
+            registration_status: r.registration_status || 'confirmed',
+            created_at: formatDateStr(r.created_at) || new Date().toISOString()
+          }));
+        }
+      } catch (err: any) {
+        console.warn('[MySQL Hydration] registrations table notice:', err.message);
+      }
+
       console.log(`[MySQL Hydration] Successfully hydrated ${db.conferences.length} conferences and child tables from scinsmedia_db.`);
     } else {
       console.log('[MySQL Hydration] Database table conferences is empty (0 records). No auto-seeding will be performed to preserve production integrity.');
@@ -650,14 +790,18 @@ async function startServer() {
 
   function authenticateAdmin(req: Request, res: Response, next: NextFunction) {
     const authHeader = req.headers.authorization || (req.headers['x-access-token'] as string);
-    if (!authHeader) {
+    const queryToken = typeof req.query?.token === 'string' ? req.query.token : undefined;
+    const cookieToken = (req as any).cookies?.auth_token;
+    const rawToken = authHeader || (queryToken ? `Bearer ${queryToken}` : undefined) || (cookieToken ? `Bearer ${cookieToken}` : undefined);
+
+    if (!rawToken) {
       return res.status(401).json({
         success: false,
         message: 'Access denied. Authentication token required for protected administrative resources.'
       });
     }
 
-    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : authHeader.trim();
+    const token = rawToken.startsWith('Bearer ') ? rawToken.slice(7).trim() : rawToken.trim();
     if (!token) {
       return res.status(401).json({
         success: false,
@@ -687,11 +831,16 @@ async function startServer() {
     }
     next();
   }
-  // Body parsers: 25MB for asset uploads, 1MB safe ceiling for general API traffic
-  app.use('/api/v1/upload', express.json({ limit: '25mb' }));
-  app.use('/api/v1/upload', express.urlencoded({ extended: true, limit: '25mb' }));
-  app.use(express.json({ limit: '1mb' }));
-  app.use(express.urlencoded({ extended: true, limit: '1mb' }));
+  // Body parsers: 25MB for asset uploads and general API traffic
+  app.use(express.json({ limit: '25mb' }));
+  app.use(express.urlencoded({ extended: true, limit: '25mb' }));
+
+  // Static uploads directory serving
+  const uploadsStaticDir = path.join(process.cwd(), 'public', 'uploads');
+  if (!fs.existsSync(uploadsStaticDir)) {
+    fs.mkdirSync(uploadsStaticDir, { recursive: true });
+  }
+  app.use('/uploads', express.static(uploadsStaticDir));
 
   // Trust reverse proxy headers (Render, GoDaddy, Cloudflare, AWS)
   app.enable('trust proxy');
@@ -1004,10 +1153,51 @@ const adminLoginRateLimiter = rateLimit({
         return res.status(400).json({ success: false, message: 'No file data received for upload' });
       }
 
-      // Decode base64 to buffer for type detection
-      const buffer = Buffer.from(fileData, 'base64');
-      const detected = await fileTypeFromBuffer(buffer);
-      const detectedMime = detected?.mime;
+      // Strip Data URL scheme if present (e.g., data:image/png;base64,...)
+      let cleanBase64 = fileData;
+      let headerMime = fileType || '';
+      const dataUrlMatch = fileData.match(/^data:([^;]+);base64,(.*)$/s);
+      if (dataUrlMatch) {
+        headerMime = dataUrlMatch[1];
+        cleanBase64 = dataUrlMatch[2];
+      }
+
+      // Decode base64 to buffer
+      const buffer = Buffer.from(cleanBase64, 'base64');
+      let detectedMime = headerMime;
+      let detectedExt = '';
+
+      try {
+        const detected = await fileTypeFromBuffer(buffer);
+        if (detected) {
+          detectedMime = detected.mime;
+          detectedExt = detected.ext;
+        }
+      } catch (_) {}
+
+      // Normalize common mime types and extensions (handling SVGs, PDFs, DOCs)
+      if (!detectedMime || detectedMime === 'application/octet-stream') {
+        const lowerName = (fileName || '').toLowerCase();
+        if (lowerName.endsWith('.svg')) detectedMime = 'image/svg+xml';
+        else if (lowerName.endsWith('.png')) detectedMime = 'image/png';
+        else if (lowerName.endsWith('.jpg') || lowerName.endsWith('.jpeg')) detectedMime = 'image/jpeg';
+        else if (lowerName.endsWith('.webp')) detectedMime = 'image/webp';
+        else if (lowerName.endsWith('.gif')) detectedMime = 'image/gif';
+        else if (lowerName.endsWith('.pdf')) detectedMime = 'application/pdf';
+        else if (lowerName.endsWith('.doc')) detectedMime = 'application/msword';
+        else if (lowerName.endsWith('.docx')) detectedMime = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+        else detectedMime = 'image/jpeg';
+      }
+
+      if (!detectedExt) {
+        if (detectedMime === 'image/png') detectedExt = 'png';
+        else if (detectedMime === 'image/webp') detectedExt = 'webp';
+        else if (detectedMime === 'image/svg+xml') detectedExt = 'svg';
+        else if (detectedMime === 'image/gif') detectedExt = 'gif';
+        else if (detectedMime === 'application/pdf') detectedExt = 'pdf';
+        else if (detectedMime.includes('word')) detectedExt = 'docx';
+        else detectedExt = 'jpg';
+      }
 
       // Validate supported mime types
       const allowedTypes = [
@@ -1016,11 +1206,12 @@ const adminLoginRateLimiter = rateLimit({
         'image/webp',
         'image/svg+xml',
         'image/gif',
-        'application/pdf'
+        'application/pdf',
+        'application/msword',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
       ];
       
-      const isAllowed = detectedMime && allowedTypes.includes(detectedMime);
-
+      const isAllowed = allowedTypes.includes(detectedMime);
       if (!isAllowed) {
         return res.status(400).json({
           success: false,
@@ -1028,29 +1219,46 @@ const adminLoginRateLimiter = rateLimit({
         });
       }
 
-      // Check size (base64 string size)
-      const approxBytes = (fileData.length * 3) / 4;
+      // Check size
+      const byteLength = buffer.length;
       const maxBytes = 25 * 1024 * 1024; // 25MB
-      if (approxBytes > maxBytes) {
+      if (byteLength > maxBytes) {
         return res.status(400).json({
           success: false,
           message: 'File size exceeds maximum permitted limit (25MB).'
         });
       }
 
-      const generatedFileName = fileName || `asset-${Date.now()}.${detected?.ext || 'bin'}`;
-      const resolvedUrl = `data:${detectedMime};base64,${fileData}`;
+      // Save file to disk
+      const uploadsDir = path.join(process.cwd(), 'public', 'uploads');
+      if (!fs.existsSync(uploadsDir)) {
+        fs.mkdirSync(uploadsDir, { recursive: true });
+      }
+      const distUploadsDir = path.join(process.cwd(), 'dist', 'uploads');
+      if (!fs.existsSync(distUploadsDir)) {
+        fs.mkdirSync(distUploadsDir, { recursive: true });
+      }
 
-      db.addAuditLog('UPLOAD_MEDIA', 'MediaAsset', generatedFileName, `Uploaded ${category} media asset (${Math.round(approxBytes / 1024)} KB)`);
+      const safeCategory = (category || 'general').replace(/[^a-z0-9_-]/gi, '_');
+      const cleanFileName = `${safeCategory}-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}.${detectedExt}`;
+      const filePath = path.join(uploadsDir, cleanFileName);
+      fs.writeFileSync(filePath, buffer);
+      try {
+        fs.writeFileSync(path.join(distUploadsDir, cleanFileName), buffer);
+      } catch (_) {}
+
+      const resolvedUrl = `/uploads/${cleanFileName}`;
+
+      db.addAuditLog('UPLOAD_MEDIA', 'MediaAsset', cleanFileName, `Uploaded ${category} media asset (${Math.round(byteLength / 1024)} KB)`);
 
       res.status(200).json({
         success: true,
-        message: 'File uploaded and CDN registered successfully',
+        message: 'File uploaded and registered successfully',
         data: {
           url: resolvedUrl,
-          fileName: generatedFileName,
+          fileName: cleanFileName,
           fileType: detectedMime,
-          fileSize: Math.round(approxBytes),
+          fileSize: byteLength,
           category,
           uploadedAt: new Date().toISOString()
         }
@@ -1582,18 +1790,12 @@ const adminLoginRateLimiter = rateLimit({
       journal_logo_url: body.journal_logo_url || ''
     };
 
-    if (!mysqlPool) {
-      return res.status(503).json({
-        success: false,
-        message: 'Database connection is currently unavailable. Cannot create conference without permanent MySQL persistence.'
-      });
-    }
-
-    const conn = await mysqlPool.getConnection();
     let assignedId: number;
 
-    try {
-      await conn.beginTransaction();
+    if (mysqlPool) {
+      const conn = await mysqlPool.getConnection();
+      try {
+        await conn.beginTransaction();
 
       const [insertRes]: any = await conn.query(
         `INSERT INTO conferences (
@@ -1756,8 +1958,11 @@ const adminLoginRateLimiter = rateLimit({
       await conn.rollback();
       console.error('[MySQL Conference Creation Transaction Failed - Rolled Back]:', txErr);
       return res.status(500).json({ success: false, message: `Failed to persist conference in MySQL: ${txErr.message}` });
-    } finally {
-      conn.release();
+      } finally {
+        conn.release();
+      }
+    } else {
+      assignedId = (db.conferences.length > 0 ? Math.max(...db.conferences.map(c => Number(c.id) || 0)) : 0) + 1;
     }
 
     const newConf: Conference = {
@@ -1766,6 +1971,7 @@ const adminLoginRateLimiter = rateLimit({
       created_at: new Date().toISOString()
     };
     db.conferences.push(newConf);
+    saveLocalConferences(db.conferences);
 
     // Sync child entities in RAM mirror as well
     if (Array.isArray(body.committee) && body.committee.length > 0) {
@@ -1873,23 +2079,19 @@ const adminLoginRateLimiter = rateLimit({
 
   app.put('/api/v1/conferences/:id', authenticateAdmin, async (req: Request, res: Response) => {
     const id = Number(req.params.id);
-    if (!mysqlPool) {
-      return res.status(503).json({
-        success: false,
-        message: 'Database connection is currently unavailable. Cannot update conference without persistent MySQL storage.'
-      });
-    }
-
-    const conn = await mysqlPool.getConnection();
+    const index = db.conferences.findIndex(c => c.id === id);
     let updatedConf: any;
 
-    try {
-      // Verify conference exists in MySQL as single source of truth
-      const [existing]: any = await conn.query('SELECT * FROM conferences WHERE id = ?', [id]);
-      if (!existing || existing.length === 0) {
-        conn.release();
-        return res.status(404).json({ success: false, message: `Conference ID ${id} not found in MySQL database.` });
-      }
+    if (mysqlPool) {
+      const conn = await mysqlPool.getConnection();
+
+      try {
+        // Verify conference exists in MySQL as single source of truth
+        const [existing]: any = await conn.query('SELECT * FROM conferences WHERE id = ?', [id]);
+        if (!existing || existing.length === 0) {
+          conn.release();
+          return res.status(404).json({ success: false, message: `Conference ID ${id} not found in MySQL database.` });
+        }
 
       const existingRecord = existing[0];
       updatedConf = {
@@ -2069,8 +2271,22 @@ const adminLoginRateLimiter = rateLimit({
       await conn.rollback();
       console.error('[MySQL Conference Update Failed - Rolled Back]:', dbErr);
       return res.status(500).json({ success: false, message: `Failed to update conference in MySQL: ${dbErr.message}` });
-    } finally {
-      conn.release();
+      } finally {
+        conn.release();
+      }
+    } else {
+      if (index === -1) {
+        return res.status(404).json({ success: false, message: `Conference ID ${id} not found.` });
+      }
+      const existingRecord = db.conferences[index];
+      updatedConf = {
+        ...existingRecord,
+        ...req.body,
+        id,
+        about_highlights: req.body.about_highlights !== undefined ? req.body.about_highlights : existingRecord.about_highlights,
+        gallery_images: req.body.gallery_images !== undefined ? req.body.gallery_images : existingRecord.gallery_images,
+        indexing_partners: req.body.indexing_partners !== undefined ? req.body.indexing_partners : existingRecord.indexing_partners
+      };
     }
 
     if (index !== -1) {
@@ -2078,6 +2294,7 @@ const adminLoginRateLimiter = rateLimit({
     } else {
       db.conferences.push(updatedConf);
     }
+    saveLocalConferences(db.conferences);
 
     // Synchronize RAM child entities
     if (Array.isArray(req.body.committee)) {
@@ -2168,18 +2385,18 @@ const adminLoginRateLimiter = rateLimit({
   app.patch('/api/v1/conferences/:id/status', authenticateAdmin, async (req: Request, res: Response) => {
     const id = Number(req.params.id);
     const { status } = req.body;
-    if (!mysqlPool) {
-      return res.status(503).json({ success: false, message: 'Database connection is currently unavailable. Status cannot be updated without MySQL persistence.' });
-    }
-    try {
-      await mysqlPool.query('UPDATE conferences SET status = ? WHERE id = ?', [status, id]);
-    } catch (err: any) {
-      console.error('[MySQL Update Status Error]:', err);
-      return res.status(500).json({ success: false, message: `Failed to update status in MySQL: ${err.message}` });
+    if (mysqlPool) {
+      try {
+        await mysqlPool.query('UPDATE conferences SET status = ? WHERE id = ?', [status, id]);
+      } catch (err: any) {
+        console.error('[MySQL Update Status Error]:', err);
+        return res.status(500).json({ success: false, message: `Failed to update status in MySQL: ${err.message}` });
+      }
     }
     const index = db.conferences.findIndex(c => c.id === id);
     if (index !== -1 && status) {
       db.conferences[index].status = status;
+      saveLocalConferences(db.conferences);
     }
     invalidatePublicCache();
     db.addAuditLog('UPDATE_CONFERENCE_STATUS', 'Conference', String(id), `Updated conference status to ${status}`);
@@ -2189,18 +2406,18 @@ const adminLoginRateLimiter = rateLimit({
   app.patch('/api/v1/conferences/:id/order', authenticateAdmin, async (req: Request, res: Response) => {
     const id = Number(req.params.id);
     const { display_order } = req.body;
-    if (!mysqlPool) {
-      return res.status(503).json({ success: false, message: 'Database connection is currently unavailable. Order cannot be updated without MySQL persistence.' });
-    }
-    try {
-      await mysqlPool.query('UPDATE conferences SET display_order = ? WHERE id = ?', [display_order, id]);
-    } catch (err: any) {
-      console.error('[MySQL Update Order Error]:', err);
-      return res.status(500).json({ success: false, message: `Failed to update order in MySQL: ${err.message}` });
+    if (mysqlPool) {
+      try {
+        await mysqlPool.query('UPDATE conferences SET display_order = ? WHERE id = ?', [display_order, id]);
+      } catch (err: any) {
+        console.error('[MySQL Update Order Error]:', err);
+        return res.status(500).json({ success: false, message: `Failed to update order in MySQL: ${err.message}` });
+      }
     }
     const index = db.conferences.findIndex(c => c.id === id);
     if (index !== -1 && typeof display_order === 'number') {
       db.conferences[index].display_order = display_order;
+      saveLocalConferences(db.conferences);
     }
     invalidatePublicCache();
     db.addAuditLog('UPDATE_CONFERENCE_ORDER', 'Conference', String(id), `Updated display order to ${display_order}`);
@@ -2377,37 +2594,36 @@ const adminLoginRateLimiter = rateLimit({
       created_at: new Date().toISOString()
     };
     db.conferences.push(duplicated);
+    saveLocalConferences(db.conferences);
     invalidatePublicCache();
     db.addAuditLog('DUPLICATE_CONFERENCE', 'Conference', duplicated.conference_code, `Cloned from ${original.title}`);
-    res.status(201).json({ success: true, message: 'Conference duplicated as draft successfully in MySQL', data: duplicated });
+    res.status(201).json({ success: true, message: 'Conference duplicated as draft successfully', data: duplicated });
   });
 
   app.delete('/api/v1/conferences/:id', authenticateAdmin, async (req: Request, res: Response) => {
     const id = Number(req.params.id);
-    if (!mysqlPool) {
-      return res.status(503).json({ success: false, message: 'Database connection is currently unavailable. Cannot delete conference without persistent MySQL connection.' });
-    }
+    if (mysqlPool) {
+      const conn = await mysqlPool.getConnection();
+      try {
+        await conn.beginTransaction();
 
-    const conn = await mysqlPool.getConnection();
-    try {
-      await conn.beginTransaction();
+        await conn.query('DELETE FROM committee_members WHERE conference_id = ?', [id]);
+        await conn.query('DELETE FROM speaker_conferences WHERE conference_id = ?', [id]);
+        await conn.query('DELETE FROM sessions WHERE conference_id = ?', [id]);
+        await conn.query('DELETE FROM registration_categories WHERE conference_id = ?', [id]);
+        await conn.query('DELETE FROM schedule_items WHERE conference_id = ?', [id]);
+        await conn.query('DELETE FROM conference_settings WHERE conference_id = ?', [id]);
+        await conn.query('DELETE FROM conferences WHERE id = ?', [id]);
 
-      await conn.query('DELETE FROM committee_members WHERE conference_id = ?', [id]);
-      await conn.query('DELETE FROM speaker_conferences WHERE conference_id = ?', [id]);
-      await conn.query('DELETE FROM sessions WHERE conference_id = ?', [id]);
-      await conn.query('DELETE FROM registration_categories WHERE conference_id = ?', [id]);
-      await conn.query('DELETE FROM schedule_items WHERE conference_id = ?', [id]);
-      await conn.query('DELETE FROM conference_settings WHERE conference_id = ?', [id]);
-      await conn.query('DELETE FROM conferences WHERE id = ?', [id]);
-
-      await conn.commit();
-      console.log(`[MySQL Delete Conference] Successfully deleted conference ID ${id} and all related child records.`);
-    } catch (err: any) {
-      await conn.rollback();
-      console.error('[MySQL Delete Conference Failed]:', err);
-      return res.status(500).json({ success: false, message: `Failed to delete conference in MySQL: ${err.message}` });
-    } finally {
-      conn.release();
+        await conn.commit();
+        console.log(`[MySQL Delete Conference] Successfully deleted conference ID ${id} and all related child records.`);
+      } catch (err: any) {
+        await conn.rollback();
+        console.error('[MySQL Delete Conference Failed]:', err);
+        return res.status(500).json({ success: false, message: `Failed to delete conference in MySQL: ${err.message}` });
+      } finally {
+        conn.release();
+      }
     }
 
     const index = db.conferences.findIndex(c => c.id === id);
@@ -2417,9 +2633,10 @@ const adminLoginRateLimiter = rateLimit({
     db.sessions = db.sessions.filter(s => s.conference_id !== id);
     db.categories = db.categories.filter(c => c.conference_id !== id);
     db.schedule = db.schedule.filter(s => s.conference_id !== id);
+    saveLocalConferences(db.conferences);
     invalidatePublicCache();
     db.addAuditLog('DELETE_CONFERENCE', 'Conference', String(id), `Deleted conference ID: ${id}`);
-    res.json({ success: true, message: 'Conference deleted successfully from MySQL', data: removed });
+    res.json({ success: true, message: 'Conference deleted successfully', data: removed });
   });
 
   // 3. Committee Members
@@ -3211,8 +3428,107 @@ const adminLoginRateLimiter = rateLimit({
     res.json({ success: true, token: req.csrfToken() });
   });
 
-  app.get('/api/v1/registrations', authenticateAdmin, (req: Request, res: Response) => {
-    res.json({ success: true, data: db.registrations });
+  app.get('/api/v1/registrations', authenticateAdmin, async (req: Request, res: Response) => {
+    const { conference_id, status, payment_status, category_id, search, start_date, end_date } = req.query;
+
+    if (mysqlPool) {
+      try {
+        let sql = `
+          SELECT r.*, c.title as conference_title, rc.name as category_name
+          FROM registrations r
+          LEFT JOIN conferences c ON r.conference_id = c.id
+          LEFT JOIN registration_categories rc ON r.category_id = rc.id
+          WHERE 1=1
+        `;
+        const params: any[] = [];
+        if (conference_id && conference_id !== 'all') {
+          sql += ` AND r.conference_id = ?`;
+          params.push(Number(conference_id));
+        }
+        if (status && status !== 'all') {
+          sql += ` AND LOWER(r.registration_status) = LOWER(?)`;
+          params.push(String(status));
+        }
+        if (payment_status && payment_status !== 'all') {
+          sql += ` AND LOWER(r.payment_status) = LOWER(?)`;
+          params.push(String(payment_status));
+        }
+        if (category_id && category_id !== 'all') {
+          sql += ` AND (r.category_id = ? OR LOWER(rc.name) = LOWER(?))`;
+          params.push(Number(category_id) || 0, String(category_id));
+        }
+        if (start_date) {
+          sql += ` AND DATE(r.created_at) >= ?`;
+          params.push(String(start_date));
+        }
+        if (end_date) {
+          sql += ` AND DATE(r.created_at) <= ?`;
+          params.push(String(end_date));
+        }
+        if (search && typeof search === 'string' && search.trim()) {
+          const sq = `%${search.trim()}%`;
+          sql += ` AND (r.first_name LIKE ? OR r.last_name LIKE ? OR r.email LIKE ? OR r.registration_id LIKE ? OR r.institution LIKE ? OR r.country LIKE ?)`;
+          params.push(sq, sq, sq, sq, sq, sq);
+        }
+        sql += ` ORDER BY r.id DESC`;
+
+        const [rows]: any = await mysqlPool.query(sql, params);
+        if (Array.isArray(rows) && rows.length > 0) {
+          return res.json({
+            success: true,
+            data: rows.map((r: any) => ({
+              ...r,
+              id: Number(r.id),
+              conference_id: Number(r.conference_id),
+              category_id: Number(r.category_id),
+              amount: Number(r.amount || 0),
+              created_at: formatDateStr(r.created_at) || (r.created_at ? new Date(r.created_at).toISOString() : '')
+            }))
+          });
+        }
+      } catch (err: any) {
+        console.warn('[Registrations MySQL Query Notice, falling back to memory]:', err.message);
+      }
+    }
+
+    let list = [...db.registrations];
+    if (conference_id && conference_id !== 'all') {
+      list = list.filter(r => r.conference_id === Number(conference_id));
+    }
+    if (status && status !== 'all') {
+      const s = String(status).toLowerCase();
+      list = list.filter(r => (r.registration_status || '').toLowerCase() === s);
+    }
+    if (payment_status && payment_status !== 'all') {
+      const ps = String(payment_status).toLowerCase();
+      list = list.filter(r => (r.payment_status || '').toLowerCase() === ps);
+    }
+    if (category_id && category_id !== 'all') {
+      const catVal = String(category_id).toLowerCase();
+      list = list.filter(r =>
+        String(r.category_id) === catVal ||
+        (r.category_name && r.category_name.toLowerCase() === catVal)
+      );
+    }
+    if (start_date) {
+      list = list.filter(r => (r.created_at || '').substring(0, 10) >= String(start_date));
+    }
+    if (end_date) {
+      list = list.filter(r => (r.created_at || '').substring(0, 10) <= String(end_date));
+    }
+    if (search && typeof search === 'string' && search.trim()) {
+      const q = search.toLowerCase().trim();
+      list = list.filter(r =>
+        (r.first_name && r.first_name.toLowerCase().includes(q)) ||
+        (r.last_name && r.last_name.toLowerCase().includes(q)) ||
+        (r.email && r.email.toLowerCase().includes(q)) ||
+        (r.registration_id && r.registration_id.toLowerCase().includes(q)) ||
+        (r.institution && r.institution.toLowerCase().includes(q)) ||
+        (r.country && r.country.toLowerCase().includes(q)) ||
+        (r.conference_title && r.conference_title.toLowerCase().includes(q))
+      );
+    }
+    res.json({ success: true, data: list });
   });
 
   app.post('/api/v1/registrations', (req: Request, res: Response) => {
@@ -3245,6 +3561,7 @@ const adminLoginRateLimiter = rateLimit({
       created_at: new Date().toISOString().replace('T', ' ').substring(0, 19)
     };
     db.registrations.unshift(newReg);
+    saveLocalRegistrations(db.registrations);
     db.addAuditLog('NEW_REGISTRATION', 'Registration', regId, `Registered delegate ${newReg.first_name} ${newReg.last_name} (${newReg.email})`);
     syncToMysql(
       `INSERT INTO registrations (registration_id, conference_id, category_id, first_name, last_name, email, phone, country, institution, department, designation, research_area, attendance_mode, accommodation_required, meal_preference, special_requirements, amount, currency, payment_status, registration_status)
@@ -3265,6 +3582,11 @@ const adminLoginRateLimiter = rateLimit({
     if (!reg) return res.status(404).json({ success: false, message: 'Registration not found' });
     if (registration_status) reg.registration_status = registration_status;
     if (payment_status) reg.payment_status = payment_status;
+    saveLocalRegistrations(db.registrations);
+    syncToMysql(
+      `UPDATE registrations SET registration_status = COALESCE(?, registration_status), payment_status = COALESCE(?, payment_status) WHERE id = ?`,
+      [registration_status || null, payment_status || null, id]
+    );
     db.addAuditLog('UPDATE_REG_STATUS', 'Registration', reg.registration_id, `Updated status to ${registration_status || payment_status}`);
     res.json({ success: true, data: reg });
   });
@@ -3673,35 +3995,79 @@ const adminLoginRateLimiter = rateLimit({
       list = list.filter(p =>
         p.title.toLowerCase().includes(q) ||
         p.authors.toLowerCase().includes(q) ||
-        p.doi.toLowerCase().includes(q) ||
-        p.journal.toLowerCase().includes(q)
+        p.journal.toLowerCase().includes(q) ||
+        (p.research_domain && p.research_domain.toLowerCase().includes(q))
       );
     }
 
     res.json({ success: true, data: list });
   });
 
-  app.post('/api/v1/publications', (req: Request, res: Response) => {
+  app.post('/api/v1/publications', authenticateAdmin, (req: Request, res: Response) => {
     const body = req.body;
     const newId = Math.max(...db.publications.map(p => p.id), 0) + 1;
-    const newPub = {
+    const newPub: Publication = {
       id: newId,
-      conference_id: body.conference_id || 1,
+      conference_id: body.conference_id ? Number(body.conference_id) : 1,
+      conference_name: body.conference_name || 'Biopolymers 2026',
       title: body.title || 'Untitled Publication',
       authors: body.authors || 'SCINS Media Research Consortium',
-      journal: body.journal || 'International Journal of Advanced Scientific Research',
-      volume: body.volume || 'Vol. 14, Issue 3',
-      pages: body.pages || '112-128',
-      doi: body.doi || `10.1016/j.scins.${Date.now().toString(36)}`,
+      journal: body.journal || 'Journal of Macromolecular Science & Green Chemistry (Elsevier)',
+      research_domain: body.research_domain || 'Biotechnology',
       publication_date: body.publication_date || new Date().toISOString().substring(0, 10),
-      abstract: body.abstract || 'Peer-reviewed congress proceedings exploring empirical methodology and multidisciplinary findings.',
+      abstract_summary: body.abstract_summary || body.abstract || 'Peer-reviewed scientific publication exploring empirical methodology and multidisciplinary findings.',
       citations: Number(body.citations) || 0,
-      indexed_in: body.indexed_in || ['Scopus', 'Web of Science', 'Elsevier'],
-      download_url: body.download_url || 'https://doi.org/'
+      indexed_in: body.indexed_in || 'Scopus, Web of Science, PubMed',
+      pdf_url: body.pdf_url || ''
     };
-    db.publications.unshift(newPub as any);
-    db.addAuditLog('NEW_PUBLICATION', 'Publication', newPub.doi, `Added new publication: ${newPub.title}`);
-    res.status(201).json({ success: true, message: 'Publication created', data: newPub });
+    db.publications.unshift(newPub);
+    saveLocalPublications(db.publications);
+    db.addAuditLog('NEW_PUBLICATION', 'Publication', String(newPub.id), `Added new publication: ${newPub.title}`);
+    syncToMysql(
+      `INSERT INTO publications (title, authors, journal, research_domain, conference_id, publication_date, doi, abstract_summary, pdf_url, citations, indexed_in)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [newPub.title, newPub.authors, newPub.journal, newPub.research_domain, newPub.conference_id, newPub.publication_date, null, newPub.abstract_summary, newPub.pdf_url, newPub.citations, newPub.indexed_in]
+    );
+    res.status(201).json({ success: true, message: 'Publication created successfully', data: newPub });
+  });
+
+  app.put('/api/v1/publications/:id', authenticateAdmin, (req: Request, res: Response) => {
+    const id = Number(req.params.id);
+    const index = db.publications.findIndex(p => p.id === id);
+    if (index === -1) {
+      return res.status(404).json({ success: false, message: 'Publication not found' });
+    }
+    const body = req.body;
+    const existing = db.publications[index];
+    const updated: Publication = {
+      ...existing,
+      ...body,
+      id: existing.id,
+      citations: body.citations !== undefined ? Number(body.citations) : existing.citations,
+      conference_id: body.conference_id !== undefined ? (body.conference_id ? Number(body.conference_id) : undefined) : existing.conference_id
+    };
+    delete updated.doi;
+    db.publications[index] = updated;
+    saveLocalPublications(db.publications);
+    db.addAuditLog('UPDATE_PUBLICATION', 'Publication', String(updated.id), `Updated publication: ${updated.title}`);
+    syncToMysql(
+      `UPDATE publications SET title = ?, authors = ?, journal = ?, research_domain = ?, conference_id = ?, publication_date = ?, doi = NULL, abstract_summary = ?, pdf_url = ?, citations = ?, indexed_in = ? WHERE id = ?`,
+      [updated.title, updated.authors, updated.journal, updated.research_domain, updated.conference_id || null, updated.publication_date, updated.abstract_summary, updated.pdf_url || null, updated.citations, updated.indexed_in, id]
+    );
+    res.json({ success: true, message: 'Publication updated successfully', data: updated });
+  });
+
+  app.delete('/api/v1/publications/:id', authenticateAdmin, (req: Request, res: Response) => {
+    const id = Number(req.params.id);
+    const index = db.publications.findIndex(p => p.id === id);
+    if (index === -1) {
+      return res.status(404).json({ success: false, message: 'Publication not found' });
+    }
+    const removed = db.publications.splice(index, 1)[0];
+    saveLocalPublications(db.publications);
+    db.addAuditLog('DELETE_PUBLICATION', 'Publication', String(removed.id), `Deleted publication: ${removed.title}`);
+    syncToMysql('DELETE FROM publications WHERE id = ?', [id]);
+    res.json({ success: true, message: 'Publication deleted successfully', data: removed });
   });
 
   app.get('/api/v1/media-partners', (req, res) => res.json({ success: true, data: db.mediaPartners }));
@@ -3914,8 +4280,23 @@ const adminLoginRateLimiter = rateLimit({
     let filename = `scinsmedia-${type}-${Date.now()}.csv`;
 
     if (type === 'registrations') {
-      csvData = 'RegistrationID,FirstName,LastName,Email,Country,Institution,Category,Amount,PaymentStatus,Date\n' +
-        db.registrations.map(r => `"${r.registration_id}","${r.first_name}","${r.last_name}","${r.email}","${r.country}","${r.institution}","${r.category_name}",${r.amount},"${r.payment_status}","${r.created_at}"`).join('\n');
+      const { conference_id, status, payment_status, category_id } = req.query;
+      let regs = [...db.registrations];
+      if (conference_id && conference_id !== 'all') {
+        regs = regs.filter(r => r.conference_id === Number(conference_id));
+        filename = `scinsmedia-conference-${conference_id}-registrations-${Date.now()}.csv`;
+      }
+      if (status && status !== 'all') {
+        regs = regs.filter(r => r.registration_status === status);
+      }
+      if (payment_status && payment_status !== 'all') {
+        regs = regs.filter(r => r.payment_status === payment_status);
+      }
+      if (category_id && category_id !== 'all') {
+        regs = regs.filter(r => r.category_id === Number(category_id));
+      }
+      csvData = 'RegistrationID,ConferenceID,ConferenceTitle,FirstName,LastName,Email,Phone,Country,Institution,Department,Category,Amount,PaymentStatus,RegistrationStatus,AttendanceMode,Date\n' +
+        regs.map(r => `"${r.registration_id}",${r.conference_id},"${(r.conference_title || '').replace(/"/g, '""')}","${r.first_name}","${r.last_name}","${r.email}","${r.phone || ''}","${r.country}","${(r.institution || '').replace(/"/g, '""')}","${(r.department || '').replace(/"/g, '""')}","${r.category_name}",${r.amount},"${r.payment_status}","${r.registration_status}","${r.attendance_mode}","${r.created_at}"`).join('\n');
     } else if (type === 'abstracts') {
       csvData = 'SubmissionID,Title,PrimaryAuthor,Email,Country,Affiliation,Domain,Status,Date\n' +
         db.abstracts.map(a => `"${a.submission_id}","${a.title.replace(/"/g, '""')}","${a.primary_author_name}","${a.primary_author_email}","${a.primary_author_country}","${a.primary_author_affiliation}","${a.research_domain}","${a.status}","${a.created_at}"`).join('\n');
@@ -3926,13 +4307,19 @@ const adminLoginRateLimiter = rateLimit({
       csvData = 'ProposalID,Type,Title,LeadProposer,Email,Phone,Country,Affiliation,TargetConferenceID,DurationFormat,Status,Date\n' +
         db.proposals.map(p => `"${p.proposal_code}","${p.proposal_type}","${p.title.replace(/"/g, '""')}","${(p.proposer_name || '').replace(/"/g, '""')}","${p.proposer_email || ''}","${p.proposer_phone || ''}","${p.proposer_country || ''}","${(p.proposer_affiliation || '').replace(/"/g, '""')}",${p.conference_id || ''},"${p.duration_format || ''}","${p.status}","${p.created_at}"`).join('\n');
     } else if (type === 'contacts') {
+      const { status } = req.query;
+      let list = [...db.contactEnquiries];
+      if (status && status !== 'All') {
+        list = list.filter(c => c.status === status);
+      }
+      filename = `scinsmedia-contact-submissions-${Date.now()}.csv`;
       csvData = 'ID,Name,Email,Phone,Subject,Message,Status,Date\n' +
-        db.contactEnquiries.map(c => `"${c.id}","${c.name.replace(/"/g, '""')}","${c.email}","${c.phone || ''}","${c.subject.replace(/"/g, '""')}","${c.message.replace(/"/g, '""')}","${c.status}","${c.created_at}"`).join('\n');
+        list.map(c => `"${c.id}","${(c.name || '').replace(/"/g, '""')}","${c.email}","${c.phone || ''}","${(c.subject || '').replace(/"/g, '""')}","${(c.message || '').replace(/"/g, '""')}","${c.status}","${c.created_at}"`).join('\n');
     } else {
       csvData = 'ID,Name,Type,Date\n1,General Export,System,' + new Date().toISOString();
     }
 
-    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     res.send(csvData);
   });

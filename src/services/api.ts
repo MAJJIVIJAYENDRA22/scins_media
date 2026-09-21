@@ -81,7 +81,81 @@ async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
   return result.data as T;
 }
 
+export function downloadCsvFile(csvContent: string, filename: string): void {
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const blobUrl = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = blobUrl;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => {
+    window.URL.revokeObjectURL(blobUrl);
+  }, 1000);
+}
+
+export async function downloadExport(
+  type: string,
+  params?: Record<string, string | number | undefined>,
+  defaultFilename?: string
+): Promise<boolean> {
+  const token = getStoredAdminToken();
+  const searchParams = new URLSearchParams();
+  if (params) {
+    Object.entries(params).forEach(([k, v]) => {
+      if (v !== undefined && v !== null && v !== '') {
+        searchParams.append(k, String(v));
+      }
+    });
+  }
+  if (token) {
+    searchParams.append('token', token);
+  }
+
+  const qs = searchParams.toString();
+  const url = `${API_BASE}/exports/${type}${qs ? `?${qs}` : ''}`;
+
+  const res = await fetch(url, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {}
+  });
+
+  if (!res.ok) {
+    let errMsg = `Export request failed (${res.status})`;
+    try {
+      const errJson = await res.json();
+      if (errJson?.message) errMsg = errJson.message;
+    } catch {}
+    throw new Error(errMsg);
+  }
+
+  const disposition = res.headers.get('content-disposition');
+  let filename = defaultFilename || `scinsmedia-${type}-${Date.now()}.csv`;
+  if (disposition && disposition.includes('filename=')) {
+    const match = disposition.match(/filename=["']?([^"';]+)["']?/);
+    if (match && match[1]) {
+      filename = match[1].trim();
+    }
+  }
+
+  const blob = await res.blob();
+  const blobUrl = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = blobUrl;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => {
+    window.URL.revokeObjectURL(blobUrl);
+  }, 1000);
+
+  return true;
+}
+
 export const api = {
+  downloadExport,
+  downloadCsvFile,
   // Conferences
   getConferences: (params?: Record<string, string>) => {
     const searchParams = new URLSearchParams(params);
@@ -290,7 +364,30 @@ export const api = {
     }),
 
   // Registrations
-  getRegistrations: () => fetchJson<Registration[]>(`${API_BASE}/registrations`),
+  getRegistrations: (params?: {
+    conference_id?: number | string;
+    status?: string;
+    payment_status?: string;
+    category_id?: number | string;
+    search?: string;
+    start_date?: string;
+    end_date?: string;
+  }) => {
+    const q = new URLSearchParams();
+    if (params) {
+      if (params.conference_id !== undefined && params.conference_id !== 'all' && params.conference_id !== '') {
+        q.append('conference_id', String(params.conference_id));
+      }
+      if (params.status && params.status !== 'all') q.append('status', params.status);
+      if (params.payment_status && params.payment_status !== 'all') q.append('payment_status', params.payment_status);
+      if (params.category_id && params.category_id !== 'all') q.append('category_id', String(params.category_id));
+      if (params.search && params.search.trim()) q.append('search', params.search.trim());
+      if (params.start_date) q.append('start_date', params.start_date);
+      if (params.end_date) q.append('end_date', params.end_date);
+    }
+    const qs = q.toString();
+    return fetchJson<Registration[]>(`${API_BASE}/registrations${qs ? `?${qs}` : ''}`);
+  },
   createRegistration: (data: Partial<Registration>) =>
     fetchJson<Registration>(`${API_BASE}/registrations`, {
       method: 'POST',
@@ -527,6 +624,15 @@ export const api = {
     fetchJson<Publication>(`${API_BASE}/publications`, {
       method: 'POST',
       body: JSON.stringify(data)
+    }),
+  updatePublication: (id: number, data: Partial<Publication>) =>
+    fetchJson<Publication>(`${API_BASE}/publications/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data)
+    }),
+  deletePublication: (id: number) =>
+    fetchJson<{ message: string; id: number }>(`${API_BASE}/publications/${id}`, {
+      method: 'DELETE'
     }),
 
   // Media Library

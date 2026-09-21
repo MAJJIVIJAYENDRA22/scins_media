@@ -1,9 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Search } from 'lucide-react';
 import { Conference } from '../types';
 import { INITIAL_CONFERENCES } from '../data/initialData';
 import { ConferenceCard } from '../components/ConferenceCard';
-import { parseConferenceDate } from '../utils/dateUtils';
+import { parseConferenceDate, isConferenceCompleted, isConferenceOngoing } from '../utils/dateUtils';
 
 interface ConferencesListPageProps {
   conferences?: Conference[];
@@ -19,6 +19,16 @@ export const ConferencesListPage: React.FC<ConferencesListPageProps> = ({
   const [selectedMode, setSelectedMode] = useState('All');
   const [selectedYear, setSelectedYear] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
+  const [timelineFilter, setTimelineFilter] = useState<'all' | 'ongoing' | 'completed'>('all');
+
+  // Real-time automatic counts based on conference database dates
+  const ongoingCount = useMemo(() => {
+    return conferences.filter(c => (c.status === 'published' || !c.status) && isConferenceOngoing(c)).length;
+  }, [conferences]);
+
+  const completedCount = useMemo(() => {
+    return conferences.filter(c => (c.status === 'published' || !c.status) && isConferenceCompleted(c)).length;
+  }, [conferences]);
 
   // Extract unique years from existing conferences data
   const years = Array.from(
@@ -35,6 +45,10 @@ export const ConferencesListPage: React.FC<ConferencesListPageProps> = ({
   const filtered = conferences
     .filter(c => {
       const matchesStatus = c.status === 'published' || !c.status;
+      const matchesTimeline =
+        timelineFilter === 'all' ||
+        (timelineFilter === 'ongoing' && isConferenceOngoing(c)) ||
+        (timelineFilter === 'completed' && isConferenceCompleted(c));
       const matchDomain = selectedDomain === 'All' || c.domain.toLowerCase().includes(selectedDomain.toLowerCase());
       const matchCountry = selectedCountry === 'All' || c.country.toLowerCase().includes(selectedCountry.toLowerCase());
       const matchMode = selectedMode === 'All' || c.mode.toLowerCase() === selectedMode.toLowerCase();
@@ -43,7 +57,7 @@ export const ConferencesListPage: React.FC<ConferencesListPageProps> = ({
         c.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
         c.theme.toLowerCase().includes(searchQuery.toLowerCase()) ||
         c.city.toLowerCase().includes(searchQuery.toLowerCase());
-      return matchesStatus && matchDomain && matchCountry && matchMode && matchQuery && matchYear;
+      return matchesStatus && matchesTimeline && matchDomain && matchCountry && matchMode && matchQuery && matchYear;
     })
     .sort((a, b) => {
       return parseConferenceDate(a.start_date) - parseConferenceDate(b.start_date);
@@ -142,6 +156,63 @@ export const ConferencesListPage: React.FC<ConferencesListPageProps> = ({
                 <option key={year} value={year}>{year}</option>
               ))}
             </select>
+          </div>
+        </div>
+
+        {/* Ongoing & Completed Timeline Filter Buttons */}
+        <div className="flex items-center justify-between flex-wrap gap-3 -mt-4">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setTimelineFilter(prev => prev === 'ongoing' ? 'all' : 'ongoing')}
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center space-x-2 ${
+                timelineFilter === 'ongoing'
+                  ? 'bg-teal-800 text-white shadow-xs ring-2 ring-teal-600/30'
+                  : 'bg-white text-slate-700 hover:bg-slate-50 hover:text-teal-900 border border-slate-200/90 shadow-2xs'
+              }`}
+              title="Show conferences scheduled for today or in the future"
+            >
+              <span className={`w-2 h-2 rounded-full ${timelineFilter === 'ongoing' ? 'bg-emerald-300 animate-pulse' : 'bg-emerald-500'}`} />
+              <span>Ongoing</span>
+              <span className={`text-[11px] px-2 py-0.5 rounded-full font-mono font-semibold ${
+                timelineFilter === 'ongoing' ? 'bg-teal-900/60 text-teal-100' : 'bg-slate-100 text-slate-600'
+              }`}>
+                {ongoingCount}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setTimelineFilter(prev => prev === 'completed' ? 'all' : 'completed')}
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center space-x-2 ${
+                timelineFilter === 'completed'
+                  ? 'bg-slate-800 text-white shadow-xs ring-2 ring-slate-600/30'
+                  : 'bg-white text-slate-700 hover:bg-slate-50 hover:text-slate-900 border border-slate-200/90 shadow-2xs'
+              }`}
+              title="Show conferences whose dates have already passed"
+            >
+              <span className={`w-2 h-2 rounded-full ${timelineFilter === 'completed' ? 'bg-slate-300' : 'bg-slate-400'}`} />
+              <span>Completed</span>
+              <span className={`text-[11px] px-2 py-0.5 rounded-full font-mono font-semibold ${
+                timelineFilter === 'completed' ? 'bg-slate-900/60 text-slate-200' : 'bg-slate-100 text-slate-600'
+              }`}>
+                {completedCount}
+              </span>
+            </button>
+
+            {timelineFilter !== 'all' && (
+              <button
+                type="button"
+                onClick={() => setTimelineFilter('all')}
+                className="text-xs font-medium text-slate-500 hover:text-slate-800 underline ml-1 cursor-pointer"
+              >
+                Reset to All
+              </button>
+            )}
+          </div>
+
+          <div className="text-xs text-slate-500 font-medium">
+            Showing <b className="text-slate-900">{filtered.length}</b> {filtered.length === 1 ? 'conference' : 'conferences'}
           </div>
         </div>
 

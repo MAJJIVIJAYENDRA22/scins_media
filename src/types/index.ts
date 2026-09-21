@@ -373,7 +373,7 @@ export interface Publication {
   conference_name?: string;
   publication_date: string;
   year?: number | string;
-  doi: string;
+  doi?: string;
   abstract_summary: string;
   pdf_url?: string;
   citations: number;

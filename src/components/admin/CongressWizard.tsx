@@ -9,6 +9,8 @@ import {
   CheckCircle2,
   ChevronRight,
   ChevronLeft,
+  ChevronUp,
+  ChevronDown,
   Calendar,
   MapPin,
   Clock,
@@ -772,7 +774,7 @@ export const CongressWizard: React.FC<CongressWizardProps> = ({
     { num: 8, title: 'SEO & Social', subtitle: 'Search metadata & SERP preview' },
     { num: 9, title: 'Committee', subtitle: 'Organizing committee & chairs' },
     { num: 10, title: 'Speakers', subtitle: 'Conference speakers & topics' },
-    { num: 11, title: '20 Sessions', subtitle: 'Full scientific tracks & halls' },
+    { num: 11, title: 'Scientific Tracks', subtitle: 'Breakout session tracks & halls' },
     { num: 12, title: 'Pricing Tiers', subtitle: 'Registration packages & perks' },
     { num: 13, title: 'Journals & Sponsors', subtitle: 'Scopus index & sponsors' },
     { num: 14, title: 'Final Review', subtitle: 'Validation & MySQL publish' }
@@ -803,7 +805,6 @@ export const CongressWizard: React.FC<CongressWizardProps> = ({
     const defaultShort = `${chosenDomain.split(' ')[0]} 2026`;
     const newSlug = defaultTitle.toLowerCase().replace(/[^a-z0-9\s-]/g, '').replace(/\s+/g, '-');
     const newCode = `SCINS-${chosenDomain.substring(0, 4).toUpperCase()}-2026`;
-    const newSessions = generate20SessionsForDomain(chosenDomain, newCode);
 
     setFormData(prev => ({
       ...prev,
@@ -813,8 +814,7 @@ export const CongressWizard: React.FC<CongressWizardProps> = ({
       slug: newSlug,
       conference_code: newCode,
       theme: `Advancing Global Innovation and Translational Breakthroughs in ${chosenDomain}`,
-      tagline: `Connecting Minds, Inspiring Innovation across ${chosenDomain}`,
-      sessions: newSessions
+      tagline: `Connecting Minds, Inspiring Innovation across ${chosenDomain}`
     }));
   };
 
@@ -970,6 +970,63 @@ export const CongressWizard: React.FC<CongressWizardProps> = ({
     setIsPreviewCardModalOpen(true);
   };
 
+  // Step 11: Dynamic Scientific Tracks Handlers
+  const handleAddNewTrack = () => {
+    const nextTrackNum = (formData.sessions || []).length + 1;
+    const prefix = formData.conference_code
+      ? formData.conference_code.replace('SCINS-', '')
+      : (formData.domain ? formData.domain.substring(0, 4).toUpperCase() : 'TRACK');
+    const newTrack: Session = {
+      id: Date.now() + nextTrackNum,
+      conference_id: initialConference?.id || 1,
+      session_number: nextTrackNum,
+      session_code: `${prefix}-SES-${String(nextTrackNum).padStart(2, '0')}`,
+      title: `Scientific Track ${nextTrackNum}: Breakout Session`,
+      track: `Track ${nextTrackNum}`,
+      category: 'Breakout Session',
+      description: '',
+      room: 'Hall A',
+      session_type: 'Oral Presentation',
+      start_time: '09:00',
+      end_time: '10:30',
+      display_order: nextTrackNum,
+      status: 'published',
+      is_published: true,
+      is_active: true
+    };
+    setFormData(prev => ({
+      ...prev,
+      sessions: [...(prev.sessions || []), newTrack]
+    }));
+  };
+
+  const handleRemoveTrack = (index: number) => {
+    setFormData(prev => {
+      const updated = (prev.sessions || [])
+        .filter((_, idx) => idx !== index)
+        .map((ses, idx) => ({
+          ...ses,
+          session_number: idx + 1,
+          display_order: idx + 1
+        }));
+      return { ...prev, sessions: updated };
+    });
+  };
+
+  const handleMoveTrack = (index: number, direction: 'up' | 'down') => {
+    const targetIndex = direction === 'up' ? index - 1 : index + 1;
+    if (targetIndex < 0 || targetIndex >= (formData.sessions || []).length) return;
+    const updated = [...(formData.sessions || [])];
+    const [moved] = updated.splice(index, 1);
+    updated.splice(targetIndex, 0, moved);
+    const reindexed = updated.map((ses, idx) => ({
+      ...ses,
+      session_number: idx + 1,
+      display_order: idx + 1
+    }));
+    setFormData(prev => ({ ...prev, sessions: reindexed }));
+  };
+
   // Step 11: Session Edit Handler
   const handleUpdateSession = (index: number, field: string, value: any) => {
     const updated = [...formData.sessions];
@@ -1121,13 +1178,22 @@ export const CongressWizard: React.FC<CongressWizardProps> = ({
       2: Boolean(formData.city && formData.country && formData.venue && formData.start_date && formData.end_date),
       3: Boolean(formData.abstract_deadline && formData.early_bird_deadline && formData.registration_deadline),
       4: Boolean(formData.mode && formData.status),
-      5: Boolean(formData.hero_image && formData.hero_image.startsWith('http')),
+      5: Boolean(
+        formData.hero_image &&
+        formData.hero_image.trim().length > 0 &&
+        (
+          formData.hero_image.startsWith('http://') ||
+          formData.hero_image.startsWith('https://') ||
+          formData.hero_image.startsWith('/') ||
+          formData.hero_image.startsWith('data:image/')
+        )
+      ),
       6: formData.description.trim().length >= 20,
       7: Boolean(formData.welcome_message.trim().length >= 10 && formData.welcome_speaker_name.trim()),
       8: Boolean(formData.meta_title.trim() && formData.meta_description.trim()),
       9: formData.committee.length >= 1,
       10: formData.speakers.length >= 1,
-      11: formData.sessions.length >= 1,
+      11: true, // Step 11: Scientific Tracks are dynamic (admin can configure any number of tracks)
       12: Boolean(
         formData.categories &&
         formData.categories.length >= 1 &&
@@ -1157,9 +1223,30 @@ export const CongressWizard: React.FC<CongressWizardProps> = ({
     const autoSlug = autoTitle.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
     const autoCode = `SCINS-CONG-${nextYear}-${Math.floor(100 + Math.random() * 900)}`;
 
-    const templateSessions = formData.sessions.length >= 10
+    const templateSessions = formData.sessions && formData.sessions.length > 0
       ? formData.sessions
-      : generate20SessionsForDomain(formData.domain || 'Biotechnology', autoCode);
+      : [
+          {
+            session_number: 1,
+            session_code: `${autoCode}-SES-01`,
+            title: 'Keynote Plenary: Breakthrough Horizons & Translation',
+            track: 'Plenary Track',
+            room: 'Main Auditorium',
+            session_type: 'Keynote Session',
+            start_time: '09:00',
+            end_time: '10:30'
+          },
+          {
+            session_number: 2,
+            session_code: `${autoCode}-SES-02`,
+            title: 'Advanced Methodologies & Molecular Characterization',
+            track: 'Core Science',
+            room: 'Breakout Room 1',
+            session_type: 'Oral Presentation',
+            start_time: '11:00',
+            end_time: '12:30'
+          }
+        ];
 
     setFormData(prev => ({
       ...prev,
@@ -1243,10 +1330,10 @@ export const CongressWizard: React.FC<CongressWizardProps> = ({
         ? formData.committee
         : COMMITTEE_MEMBERS;
 
-      // Safe sessions
+      // Safe sessions: persist only the tracks the admin actually created
       const safeSessions = (formData.sessions && formData.sessions.length > 0)
         ? formData.sessions
-        : generate20SessionsForDomain(formData.domain || 'Biotechnology', safeCode);
+        : [];
 
       // Safe sponsors
       const safeSponsors = (formData.sponsors && formData.sponsors.length > 0)
@@ -1360,50 +1447,18 @@ export const CongressWizard: React.FC<CongressWizardProps> = ({
       let savedData: Conference;
       if (initialConference?.id) {
         // Edit flow: PUT /api/v1/conferences/:id
-        try {
-          savedData = await api.updateConference(initialConference.id, conferencePayload);
-        } catch (apiErr) {
-          console.warn('Backend PUT call fallback:', apiErr);
-          const res = await fetch(`/api/v1/conferences/${initialConference.id}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(conferencePayload)
-          });
-          if (res.ok) {
-            const json = await res.json();
-            savedData = json.data;
-          } else {
-            savedData = {
-              ...conferencePayload,
-              id: initialConference.id,
-              created_at: initialConference.created_at || new Date().toISOString()
-            } as Conference;
-          }
+        savedData = await api.updateConference(initialConference.id, conferencePayload);
+        if (!savedData || !savedData.id) {
+          throw new Error('Conference record could not be confirmed in the database after update.');
         }
         if (onConferenceUpdated) {
           onConferenceUpdated(savedData);
         }
       } else {
         // Create flow: POST /api/v1/conferences
-        try {
-          savedData = await api.createConference(conferencePayload);
-        } catch (apiErr) {
-          console.warn('Backend POST call fallback:', apiErr);
-          const res = await fetch('/api/v1/conferences', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(conferencePayload)
-          });
-          if (res.ok) {
-            const json = await res.json();
-            savedData = json.data;
-          } else {
-            savedData = {
-              ...conferencePayload,
-              id: Date.now(),
-              created_at: new Date().toISOString()
-            } as Conference;
-          }
+        savedData = await api.createConference(conferencePayload);
+        if (!savedData || !savedData.id) {
+          throw new Error('Conference record could not be confirmed in the database after creation.');
         }
       }
 
@@ -1420,20 +1475,9 @@ export const CongressWizard: React.FC<CongressWizardProps> = ({
       } catch (e) {}
 
       setShowSuccessModal(true);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error saving conference:', err);
-      // Ensure local state creation on error
-      const fallbackConf = {
-        ...formData,
-        id: initialConference?.id || Date.now(),
-        created_at: initialConference?.created_at || new Date().toISOString()
-      } as unknown as Conference;
-      setPublishedConference(fallbackConf);
-      if (initialConference?.id && onConferenceUpdated) {
-        onConferenceUpdated(fallbackConf);
-      }
-      onConferenceCreated(fallbackConf);
-      setShowSuccessModal(true);
+      alert(`Conference Save Error: ${err?.message || 'Could not persist conference to database. Please check required fields and try again.'}`);
     } finally {
       setIsSubmitting(false);
     }
@@ -2402,34 +2446,23 @@ export const CongressWizard: React.FC<CongressWizardProps> = ({
                     { label: 'Photo 3 (Auditorium / Keynotes)', default: 'https://images.unsplash.com/photo-1507668077129-56e32842fceb?auto=format&fit=crop&w=600&q=80' },
                     { label: 'Photo 4 (Poster / Networking Session)', default: 'https://images.unsplash.com/photo-1524178232363-1fb2b075b655?auto=format&fit=crop&w=600&q=80' }
                   ].map((item, idx) => (
-                    <div key={idx} className="space-y-1.5 bg-white p-2.5 rounded-xl border border-slate-200">
-                      <div className="flex items-center justify-between">
-                        <label className="text-[11px] font-bold text-slate-700">{item.label}</label>
-                        {formData.gallery_images?.[idx] && (
-                          <span className="text-[9px] text-teal-700 bg-teal-50 px-1.5 py-0.2 rounded font-medium">Ready</span>
-                        )}
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        <input
-                          type="text"
-                          value={formData.gallery_images?.[idx] || ''}
-                          onChange={e => {
-                            const updated = [...(formData.gallery_images || ['', '', '', ''])];
-                            updated[idx] = e.target.value;
-                            setFormData({ ...formData, gallery_images: updated });
-                          }}
-                          placeholder={item.default}
-                          className="flex-1 bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs text-slate-900 font-mono focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600"
-                        />
-                        {formData.gallery_images?.[idx] ? (
-                          <img
-                            src={formData.gallery_images[idx]}
-                            alt={`Preview ${idx + 1}`}
-                            className="w-8 h-8 rounded-lg object-cover border border-slate-200 shrink-0"
-                            onError={(e) => { (e.target as HTMLElement).style.display = 'none'; }}
-                          />
-                        ) : null}
-                      </div>
+                    <div key={idx} className="bg-white p-3 rounded-2xl border border-slate-200 shadow-2xs">
+                      <MediaUploadInput
+                        label={item.label}
+                        value={formData.gallery_images?.[idx] || ''}
+                        onChange={(url) => {
+                          const updated = [...(formData.gallery_images || ['', '', '', ''])];
+                          while (updated.length < 4) updated.push('');
+                          updated[idx] = url;
+                          setFormData({ ...formData, gallery_images: updated });
+                        }}
+                        accept="image"
+                        maxSizeMB={10}
+                        category="gallery"
+                        showUrlToggle={true}
+                        placeholder={item.default}
+                        helperText="Supports JPG, PNG, WEBP up to 10MB. Stored on system CDN."
+                      />
                     </div>
                   ))}
                 </div>
@@ -3191,16 +3224,16 @@ export const CongressWizard: React.FC<CongressWizardProps> = ({
                   <h3 className="text-base font-bold text-slate-900 font-display">
                     Step 11: Scientific Tracks & 2-Day Detailed Schedule
                   </h3>
-                  <p className="text-xs text-slate-500">Configure 20 breakout session tracks and the chronological 2-Day congress program.</p>
+                  <p className="text-xs text-slate-500">Configure dynamic breakout session tracks and the chronological 2-Day congress program.</p>
                 </div>
                 {step11Tab === 'sessions' ? (
                   <button
                     type="button"
-                    onClick={() => setFormData({ ...formData, sessions: generate20SessionsForDomain(formData.domain, formData.conference_code) })}
-                    className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-xl flex items-center space-x-1 shrink-0 cursor-pointer"
+                    onClick={handleAddNewTrack}
+                    className="px-3 py-1.5 bg-teal-800 hover:bg-teal-900 text-white rounded-xl text-xs font-bold flex items-center space-x-1.5 shadow-2xs shrink-0 cursor-pointer transition-all active:scale-95"
                   >
-                    <RefreshCw className="w-3 h-3" />
-                    <span>Regenerate 20 Tracks</span>
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Add Track</span>
                   </button>
                 ) : (
                   <button
@@ -3214,7 +3247,7 @@ export const CongressWizard: React.FC<CongressWizardProps> = ({
                 )}
               </div>
 
-              {/* Sub-Tabs: 20 Scientific Tracks vs 2-Day Schedule Flow */}
+              {/* Sub-Tabs: Scientific Tracks vs 2-Day Schedule Flow */}
               <div className="flex items-center space-x-2 bg-slate-100 p-1 rounded-2xl border border-slate-200">
                 <button
                   type="button"
@@ -3225,7 +3258,7 @@ export const CongressWizard: React.FC<CongressWizardProps> = ({
                       : 'text-slate-600 hover:text-slate-900'
                   }`}
                 >
-                  20 Scientific Tracks ({formData.sessions.length})
+                  Scientific Tracks ({(formData.sessions || []).length})
                 </button>
                 <button
                   type="button"
@@ -3246,76 +3279,154 @@ export const CongressWizard: React.FC<CongressWizardProps> = ({
                   <div className="bg-teal-50/80 border border-teal-200 p-3 rounded-2xl flex items-center space-x-2.5 text-xs text-teal-900">
                     <Clock className="w-4 h-4 text-teal-700 shrink-0" />
                     <span>
-                      <strong>Scientific Breakout Tracks:</strong> Arranged chronologically by <strong>Start Time</strong> on the public schedule.
+                      <strong>Scientific Breakout Tracks:</strong> Arranged chronologically by <strong>Start Time</strong> on the public schedule. Add as many tracks as required.
                     </span>
                   </div>
 
-                  {/* Sessions Accordion / Editor */}
+                  {/* Sessions Accordion / Dynamic Track Editor */}
                   <div className="space-y-2.5 max-h-[380px] overflow-y-auto pr-1">
-                    {formData.sessions.map((ses, idx) => (
-                      <div key={idx} className="p-3 bg-slate-50 border border-slate-200 rounded-2xl space-y-2">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center space-x-2">
-                            <span className="w-5 h-5 rounded-full bg-teal-800 text-white font-bold text-[10px] flex items-center justify-center">
-                              {idx + 1}
-                            </span>
-                            <span className="font-mono text-xs font-bold text-teal-900">{ses.session_code}</span>
-                            <span className="text-[10px] font-semibold text-slate-500 bg-white px-1.5 py-0.5 rounded border border-slate-200">
-                              {ses.track}
-                            </span>
-                          </div>
-                          <span className="text-[10px] font-mono text-teal-800 font-semibold">{ses.start_time || '09:00'} – {ses.end_time || '10:30'}</span>
+                    {(formData.sessions || []).length === 0 ? (
+                      <div className="text-center py-10 px-4 bg-white border-2 border-dashed border-slate-200 rounded-2xl space-y-3">
+                        <div className="w-10 h-10 rounded-xl bg-teal-50 text-teal-700 flex items-center justify-center mx-auto">
+                          <Layers className="w-5 h-5" />
                         </div>
-
-                        <input
-                          type="text"
-                          value={ses.title}
-                          onChange={e => handleUpdateSession(idx, 'title', e.target.value)}
-                          className="w-full bg-white border border-slate-300 rounded-xl px-3 py-1.5 text-xs text-slate-900 font-medium focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600"
-                        />
-
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px]">
-                          <div>
-                            <label className="block text-[9px] text-slate-500 font-semibold mb-0.5">Hall / Room</label>
-                            <input
-                              type="text"
-                              value={ses.room}
-                              onChange={e => handleUpdateSession(idx, 'room', e.target.value)}
-                              placeholder="Hall name"
-                              className="w-full bg-white border border-slate-300 rounded-lg px-2 py-1 text-xs text-slate-700"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-[9px] text-slate-500 font-semibold mb-0.5">Session Format</label>
-                            <input
-                              type="text"
-                              value={ses.session_type}
-                              onChange={e => handleUpdateSession(idx, 'session_type', e.target.value)}
-                              placeholder="Session Type"
-                              className="w-full bg-white border border-slate-300 rounded-lg px-2 py-1 text-xs text-slate-700"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-[9px] text-slate-500 font-semibold mb-0.5">Start Time</label>
-                            <input
-                              type="time"
-                              value={ses.start_time || '09:00'}
-                              onChange={e => handleUpdateSession(idx, 'start_time', e.target.value)}
-                              className="w-full bg-white border border-slate-300 rounded-lg px-2 py-1 text-xs text-slate-900 font-mono"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-[9px] text-slate-500 font-semibold mb-0.5">End Time</label>
-                            <input
-                              type="time"
-                              value={ses.end_time || '10:30'}
-                              onChange={e => handleUpdateSession(idx, 'end_time', e.target.value)}
-                              className="w-full bg-white border border-slate-300 rounded-lg px-2 py-1 text-xs text-slate-900 font-mono"
-                            />
-                          </div>
+                        <div>
+                          <h4 className="text-xs font-bold text-slate-800">No Scientific Tracks Added Yet</h4>
+                          <p className="text-[11px] text-slate-500 mt-1 max-w-sm mx-auto">
+                            Add custom breakout session tracks based on your congress requirements.
+                          </p>
                         </div>
+                        <button
+                          type="button"
+                          onClick={handleAddNewTrack}
+                          className="inline-flex items-center space-x-1.5 px-3.5 py-1.5 bg-teal-800 hover:bg-teal-900 text-white rounded-xl text-xs font-bold shadow-xs cursor-pointer"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          <span>Add First Track</span>
+                        </button>
                       </div>
-                    ))}
+                    ) : (
+                      <>
+                        {(formData.sessions || []).map((ses, idx) => (
+                          <div key={idx} className="p-3 bg-slate-50 border border-slate-200 rounded-2xl space-y-2">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center space-x-2">
+                                <span className="w-5 h-5 rounded-full bg-teal-800 text-white font-bold text-[10px] flex items-center justify-center">
+                                  {idx + 1}
+                                </span>
+                                <span className="font-mono text-xs font-bold text-teal-900">{ses.session_code || `SES-${idx + 1}`}</span>
+                                <span className="text-[10px] font-semibold text-slate-500 bg-white px-1.5 py-0.5 rounded border border-slate-200">
+                                  {ses.track || `Track ${idx + 1}`}
+                                </span>
+                              </div>
+                              <div className="flex items-center space-x-1">
+                                <span className="text-[10px] font-mono text-teal-800 font-semibold mr-1.5">
+                                  {ses.start_time || '09:00'} – {ses.end_time || '10:30'}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleMoveTrack(idx, 'up')}
+                                  disabled={idx === 0}
+                                  title="Move Track Up"
+                                  className={`p-1 rounded-md border border-slate-200 text-slate-500 hover:text-slate-900 hover:bg-white transition-all ${
+                                    idx === 0 ? 'opacity-30 cursor-not-allowed' : 'cursor-pointer'
+                                  }`}
+                                >
+                                  <ChevronUp className="w-3 h-3" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleMoveTrack(idx, 'down')}
+                                  disabled={idx === (formData.sessions || []).length - 1}
+                                  title="Move Track Down"
+                                  className={`p-1 rounded-md border border-slate-200 text-slate-500 hover:text-slate-900 hover:bg-white transition-all ${
+                                    idx === (formData.sessions || []).length - 1 ? 'opacity-30 cursor-not-allowed' : 'cursor-pointer'
+                                  }`}
+                                >
+                                  <ChevronDown className="w-3 h-3" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveTrack(idx)}
+                                  title="Delete Track"
+                                  className="p-1 rounded-md border border-rose-200 text-rose-600 hover:bg-rose-50 cursor-pointer ml-1"
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                </button>
+                              </div>
+                            </div>
+
+                            <input
+                              type="text"
+                              value={ses.title}
+                              placeholder="Track Title / Symposium Name"
+                              onChange={e => handleUpdateSession(idx, 'title', e.target.value)}
+                              className="w-full bg-white border border-slate-300 rounded-xl px-3 py-1.5 text-xs text-slate-900 font-medium focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600"
+                            />
+
+                            <div className="grid grid-cols-2 sm:grid-cols-6 gap-2 text-[11px]">
+                              <div className="sm:col-span-2">
+                                <label className="block text-[9px] text-slate-500 font-semibold mb-0.5">Track / Discipline</label>
+                                <input
+                                  type="text"
+                                  value={ses.track}
+                                  onChange={e => handleUpdateSession(idx, 'track', e.target.value)}
+                                  placeholder="e.g. Core Science"
+                                  className="w-full bg-white border border-slate-300 rounded-lg px-2 py-1 text-xs text-slate-700"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-[9px] text-slate-500 font-semibold mb-0.5">Hall / Room</label>
+                                <input
+                                  type="text"
+                                  value={ses.room}
+                                  onChange={e => handleUpdateSession(idx, 'room', e.target.value)}
+                                  placeholder="Hall name"
+                                  className="w-full bg-white border border-slate-300 rounded-lg px-2 py-1 text-xs text-slate-700"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-[9px] text-slate-500 font-semibold mb-0.5">Session Format</label>
+                                <input
+                                  type="text"
+                                  value={ses.session_type}
+                                  onChange={e => handleUpdateSession(idx, 'session_type', e.target.value)}
+                                  placeholder="Session Type"
+                                  className="w-full bg-white border border-slate-300 rounded-lg px-2 py-1 text-xs text-slate-700"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-[9px] text-slate-500 font-semibold mb-0.5">Start Time</label>
+                                <input
+                                  type="time"
+                                  value={ses.start_time || '09:00'}
+                                  onChange={e => handleUpdateSession(idx, 'start_time', e.target.value)}
+                                  className="w-full bg-white border border-slate-300 rounded-lg px-2 py-1 text-xs text-slate-900 font-mono"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-[9px] text-slate-500 font-semibold mb-0.5">End Time</label>
+                                <input
+                                  type="time"
+                                  value={ses.end_time || '10:30'}
+                                  onChange={e => handleUpdateSession(idx, 'end_time', e.target.value)}
+                                  className="w-full bg-white border border-slate-300 rounded-lg px-2 py-1 text-xs text-slate-900 font-mono"
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+
+                        <button
+                          type="button"
+                          onClick={handleAddNewTrack}
+                          className="w-full py-2.5 border-2 border-dashed border-teal-300 hover:border-teal-500 bg-teal-50/40 hover:bg-teal-50 text-teal-800 rounded-2xl text-xs font-bold flex items-center justify-center space-x-1.5 transition-all cursor-pointer"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          <span>Add Another Track</span>
+                        </button>
+                      </>
+                    )}
                   </div>
                 </>
               ) : (

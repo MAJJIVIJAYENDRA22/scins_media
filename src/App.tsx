@@ -15,6 +15,7 @@ import { RegistrationPage } from './pages/RegistrationPage';
 import { CallForProposalsPage } from './pages/CallForProposalsPage';
 import { AbstractSubmissionModal } from './components/AbstractSubmissionModal';
 import { RegistrationModal } from './components/RegistrationModal';
+import { PublicContextMenu } from './components/PublicContextMenu';
 
 import {
   INITIAL_CONFERENCES,
@@ -23,7 +24,7 @@ import {
   TESTIMONIALS,
   SESSIONS_20
 } from './data/initialData';
-import { Conference, Speaker } from './types';
+import { Conference, Speaker, Publication } from './types';
 import { api, getStoredAdminToken, isTokenValid, clearAdminSession } from './services/api';
 
 export default function App() {
@@ -56,6 +57,7 @@ export default function App() {
   const [selectedConferenceSlug, setSelectedConferenceSlug] = useState<string>('biopolymers-bioplastics-2026');
   const [conferences, setConferences] = useState<Conference[]>(INITIAL_CONFERENCES);
   const [speakers, setSpeakers] = useState<Speaker[]>(SPEAKERS);
+  const [publications, setPublications] = useState<Publication[]>(PUBLICATIONS);
   const [isSearchOpen, setIsSearchOpen] = useState<boolean>(false);
   const [isGlobalAbstractModalOpen, setIsGlobalAbstractModalOpen] = useState<boolean>(false);
   const [isGlobalRegisterModalOpen, setIsGlobalRegisterModalOpen] = useState<boolean>(false);
@@ -120,9 +122,32 @@ export default function App() {
       } catch (err) {
         // use initial seed speakers
       }
+
+      try {
+        const pubData = await api.getPublications();
+        if (pubData && pubData.length > 0) {
+          setPublications(pubData);
+        }
+      } catch (err) {
+        // use initial seed publications
+      }
     };
     loadAppData();
   }, [currentPath]);
+
+  // Listen for publication updates from admin or cross-component
+  useEffect(() => {
+    const handlePubsUpdate = async () => {
+      try {
+        const pubData = await api.getPublications();
+        if (pubData && pubData.length > 0) {
+          setPublications(pubData);
+        }
+      } catch {}
+    };
+    window.addEventListener('scinsmedia:publications_updated', handlePubsUpdate);
+    return () => window.removeEventListener('scinsmedia:publications_updated', handlePubsUpdate);
+  }, []);
 
   // Keyboard shortcut for Cmd/Ctrl+K search
   useEffect(() => {
@@ -294,7 +319,7 @@ export default function App() {
           />
         );
       case '/publications':
-        return <PublicationsPage publications={PUBLICATIONS} onNavigate={navigateTo} />;
+        return <PublicationsPage publications={publications} onNavigate={navigateTo} />;
       case '/speakers':
         return (
           <SpeakersDirectoryPage
@@ -374,6 +399,9 @@ export default function App() {
         onClose={() => setIsGlobalRegisterModalOpen(false)}
         conference={activeConference}
       />
+
+      {/* Public Context Menu with Open in New Tab & Open in New Window */}
+      <PublicContextMenu isAdmin={isAdmin} />
     </div>
   );
 }

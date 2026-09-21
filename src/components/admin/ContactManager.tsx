@@ -6,7 +6,8 @@ import {
   Trash2,
   CheckCircle2,
   X,
-  ExternalLink
+  ExternalLink,
+  Download
 } from 'lucide-react';
 import { ContactEnquiry } from '../../types';
 import { api } from '../../services/api';
@@ -26,11 +27,34 @@ export const ContactManager: React.FC<ContactManagerProps> = ({
   const [selectedEnquiry, setSelectedEnquiry] = useState<ContactEnquiry | null>(null);
   const [deletingEnquiry, setDeletingEnquiry] = useState<ContactEnquiry | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3500);
+  };
+
+  const handleExportContacts = async () => {
+    setIsExporting(true);
+    try {
+      const params: Record<string, string> = {};
+      if (statusFilter !== 'All') params.status = statusFilter;
+      await api.downloadExport('contacts', params, `scinsmedia-contacts-${statusFilter.toLowerCase()}-${Date.now()}.csv`);
+      showToast('Contact submissions (CSV) downloaded successfully');
+    } catch (err) {
+      console.warn('Direct server contact export notice, using client fallback:', err);
+      const targetSubmissions = filtered.length > 0 ? filtered : submissions;
+      const header = 'ID,Name,Email,Phone,Subject,Message,Status,Date\n';
+      const rows = targetSubmissions.map(c =>
+        `"${c.id}","${(c.name || '').replace(/"/g, '""')}","${c.email}","${c.phone || ''}","${(c.subject || '').replace(/"/g, '""')}","${(c.message || '').replace(/"/g, '""')}","${c.status}","${c.created_at}"`
+      ).join('\n');
+      const filename = `scinsmedia-contacts-${statusFilter.toLowerCase()}-${Date.now()}.csv`;
+      api.downloadCsvFile(header + rows, filename);
+      showToast('Contact submissions (CSV) exported successfully');
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   // Filtered submissions by search and status
@@ -144,6 +168,23 @@ export const ContactManager: React.FC<ContactManagerProps> = ({
               Manage incoming inquiries, visa invitation requests, and secretariat communications
             </p>
           </div>
+        </div>
+
+        <div className="flex items-center space-x-2.5 self-start sm:self-auto">
+          <button
+            type="button"
+            onClick={handleExportContacts}
+            disabled={isExporting || submissions.length === 0}
+            className="px-3.5 py-2 bg-teal-800 hover:bg-teal-900 disabled:bg-slate-200 disabled:text-slate-400 text-white rounded-xl text-xs font-bold flex items-center space-x-1.5 shadow-xs transition-colors cursor-pointer"
+            title="Export contact enquiries to CSV"
+          >
+            {isExporting ? (
+              <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+            ) : (
+              <Download className="w-3.5 h-3.5" />
+            )}
+            <span>{isExporting ? 'Exporting...' : `Export CSV (${filtered.length})`}</span>
+          </button>
         </div>
       </div>
 

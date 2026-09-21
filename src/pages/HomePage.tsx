@@ -1,11 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   ArrowRight,
   Search,
   Sparkles,
   CheckCircle2
 } from 'lucide-react';
-import { parseConferenceDate } from '../utils/dateUtils';
+import { parseConferenceDate, isConferenceCompleted, isConferenceOngoing } from '../utils/dateUtils';
 import { HeroVisual } from '../components/HeroVisual';
 import { ConferenceCard } from '../components/ConferenceCard';
 import { Conference, Speaker, Testimonial } from '../types';
@@ -37,17 +37,29 @@ export const HomePage: React.FC<HomePageProps> = ({
   const [selectedCountry, setSelectedCountry] = useState<string>('All');
   const [selectedMode, setSelectedMode] = useState<string>('All');
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [timelineFilter, setTimelineFilter] = useState<'all' | 'ongoing' | 'completed'>('all');
 
-  // Filter conferences to show only upcoming, published ones sorted chronologically by start_date
+  // Real-time automatic counts based on conference database dates
+  const ongoingCount = useMemo(() => {
+    return conferences.filter(c => (c.status === 'published' || !c.status) && isConferenceOngoing(c)).length;
+  }, [conferences]);
+
+  const completedCount = useMemo(() => {
+    return conferences.filter(c => (c.status === 'published' || !c.status) && isConferenceCompleted(c)).length;
+  }, [conferences]);
+
+  // Filter conferences automatically based on dates and existing filters
   const filteredConferences = conferences
     .filter(c => {
       const isPublished = c.status === 'published' || !c.status;
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const confTime = parseConferenceDate(c.start_date);
-      const isUpcoming = confTime === Infinity || confTime >= today.getTime();
+      if (!isPublished) return false;
 
-      if (!isPublished || !isUpcoming) return false;
+      const matchesTimeline =
+        timelineFilter === 'all' ||
+        (timelineFilter === 'ongoing' && isConferenceOngoing(c)) ||
+        (timelineFilter === 'completed' && isConferenceCompleted(c));
+
+      if (!matchesTimeline) return false;
 
       const matchDomain = selectedDomain === 'All' || c.domain.toLowerCase().includes(selectedDomain.toLowerCase());
       const matchCountry = selectedCountry === 'All' || c.country.toLowerCase().includes(selectedCountry.toLowerCase());
@@ -90,13 +102,19 @@ export const HomePage: React.FC<HomePageProps> = ({
 
           {/* Primary Action Buttons */}
           <div className="pt-4 flex flex-col sm:flex-row items-center justify-center gap-3.5 max-w-md mx-auto">
-            <button
-              onClick={() => onSelectConference('biopolymers-bioplastics-2026')}
-              className="w-full sm:w-auto px-7 py-3.5 bg-[#0A2540] hover:bg-[#0E7490] text-white rounded-2xl text-sm font-semibold shadow-lg shadow-slate-900/10 flex items-center justify-center space-x-2 transition-all hover:scale-[1.02] cursor-pointer"
+            <a
+              href="/conferences/biopolymers-bioplastics-2026"
+              onClick={(e) => {
+                if (!e.ctrlKey && !e.metaKey && e.button === 0) {
+                  e.preventDefault();
+                  onSelectConference('biopolymers-bioplastics-2026');
+                }
+              }}
+              className="w-full sm:w-auto px-7 py-3.5 bg-[#0A2540] hover:bg-[#0E7490] text-white rounded-2xl text-sm font-semibold shadow-lg shadow-slate-900/10 flex items-center justify-center space-x-2 transition-all hover:scale-[1.02] cursor-pointer text-center"
             >
               <span>Explore Paris 2026 Flagship</span>
               <ArrowRight className="w-4 h-4 text-teal-300" />
-            </button>
+            </a>
             <button
               onClick={() => {
                 const el = document.getElementById('conference-discovery-section');
@@ -296,6 +314,63 @@ export const HomePage: React.FC<HomePageProps> = ({
                 <option value="in-person">In-Person Only</option>
                 <option value="virtual">Virtual Interactive</option>
               </select>
+            </div>
+          </div>
+
+          {/* Ongoing & Completed Timeline Filter Buttons */}
+          <div className="flex items-center justify-between flex-wrap gap-3 -mt-2">
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setTimelineFilter(prev => prev === 'ongoing' ? 'all' : 'ongoing')}
+                className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center space-x-2 ${
+                  timelineFilter === 'ongoing'
+                    ? 'bg-teal-800 text-white shadow-xs ring-2 ring-teal-600/30'
+                    : 'bg-white text-slate-700 hover:bg-slate-50 hover:text-teal-900 border border-slate-200 shadow-2xs'
+                }`}
+                title="Show conferences scheduled for today or in the future"
+              >
+                <span className={`w-2 h-2 rounded-full ${timelineFilter === 'ongoing' ? 'bg-emerald-300 animate-pulse' : 'bg-emerald-500'}`} />
+                <span>Ongoing</span>
+                <span className={`text-[11px] px-2 py-0.5 rounded-full font-mono font-semibold ${
+                  timelineFilter === 'ongoing' ? 'bg-teal-900/60 text-teal-100' : 'bg-slate-100 text-slate-600'
+                }`}>
+                  {ongoingCount}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setTimelineFilter(prev => prev === 'completed' ? 'all' : 'completed')}
+                className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center space-x-2 ${
+                  timelineFilter === 'completed'
+                    ? 'bg-slate-800 text-white shadow-xs ring-2 ring-slate-600/30'
+                    : 'bg-white text-slate-700 hover:bg-slate-50 hover:text-slate-900 border border-slate-200 shadow-2xs'
+                }`}
+                title="Show conferences whose dates have already passed"
+              >
+                <span className={`w-2 h-2 rounded-full ${timelineFilter === 'completed' ? 'bg-slate-300' : 'bg-slate-400'}`} />
+                <span>Completed</span>
+                <span className={`text-[11px] px-2 py-0.5 rounded-full font-mono font-semibold ${
+                  timelineFilter === 'completed' ? 'bg-slate-900/60 text-slate-200' : 'bg-slate-100 text-slate-600'
+                }`}>
+                  {completedCount}
+                </span>
+              </button>
+
+              {timelineFilter !== 'all' && (
+                <button
+                  type="button"
+                  onClick={() => setTimelineFilter('all')}
+                  className="text-xs font-medium text-slate-500 hover:text-slate-800 underline ml-1 cursor-pointer"
+                >
+                  Reset to All
+                </button>
+              )}
+            </div>
+
+            <div className="text-xs text-slate-500 font-medium">
+              Showing <b className="text-slate-900">{filteredConferences.length}</b> {filteredConferences.length === 1 ? 'conference' : 'conferences'}
             </div>
           </div>
 

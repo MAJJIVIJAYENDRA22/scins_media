@@ -148,11 +148,17 @@ export const ConferenceManager: React.FC<ConferenceManagerProps> = ({
       await api.updateConferenceStatus(conf.id, nextStatus);
       const updatedList = conferences.map(c => (c.id === conf.id ? { ...c, status: nextStatus } : c));
       onConferencesChange(updatedList);
+      try {
+        window.dispatchEvent(new CustomEvent('scinsmedia:conferences_updated', { detail: { conferences: updatedList } }));
+      } catch {}
       showToast(`${conf.short_title || conf.title} is now ${nextStatus === 'published' ? 'Published' : 'Draft'}`);
     } catch {
       // Optimistic update
       const updatedList = conferences.map(c => (c.id === conf.id ? { ...c, status: nextStatus } : c));
       onConferencesChange(updatedList);
+      try {
+        window.dispatchEvent(new CustomEvent('scinsmedia:conferences_updated', { detail: { conferences: updatedList } }));
+      } catch {}
       showToast(`Status updated to "${nextStatus}"`);
     }
   };
@@ -599,11 +605,18 @@ export const ConferenceManager: React.FC<ConferenceManagerProps> = ({
           c.id === editingConference.id ? ({ ...c, ...payload } as Conference) : c
         );
         onConferencesChange(updatedList);
+        try {
+          window.dispatchEvent(new CustomEvent('scinsmedia:conferences_updated', { detail: { conferences: updatedList } }));
+        } catch {}
         showToast(`Conference "${payload.title}" saved successfully`);
       } else {
         // Create new
         const created = await api.createConference(payload);
-        onConferencesChange([created, ...conferences]);
+        const updatedList = [created, ...conferences];
+        onConferencesChange(updatedList);
+        try {
+          window.dispatchEvent(new CustomEvent('scinsmedia:conferences_updated', { detail: { conferences: updatedList } }));
+        } catch {}
         showToast(`New conference created: "${created.title}"`);
       }
 
@@ -637,10 +650,16 @@ export const ConferenceManager: React.FC<ConferenceManagerProps> = ({
       await api.deleteConference(deletingConference.id);
       const updatedList = conferences.filter(c => c.id !== deletingConference.id);
       onConferencesChange(updatedList);
+      try {
+        window.dispatchEvent(new CustomEvent('scinsmedia:conferences_updated', { detail: { conferences: updatedList } }));
+      } catch {}
       showToast(`Conference "${deletingConference.title}" deleted successfully`);
     } catch {
       const updatedList = conferences.filter(c => c.id !== deletingConference.id);
       onConferencesChange(updatedList);
+      try {
+        window.dispatchEvent(new CustomEvent('scinsmedia:conferences_updated', { detail: { conferences: updatedList } }));
+      } catch {}
       showToast(`Conference "${deletingConference.title}" removed`);
     } finally {
       setIsDeleting(false);

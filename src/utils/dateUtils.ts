@@ -48,3 +48,26 @@ export function sortConferencesByDate<T extends { start_date?: string }>(
     return 0;
   });
 }
+
+/**
+ * Determines whether a conference has completed (date has passed)
+ * based automatically on end_date (or start_date).
+ */
+export function isConferenceCompleted(conf: { start_date?: string; end_date?: string }): boolean {
+  const targetDateStr = conf.end_date || conf.start_date;
+  const ts = parseConferenceDate(targetDateStr);
+  if (ts === Infinity) return false;
+
+  const confDate = new Date(ts);
+  // Set to end of that calendar day so current day conferences count as ongoing
+  confDate.setHours(23, 59, 59, 999);
+  return confDate.getTime() < Date.now();
+}
+
+/**
+ * Determines whether a conference is ongoing (date is today or in the future).
+ */
+export function isConferenceOngoing(conf: { start_date?: string; end_date?: string }): boolean {
+  return !isConferenceCompleted(conf);
+}
+

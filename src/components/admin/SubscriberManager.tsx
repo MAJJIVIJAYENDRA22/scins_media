@@ -35,10 +35,30 @@ export const SubscriberManager: React.FC<SubscriberManagerProps> = ({
   const [newEmail, setNewEmail] = useState('');
   const [isAdding, setIsAdding] = useState(false);
   const [addError, setAddError] = useState('');
+  const [isExporting, setIsExporting] = useState(false);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3500);
+  };
+
+  const handleExportSubscribers = async () => {
+    setIsExporting(true);
+    try {
+      await api.downloadExport('subscribers', undefined, `scinsmedia-subscribers-${Date.now()}.csv`);
+      showToast('Newsletter subscribers (CSV) downloaded successfully');
+    } catch (err) {
+      console.warn('Backend export failed, falling back to local subscribers dataset:', err);
+      const targetSubs = filtered.length > 0 ? filtered : subscribers;
+      const header = 'ID,Email,SubscriptionDate,Status\n';
+      const rows = targetSubs.map(s =>
+        `"${s.id}","${s.email}","${s.created_at}","${s.status}"`
+      ).join('\n');
+      api.downloadCsvFile(header + rows, `scinsmedia-subscribers-${Date.now()}.csv`);
+      showToast('Newsletter subscribers (CSV) exported successfully');
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   // Filtered subscribers
@@ -176,14 +196,20 @@ export const SubscriberManager: React.FC<SubscriberManagerProps> = ({
         </div>
 
         <div className="flex items-center space-x-2.5 self-start sm:self-auto">
-          <a
-            href="/api/v1/exports/subscribers"
-            download
-            className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition-colors"
+          <button
+            type="button"
+            onClick={handleExportSubscribers}
+            disabled={isExporting || subscribers.length === 0}
+            className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 disabled:opacity-60 text-slate-800 border border-slate-300 rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition-colors cursor-pointer"
+            title="Export newsletter subscribers to CSV"
           >
-            <Download className="w-3.5 h-3.5 text-teal-700" />
-            <span>Export CSV</span>
-          </a>
+            {isExporting ? (
+              <div className="w-3.5 h-3.5 border-2 border-teal-700 border-t-transparent rounded-full animate-spin" />
+            ) : (
+              <Download className="w-3.5 h-3.5 text-teal-700" />
+            )}
+            <span>{isExporting ? 'Exporting...' : 'Export CSV'}</span>
+          </button>
 
           <button
             type="button"

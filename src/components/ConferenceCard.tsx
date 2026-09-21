@@ -64,11 +64,19 @@ export const ConferenceCard: React.FC<ConferenceCardProps> = ({
           </div>
 
           {/* Title */}
-          <h3
-            onClick={() => onSelect(conference.slug)}
-            className="text-base sm:text-lg font-bold text-slate-900 group-hover:text-teal-900 transition-colors font-display line-clamp-2 cursor-pointer leading-snug"
-          >
-            {conference.title}
+          <h3 className="text-base sm:text-lg font-bold text-slate-900 group-hover:text-teal-900 transition-colors font-display line-clamp-2 leading-snug">
+            <a
+              href={`/conferences/${conference.slug}`}
+              onClick={(e) => {
+                if (!e.ctrlKey && !e.metaKey && e.button === 0) {
+                  e.preventDefault();
+                  onSelect(conference.slug);
+                }
+              }}
+              className="hover:text-teal-900 cursor-pointer"
+            >
+              {conference.title}
+            </a>
           </h3>
 
           {/* Theme & Tagline */}
@@ -91,13 +99,19 @@ export const ConferenceCard: React.FC<ConferenceCardProps> = ({
 
         {/* Action Buttons */}
         <div className="pt-2 flex items-center space-x-2">
-          <button
-            onClick={() => onSelect(conference.slug)}
-            className="flex-1 py-2.5 bg-[#0A2540] hover:bg-[#0E7490] text-white rounded-xl text-xs font-semibold flex items-center justify-center space-x-1.5 transition-all shadow-xs cursor-pointer"
+          <a
+            href={`/conferences/${conference.slug}`}
+            onClick={(e) => {
+              if (!e.ctrlKey && !e.metaKey && e.button === 0) {
+                e.preventDefault();
+                onSelect(conference.slug);
+              }
+            }}
+            className="flex-1 py-2.5 bg-[#0A2540] hover:bg-[#0E7490] text-white rounded-xl text-xs font-semibold flex items-center justify-center space-x-1.5 transition-all shadow-xs cursor-pointer text-center"
           >
             <span>Explore Congress</span>
             <ArrowRight className="w-3.5 h-3.5 text-teal-300" />
-          </button>
+          </a>
         </div>
       </div>
     </div>

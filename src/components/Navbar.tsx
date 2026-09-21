@@ -62,9 +62,15 @@ export const Navbar: React.FC<NavbarProps> = ({
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between">
         {/* Left: Brand Identity */}
         <div className="flex items-center">
-          <button
-            onClick={() => onNavigate('/')}
-            className="flex items-center text-left group focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-700 rounded-xl py-0.5"
+          <a
+            href="/"
+            onClick={(e) => {
+              if (!e.ctrlKey && !e.metaKey && e.button === 0) {
+                e.preventDefault();
+                onNavigate('/');
+              }
+            }}
+            className="flex items-center text-left group focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-700 rounded-xl py-0.5 cursor-pointer"
             aria-label="SCINS MEDIA — Connecting Minds, Inspiring Innovation"
           >
             <img
@@ -73,7 +79,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               className="h-20 sm:h-[96px] md:h-[110px] w-auto max-h-[110px] -my-4 sm:-my-6 md:-my-8 object-contain transition-transform duration-200 group-hover:scale-[1.02]"
               loading="eager"
             />
-          </button>
+          </a>
         </div>
 
         {/* Center: Desktop Navigation */}
@@ -82,13 +88,19 @@ export const Navbar: React.FC<NavbarProps> = ({
             const isActive = currentPath === item.path;
             const isRegister = item.label === 'Register';
             return (
-              <button
+              <a
                 key={idx}
-                onClick={() => onNavigate(item.path!)}
+                href={item.path}
+                onClick={(e) => {
+                  if (!e.ctrlKey && !e.metaKey && e.button === 0) {
+                    e.preventDefault();
+                    onNavigate(item.path!);
+                  }
+                }}
                 className={
                   isRegister
-                    ? 'ml-1 px-4 py-2 rounded-xl text-sm font-bold bg-teal-600 hover:bg-teal-700 text-white shadow-xs transition-colors cursor-pointer'
-                    : `px-3.5 py-2 rounded-xl text-sm font-medium transition-colors cursor-pointer ${
+                    ? 'ml-1 px-4 py-2 rounded-xl text-sm font-bold bg-teal-600 hover:bg-teal-700 text-white shadow-xs transition-colors cursor-pointer inline-block'
+                    : `px-3.5 py-2 rounded-xl text-sm font-medium transition-colors cursor-pointer inline-block ${
                         isActive
                           ? 'text-[#0E7490] bg-teal-50 font-bold border border-teal-100'
                           : 'text-slate-700 hover:text-[#0A2540] hover:bg-slate-100/80'
@@ -96,7 +108,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 }
               >
                 {item.label}
-              </button>
+              </a>
             );
           })}
         </nav>
@@ -104,22 +116,34 @@ export const Navbar: React.FC<NavbarProps> = ({
         {/* Right: Actions */}
         <div className="hidden sm:flex items-center space-x-2.5">
           {/* Submit Proposal CTA */}
-          <button
-            onClick={() => onNavigate('/proposals')}
+          <a
+            href="/proposals"
+            onClick={(e) => {
+              if (!e.ctrlKey && !e.metaKey && e.button === 0) {
+                e.preventDefault();
+                onNavigate('/proposals');
+              }
+            }}
             className="flex items-center space-x-1.5 px-3.5 py-2 rounded-xl bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 text-xs font-bold transition-all cursor-pointer"
           >
             <Sparkles className="w-3.5 h-3.5 text-teal-600" />
             <span>Call for Proposals</span>
-          </button>
+          </a>
 
           {/* Upcoming Events Quick Jump */}
-          <button
-            onClick={() => onNavigate('/conferences')}
+          <a
+            href="/conferences"
+            onClick={(e) => {
+              if (!e.ctrlKey && !e.metaKey && e.button === 0) {
+                e.preventDefault();
+                onNavigate('/conferences');
+              }
+            }}
             className="flex items-center space-x-1.5 px-3.5 py-2 rounded-xl bg-[#0A2540] hover:bg-[#0E7490] text-white text-xs font-semibold shadow-xs transition-all cursor-pointer"
           >
             <Compass className="w-3.5 h-3.5 text-teal-300" />
             <span>Upcoming Events</span>
-          </button>
+          </a>
         </div>
 
         {/* Mobile Hamburger Toggle */}
@@ -137,70 +161,98 @@ export const Navbar: React.FC<NavbarProps> = ({
       {mobileMenuOpen && (
         <div className="lg:hidden bg-white border-b border-slate-200 px-4 pt-3 pb-6 space-y-3 shadow-lg">
           <div className="grid grid-cols-2 gap-2">
-            <button
-              onClick={() => {
-                onNavigate('/conferences');
-                setMobileMenuOpen(false);
+            <a
+              href="/conferences"
+              onClick={(e) => {
+                if (!e.ctrlKey && !e.metaKey && e.button === 0) {
+                  e.preventDefault();
+                  onNavigate('/conferences');
+                  setMobileMenuOpen(false);
+                }
               }}
-              className="p-3 bg-slate-50 hover:bg-teal-50 rounded-xl text-left font-medium text-slate-800 text-sm"
+              className="p-3 bg-slate-50 hover:bg-teal-50 rounded-xl text-left font-medium text-slate-800 text-sm block"
             >
               Conferences
-            </button>
-            <button
-              onClick={() => {
-                onNavigate('/publications');
-                setMobileMenuOpen(false);
+            </a>
+            <a
+              href="/publications"
+              onClick={(e) => {
+                if (!e.ctrlKey && !e.metaKey && e.button === 0) {
+                  e.preventDefault();
+                  onNavigate('/publications');
+                  setMobileMenuOpen(false);
+                }
               }}
-              className="p-3 bg-slate-50 hover:bg-teal-50 rounded-xl text-left font-medium text-slate-800 text-sm"
+              className="p-3 bg-slate-50 hover:bg-teal-50 rounded-xl text-left font-medium text-slate-800 text-sm block"
             >
               Publications
-            </button>
-            <button
-              onClick={() => {
-                onNavigate('/speakers');
-                setMobileMenuOpen(false);
+            </a>
+            <a
+              href="/speakers"
+              onClick={(e) => {
+                if (!e.ctrlKey && !e.metaKey && e.button === 0) {
+                  e.preventDefault();
+                  onNavigate('/speakers');
+                  setMobileMenuOpen(false);
+                }
               }}
-              className="p-3 bg-slate-50 hover:bg-teal-50 rounded-xl text-left font-medium text-slate-800 text-sm"
+              className="p-3 bg-slate-50 hover:bg-teal-50 rounded-xl text-left font-medium text-slate-800 text-sm block"
             >
               Speakers
-            </button>
-            <button
-              onClick={() => {
-                onNavigate('/about');
-                setMobileMenuOpen(false);
+            </a>
+            <a
+              href="/about"
+              onClick={(e) => {
+                if (!e.ctrlKey && !e.metaKey && e.button === 0) {
+                  e.preventDefault();
+                  onNavigate('/about');
+                  setMobileMenuOpen(false);
+                }
               }}
-              className="p-3 bg-slate-50 hover:bg-teal-50 rounded-xl text-left font-medium text-slate-800 text-sm"
+              className="p-3 bg-slate-50 hover:bg-teal-50 rounded-xl text-left font-medium text-slate-800 text-sm block"
             >
               About
-            </button>
+            </a>
 
-            <button
-              onClick={() => {
-                onNavigate('/proposals');
-                setMobileMenuOpen(false);
+            <a
+              href="/proposals"
+              onClick={(e) => {
+                if (!e.ctrlKey && !e.metaKey && e.button === 0) {
+                  e.preventDefault();
+                  onNavigate('/proposals');
+                  setMobileMenuOpen(false);
+                }
               }}
-              className="p-3 bg-teal-50 hover:bg-teal-100 rounded-xl text-left font-bold text-teal-900 text-sm border border-teal-100"
+              className="p-3 bg-teal-50 hover:bg-teal-100 rounded-xl text-left font-bold text-teal-900 text-sm border border-teal-100 block"
             >
               Call for Proposals
-            </button>
-            <button
-              onClick={() => {
-                onNavigate('/contact');
-                setMobileMenuOpen(false);
+            </a>
+            <a
+              href="/contact"
+              onClick={(e) => {
+                if (!e.ctrlKey && !e.metaKey && e.button === 0) {
+                  e.preventDefault();
+                  onNavigate('/contact');
+                  setMobileMenuOpen(false);
+                }
               }}
-              className="p-3 bg-slate-50 hover:bg-teal-50 rounded-xl text-left font-medium text-slate-800 text-sm"
+              className="p-3 bg-slate-50 hover:bg-teal-50 rounded-xl text-left font-medium text-slate-800 text-sm block"
             >
               Contact
-            </button>
-            <button
-              onClick={() => {
-                onNavigate('/conferences/biopolymers-bioplastics-2026#registration-section');
-                setMobileMenuOpen(false);
+            </a>
+            <a
+              href="/conferences/biopolymers-bioplastics-2026#registration-section"
+              onClick={(e) => {
+                if (!e.ctrlKey && !e.metaKey && e.button === 0) {
+                  e.preventDefault();
+                  onNavigate('/conferences/biopolymers-bioplastics-2026#registration-section');
+                  setMobileMenuOpen(false);
+                }
               }}
-              className="p-3 bg-teal-600 hover:bg-teal-700 rounded-xl text-left font-bold text-white text-sm"
+              className="p-3 bg-teal-600 hover:bg-teal-700 rounded-xl text-left font-bold text-white text-sm block"
             >
-              Register
-            </button>
+              Register Now
+            </a>
           </div>
 
           <div className="pt-2 border-t border-slate-100 flex flex-col space-y-2">
