@@ -523,14 +523,8 @@ export const LiveDesktopViewportPreview: React.FC<LiveDesktopViewportPreviewProp
               {/* Badges Strip */}
               <div className="flex flex-wrap items-center gap-1.5">
                 <span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider bg-teal-500 text-slate-950 px-2 py-0.5 rounded shadow-xs">
-                  {data.domain || 'Scientific Discipline'}
+                  {data.short_title || data.conference_code || data.title || 'Conference'}
                 </span>
-                {data.featured_badge && data.featured_badge.trim() !== '' && (
-                  <span className="text-[9px] sm:text-[10px] font-bold text-amber-300 bg-amber-950/80 border border-amber-800 px-2 py-0.5 rounded flex items-center space-x-1">
-                    <Star className="w-2.5 h-2.5 fill-amber-400 text-amber-400" />
-                    <span>{data.featured_badge}</span>
-                  </span>
-                )}
                 <span className="text-[9px] sm:text-[10px] font-mono text-slate-300 bg-slate-900/90 border border-slate-700 px-2 py-0.5 rounded">
                   {data.conference_code || 'SCINS-2026'}
                 </span>

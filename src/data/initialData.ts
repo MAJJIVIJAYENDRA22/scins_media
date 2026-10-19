@@ -23,7 +23,9 @@ import {
   AuditLog,
   AdminUser,
   ContactEnquiry,
-  NewsletterSubscriber
+  NewsletterSubscriber,
+  TermsSection,
+  TermsContent
 } from '../types';
 
 export const INITIAL_CONFERENCES: Conference[] = [
@@ -44,6 +46,9 @@ The global plastics crisis demands unprecedented scientific coordination. This c
     country: 'France',
     venue: 'Paris Convention Centre & Pullman Congress Hall',
     venue_address: '2 Place de la Porte Maillot, 75017 Paris, France',
+    venue_photo: 'https://images.unsplash.com/photo-1517048676732-d65bc937f952?auto=format&fit=crop&w=1200&q=80',
+    venue_maps_url: 'https://maps.google.com/?q=2+Place+de+la+Porte+Maillot+75017+Paris+France',
+    venue_description: 'Situated in the vibrant 17th arrondissement of Paris, the Paris Convention Centre offers state-of-the-art auditoriums, specialized scientific breakout halls, and modern exhibition facilities with convenient transit connections.',
     timezone: 'Europe/Paris (UTC+2)',
     start_date: '2026-06-22',
     end_date: '2026-06-23',
@@ -54,8 +59,12 @@ The global plastics crisis demands unprecedented scientific coordination. This c
     status: 'published',
     display_order: 1,
     hero_image: 'https://images.unsplash.com/photo-1532094349884-543bc11b234d?auto=format&fit=crop&w=1600&q=80',
-    sample_abstract_url: '/sample-abstract-template.pdf',
-    flyer_url: 'https://scinsmedia.com/downloads/biopolymers-2026-brochure.pdf',
+    sample_abstract_url: '/uploads/sample_abstract-1791699502920-8841.pdf',
+    flyer_url: '/uploads/brochure_pdf-1791699467728-2254.pdf',
+    accommodation_price_per_day: 120,
+    hotel_name: 'Paris Marriott Rive Gauche Hotel & Conference Center',
+    support_email: 'biopolymers-desk@scinsmedia.com',
+    support_phone: '+33 1 40 78 79 80 (Paris Secretariat)',
     featured_badge: '2nd Edition Flagship',
     about_heading: 'Accelerating Sustainable Polymer Innovations & Industrial Decarbonization',
     about_highlights: [
@@ -131,7 +140,11 @@ The global plastics crisis demands unprecedented scientific coordination. This c
     status: 'published',
     display_order: 2,
     hero_image: 'https://images.unsplash.com/photo-1576086213369-97a306d36557?auto=format&fit=crop&w=1600&q=80',
-    sample_abstract_url: '/sample-abstract-template.pdf',
+    sample_abstract_url: '',
+    accommodation_price_per_day: 140,
+    hotel_name: 'The Westin Boston Seaport District',
+    support_email: 'nanomed-support@scinsmedia.com',
+    support_phone: '+1 (617) 535-7000 (Boston Secretariat)',
     featured_badge: 'High Impact Medical Summit',
     welcome_message: 'Welcome to Boston for NanoMed 2026. Nanoscale engineering is redefining medical intervention thresholds across therapeutic domains.',
     welcome_speaker_name: 'Dr. Robert S. Chen, M.D., Ph.D.',
@@ -177,7 +190,9 @@ The global plastics crisis demands unprecedented scientific coordination. This c
     status: 'published',
     display_order: 3,
     hero_image: 'https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=1600&q=80',
-    sample_abstract_url: '/sample-abstract-template.pdf',
+    sample_abstract_url: '',
+    accommodation_price_per_day: 130,
+    hotel_name: 'The Dolder Grand Zurich & Congress Suites',
     featured_badge: 'Computational Science Track',
     welcome_message: 'Machine intelligence is transitioning from diagnostic assistance to synthetic biological discovery. Welcome to Zurich.',
     welcome_speaker_name: 'Prof. Markus Von Berg',
@@ -221,7 +236,9 @@ The global plastics crisis demands unprecedented scientific coordination. This c
     mode: 'in-person',
     status: 'published',
     hero_image: 'https://images.unsplash.com/photo-1509391365360-2e959784a276?auto=format&fit=crop&w=1600&q=80',
-    sample_abstract_url: '/sample-abstract-template.pdf',
+    sample_abstract_url: '',
+    accommodation_price_per_day: 150,
+    hotel_name: 'Imperial Hotel Tokyo & Convention Tower',
     featured_badge: 'Sustainability Benchmark',
     meta_title: 'Global Conference on Green Chemistry & Renewable Energy | Tokyo 2026',
     meta_description: 'Discover carbon capture, green catalysis, and renewable energy storage solutions in Tokyo at GreenChem 2026.',
@@ -250,7 +267,9 @@ The global plastics crisis demands unprecedented scientific coordination. This c
     mode: 'hybrid',
     status: 'published',
     hero_image: 'https://images.unsplash.com/photo-1635070041078-e363dbe005cb?auto=format&fit=crop&w=1600&q=80',
-    sample_abstract_url: '/sample-abstract-template.pdf',
+    sample_abstract_url: '',
+    accommodation_price_per_day: 135,
+    hotel_name: 'The Fellows House Cambridge & Luxury Suites',
     featured_badge: 'Next-Gen Computing',
     meta_title: 'International Symposium on Quantum Information & Photonic Computing 2026',
     meta_description: 'Explore quantum networking, fault tolerance, and photonic chips in Cambridge at Quantum Optica 2026.',
@@ -2555,6 +2574,7 @@ export interface OrganizationLocationInfo {
   editorial_title: string;
   editorial_location: string;
   editorial_email: string;
+  whatsapp_number?: string;
 }
 
 export const INITIAL_ORGANIZATION_INFO: OrganizationLocationInfo = {
@@ -2564,6 +2584,84 @@ export const INITIAL_ORGANIZATION_INFO: OrganizationLocationInfo = {
   secretariat_email: 'scinsmedia@gmail.com',
   editorial_title: 'Editorial & Publications Secretariat',
   editorial_location: 'Estonia, Europe',
-  editorial_email: 'scinsmedia@gmail.com'
+  editorial_email: 'scinsmedia@gmail.com',
+  whatsapp_number: '+1 307-357-9814'
+};
+
+export const INITIAL_TERMS_SECTIONS: TermsSection[] = [
+  {
+    id: 1,
+    heading: 'Acceptance of Terms',
+    points: [
+      'By accessing, browsing, or utilizing the SCINS Media digital platform, or by submitting abstracts, registering for scientific congresses, or making payments, you acknowledge that you have read, understood, and agree to be bound by these Terms and Conditions along with our Privacy and Ethics statements.'
+    ]
+  },
+  {
+    id: 2,
+    heading: 'Congress Registration & Attendance',
+    points: [
+      'All delegates, oral presenters, poster presenters, student delegates, and accompanying persons must complete an official registration and fulfill the corresponding registration fee prior to attending in-person or virtual sessions.',
+      'Registrations are personalized and non-transferable without prior formal written consent from the Conference Secretariat.',
+      'Access credentials and conference badges must be worn or displayed during all scheduled academic and networking sessions.',
+      'The conference committee reserves the right to decline or revoke registration credentials for failure to adhere to the code of conduct.'
+    ]
+  },
+  {
+    id: 3,
+    heading: 'Abstract Submission & Intellectual Property',
+    points: [
+      'Authors submitting abstracts warrant that their work is original, has not been published elsewhere without appropriate attribution, and does not infringe upon any third-party intellectual property or copyright.',
+      'Submitting an abstract grants SCINS Media a non-exclusive license to publish the title, abstract, and author biographical details in congress program guides, proceedings, and partnering indexed journals. Full intellectual property and authorship rights remain with the original creators.'
+    ]
+  },
+  {
+    id: 4,
+    heading: 'Fees, Payments & Invoicing',
+    points: [
+      'All fees quoted on the platform are in USD or EUR as indicated. Online payments are processed through secure payment gateways (including Stripe and authorized banking partners). SCINS Media does not store sensitive credit or debit card numbers on its servers.',
+      'Institutional wire transfers and purchase order invoices must be settled within the timelines specified on the pro-forma invoice or registration portal.'
+    ]
+  },
+  {
+    id: 5,
+    heading: 'Cancellation, Substitution & Refund Policy',
+    points: [
+      'Cancellations must be communicated to the Secretariat in writing via email. Because venue bookings, catering commitments, and publication logistics are committed months in advance:',
+      '60+ Days Prior: Eligible for a 70% refund (less processing fees).',
+      '30–59 Days Prior: Eligible for a 40% refund or credit note.',
+      'Under 30 Days: Non-refundable. Delegate substitutions are welcomed.'
+    ]
+  },
+  {
+    id: 6,
+    heading: 'Visa Support & Travel Disclaimer',
+    points: [
+      'Official Visa Support Letters are issued exclusively to registered and paid participants. The issuance of an official invitation letter does not guarantee visa approval, which remains solely within the jurisdiction of embassy and consular authorities.',
+      'SCINS Media cannot be held liable for travel disruptions, visa delays, or denied visa applications. Delegates are strongly urged to apply for their visas well in advance.'
+    ]
+  },
+  {
+    id: 7,
+    heading: 'Force Majeure & Event Modifications',
+    points: [
+      'If an event cannot take place as scheduled due to circumstances beyond reasonable control (including natural disasters, international travel restrictions, public health emergencies, or geopolitical disruptions), SCINS Media reserves the right to convert the event to an interactive virtual format or reschedule the conference dates. Registrations will carry forward with full credit.'
+    ]
+  },
+  {
+    id: 8,
+    heading: 'Contact & Institutional Inquiries',
+    points: [
+      'For legal inquiries, registration questions, or clarification regarding these terms, please contact our secretariat at scinsmedia@gmail.com or reach our administrative desk through our official Contact Page.'
+    ]
+  }
+];
+
+export const INITIAL_TERMS_CONTENT: TermsContent = {
+  badge: 'Legal & Institutional Framework',
+  title: 'Terms & Conditions',
+  description: 'Please review the terms and regulations governing conference participation, delegate registrations, abstract submissions, publication services, and portal usage under SCINS Media.',
+  effective_date: 'Effective Date: January 1, 2026 • Version 2.4',
+  sections: INITIAL_TERMS_SECTIONS,
+  updated_at: '2026-01-01'
 };
 

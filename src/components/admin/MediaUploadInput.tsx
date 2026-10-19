@@ -106,13 +106,16 @@ export const MediaUploadInput: React.FC<MediaUploadInputProps> = ({
             category
           });
 
-          const generatedUrl = response?.url || fileData;
+          const generatedUrl = response?.url;
+          if (!generatedUrl) {
+            throw new Error('Server upload completed but did not return a valid asset URL.');
+          }
           onChange(generatedUrl);
           setUploadSuccess(`Uploaded "${file.name}" (${(file.size / 1024).toFixed(0)} KB)`);
           setIsUploading(false);
         } catch (err: any) {
-          onChange(fileData);
-          setUploadSuccess(`Uploaded "${file.name}"`);
+          console.error('[MediaUploadInput Error]:', err);
+          setUploadError(err.message || 'Upload failed. Could not persist asset to server database.');
           setIsUploading(false);
         }
       };

@@ -5,92 +5,133 @@ import { GlobalSearchModal } from './components/GlobalSearchModal';
 import { HomePage } from './pages/HomePage';
 import { ConferencesListPage } from './pages/ConferencesListPage';
 import { ConferenceDetailsPage } from './pages/ConferenceDetailsPage';
-import { PublicationsPage } from './pages/PublicationsPage';
-import { SpeakersDirectoryPage } from './pages/SpeakersDirectoryPage';
 import { AboutPage } from './pages/AboutPage';
 import { ContactPage } from './pages/ContactPage';
 import { AdminDashboardPage } from './pages/AdminDashboardPage';
 import { AdminLoginPage } from './pages/AdminLoginPage';
 import { RegistrationPage } from './pages/RegistrationPage';
-import { CallForProposalsPage } from './pages/CallForProposalsPage';
+import { AbstractSubmissionPage } from './pages/AbstractSubmissionPage';
+import { BrochureDownloadPage } from './pages/BrochureDownloadPage';
+import { TermsAndConditionsPage } from './pages/TermsAndConditionsPage';
+import { StripeCheckoutPage } from './pages/StripeCheckoutPage';
+import { NotFoundPage } from './pages/NotFoundPage';
 import { AbstractSubmissionModal } from './components/AbstractSubmissionModal';
 import { RegistrationModal } from './components/RegistrationModal';
+import { ContactUsModal } from './components/ContactUsModal';
 import { PublicContextMenu } from './components/PublicContextMenu';
+import { FloatingWhatsApp } from './components/FloatingWhatsApp';
 
 import {
   INITIAL_CONFERENCES,
-  PUBLICATIONS,
   SPEAKERS,
   TESTIMONIALS,
   SESSIONS_20
 } from './data/initialData';
-import { Conference, Speaker, Publication } from './types';
+import { Conference, Speaker } from './types';
 import { api, getStoredAdminToken, isTokenValid, clearAdminSession } from './services/api';
+import {
+  setHomeSeo,
+  setConferencesListSeo,
+  setConferenceDetailSeo,
+  setAboutSeo,
+  setContactSeo,
+  setTermsSeo,
+  setAdminSeo,
+  setNotFoundSeo
+} from './utils/seo';
 
 export default function App() {
-  // Always require authentication on initial load or refresh
+  // Refreshing admin panel always logs out; admin session is strictly in-memory per live visit
   const [isAdminAuthenticated, setIsAdminAuthenticated] = useState<boolean>(false);
 
-  // Security requirement: when the Admin page is loaded/refreshed, clear any existing session
+  // Clear any residual session on page load/refresh
   useEffect(() => {
     clearAdminSession();
-    setIsAdminAuthenticated(false);
+    const handleBeforeUnload = () => {
+      clearAdminSession();
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
   }, []);
 
   const [currentPath, setCurrentPath] = useState<string>(() => {
-    if (typeof window !== 'undefined' && window.location.pathname) {
-      const path = window.location.pathname;
+    if (typeof window !== 'undefined') {
+      const fullPath = (window.location.pathname || '') + (window.location.hash || '');
+      const path = window.location.pathname || '/';
       const cleanPath = (path.length > 1 && path.endsWith('/')) ? path.slice(0, -1) : path;
-      const isAdminPath = cleanPath === '/admin' || cleanPath.startsWith('/admin/') || cleanPath === '/login';
+      const isAdminPath = cleanPath === '/admin' || cleanPath.startsWith('/admin/') || cleanPath === '/login' || cleanPath === '/admin-login';
 
       if (isAdminPath) {
         if (window.location.pathname !== '/admin') {
           window.history.replaceState({}, '', '/admin');
         }
-        clearAdminSession();
         return '/admin';
       }
-      return path;
+      return fullPath || '/';
     }
     return '/';
   });
   const [selectedConferenceSlug, setSelectedConferenceSlug] = useState<string>('biopolymers-bioplastics-2026');
   const [conferences, setConferences] = useState<Conference[]>(INITIAL_CONFERENCES);
+  const [isConferencesLoaded, setIsConferencesLoaded] = useState<boolean>(false);
   const [speakers, setSpeakers] = useState<Speaker[]>(SPEAKERS);
-  const [publications, setPublications] = useState<Publication[]>(PUBLICATIONS);
   const [isSearchOpen, setIsSearchOpen] = useState<boolean>(false);
   const [isGlobalAbstractModalOpen, setIsGlobalAbstractModalOpen] = useState<boolean>(false);
   const [isGlobalRegisterModalOpen, setIsGlobalRegisterModalOpen] = useState<boolean>(false);
+  const [isContactModalOpen, setIsContactModalOpen] = useState<boolean>(false);
 
-  // Sync browser back/forward buttons
+  // Sync browser back/forward buttons (including hash anchors)
   useEffect(() => {
     const handlePopState = () => {
       if (typeof window !== 'undefined') {
-        const path = window.location.pathname || '';
+        const fullPath = (window.location.pathname || '') + (window.location.hash || '');
+        const path = window.location.pathname || '/';
         const cleanPath = (path.length > 1 && path.endsWith('/')) ? path.slice(0, -1) : path;
-        const isAdminPath = cleanPath === '/admin' || cleanPath.startsWith('/admin/') || cleanPath === '/login';
+        const isAdminPath = cleanPath === '/admin' || cleanPath.startsWith('/admin/') || cleanPath === '/login' || cleanPath === '/admin-login';
 
         if (isAdminPath) {
           if (window.location.pathname !== '/admin') {
             window.history.replaceState({}, '', '/admin');
           }
-          if (!isAdminAuthenticated) {
-            clearAdminSession();
-          }
           setCurrentPath('/admin');
           return;
         }
-        setCurrentPath(path);
+        setCurrentPath(fullPath || '/');
+
+        // Scroll to hash target if present on back/forward
+        if (window.location.hash) {
+          const hash = window.location.hash.slice(1);
+          const el = document.getElementById(hash);
+          if (el) {
+            el.scrollIntoView({ behavior: 'smooth' });
+          }
+        }
       }
     };
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
   }, [isAdminAuthenticated]);
 
+  // Handle direct access and page refresh with hash anchor (e.g. /#upcoming-conferences)
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.location.hash) {
+      const hash = window.location.hash.slice(1);
+      const tryScroll = (retries = 8) => {
+        const el = document.getElementById(hash);
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth' });
+        } else if (retries > 0) {
+          setTimeout(() => tryScroll(retries - 1), 100);
+        }
+      };
+      setTimeout(() => tryScroll(8), 120);
+    }
+  }, []);
+
   // Strict Admin Route Protection
   useEffect(() => {
     const cleanPath = (currentPath.length > 1 && currentPath.endsWith('/')) ? currentPath.slice(0, -1) : currentPath;
-    const isAdminPath = cleanPath === '/admin' || cleanPath.startsWith('/admin/') || cleanPath === '/login';
+    const isAdminPath = cleanPath === '/admin' || cleanPath.startsWith('/admin/') || cleanPath === '/login' || cleanPath === '/admin-login';
 
     if (isAdminPath) {
       if (typeof window !== 'undefined' && window.location.pathname !== '/admin') {
@@ -102,6 +143,51 @@ export default function App() {
     }
   }, [currentPath, isAdminAuthenticated]);
 
+  // Dynamic SEO metadata synchronization across client navigation
+  useEffect(() => {
+    const cleanCurrent = (currentPath.length > 1 && currentPath.endsWith('/')) ? currentPath.slice(0, -1) : currentPath;
+    const baseRoute = cleanCurrent.split('#')[0].split('?')[0] || '/';
+
+    if (cleanCurrent === '/admin' || cleanCurrent.startsWith('/admin/') || cleanCurrent === '/login') {
+      setAdminSeo();
+      return;
+    }
+
+    if (baseRoute === '/' || baseRoute === '') {
+      setHomeSeo();
+      return;
+    }
+
+    if (baseRoute === '/conferences') {
+      setConferencesListSeo(conferences.length);
+      return;
+    }
+
+    if (baseRoute === '/about') {
+      setAboutSeo();
+      return;
+    }
+
+    if (baseRoute === '/contact') {
+      setContactSeo();
+      return;
+    }
+
+    if (baseRoute === '/terms' || baseRoute === '/terms-and-conditions') {
+      setTermsSeo();
+      return;
+    }
+
+    if (baseRoute.startsWith('/conferences/')) {
+      const slug = baseRoute.replace('/conferences/', '').split('/')[0];
+      const conf = conferences.find(c => c.slug === slug || String(c.id) === slug);
+      if (conf) {
+        setConferenceDetailSeo(conf);
+        return;
+      }
+    }
+  }, [currentPath, conferences]);
+
   // Fetch real conferences and speakers from backend
   useEffect(() => {
     const loadAppData = async () => {
@@ -112,6 +198,8 @@ export default function App() {
         }
       } catch (err) {
         console.warn('Using initial seed conference records.');
+      } finally {
+        setIsConferencesLoaded(true);
       }
 
       try {
@@ -122,32 +210,9 @@ export default function App() {
       } catch (err) {
         // use initial seed speakers
       }
-
-      try {
-        const pubData = await api.getPublications();
-        if (pubData && pubData.length > 0) {
-          setPublications(pubData);
-        }
-      } catch (err) {
-        // use initial seed publications
-      }
     };
     loadAppData();
   }, [currentPath]);
-
-  // Listen for publication updates from admin or cross-component
-  useEffect(() => {
-    const handlePubsUpdate = async () => {
-      try {
-        const pubData = await api.getPublications();
-        if (pubData && pubData.length > 0) {
-          setPublications(pubData);
-        }
-      } catch {}
-    };
-    window.addEventListener('scinsmedia:publications_updated', handlePubsUpdate);
-    return () => window.removeEventListener('scinsmedia:publications_updated', handlePubsUpdate);
-  }, []);
 
   // Keyboard shortcut for Cmd/Ctrl+K search
   useEffect(() => {
@@ -175,26 +240,30 @@ export default function App() {
         setIsAdminAuthenticated(false);
       }
     }
-    if (targetPath === '/register') {
-      const slug = activeConference?.slug || 'biopolymers-bioplastics-2026';
-      targetPath = `/conferences/${slug}#registration-section`;
-    }
     setCurrentPath(targetPath);
-    if (typeof window !== 'undefined' && window.location.pathname !== targetPath) {
-      window.history.pushState({}, '', targetPath);
+    if (typeof window !== 'undefined') {
+      const currentFull = (window.location.pathname || '') + (window.location.hash || '');
+      if (currentFull !== targetPath) {
+        window.history.pushState({}, '', targetPath);
+      }
     }
+    const isSameConferenceAction =
+      targetPath.startsWith('/conferences/') &&
+      currentPath.startsWith('/conferences/') &&
+      targetPath.split('/')[2] === currentPath.split('/')[2];
+
     const hash = targetPath.includes('#') ? targetPath.split('#')[1] : '';
     if (hash) {
-      const tryScroll = (retries = 6) => {
+      const tryScroll = (retries = 8) => {
         const el = document.getElementById(hash);
         if (el) {
           el.scrollIntoView({ behavior: 'smooth' });
         } else if (retries > 0) {
-          setTimeout(() => tryScroll(retries - 1), 120);
+          setTimeout(() => tryScroll(retries - 1), 100);
         }
       };
-      setTimeout(() => tryScroll(6), 100);
-    } else {
+      setTimeout(() => tryScroll(8), 100);
+    } else if (!isSameConferenceAction) {
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
   };
@@ -213,7 +282,7 @@ export default function App() {
     const cleanCurrent = (currentPath.length > 1 && currentPath.endsWith('/')) ? currentPath.slice(0, -1) : currentPath;
 
     // Single Secure Admin Route: /admin ONLY
-    if (cleanCurrent === '/admin' || cleanCurrent.startsWith('/admin/') || cleanCurrent === '/login') {
+    if (cleanCurrent === '/admin' || cleanCurrent.startsWith('/admin/') || cleanCurrent === '/login' || cleanCurrent === '/admin-login') {
       if (typeof window !== 'undefined' && window.location.pathname !== '/admin') {
         window.history.replaceState({}, '', '/admin');
       }
@@ -226,11 +295,11 @@ export default function App() {
         clearAdminSession();
         return (
           <AdminLoginPage
-              onLoginSuccess={() => {
-                setIsAdminAuthenticated(true);
-              }}
-              onNavigateHome={() => navigateTo('/')}
-            />
+            onLoginSuccess={() => {
+              setIsAdminAuthenticated(true);
+            }}
+            onNavigateHome={() => navigateTo('/')}
+          />
         );
       }
 
@@ -260,47 +329,136 @@ export default function App() {
       );
     }
 
+    if (currentPath.startsWith('/checkout/stripe-session')) {
+      return <StripeCheckoutPage />;
+    }
+
     if (currentPath === '/register' || currentPath === '/registration' || currentPath.startsWith('/register/')) {
       const rest = currentPath.startsWith('/register/') ? currentPath.replace('/register/', '') : '';
       const [slugFromPath, catIdFromPath] = rest.split('/');
+      if (slugFromPath) {
+        const conf = conferences.find(c => c.slug === slugFromPath || String(c.id) === slugFromPath);
+        if (conf) {
+          return (
+            <ConferenceDetailsPage
+              conference={conf}
+              activeAction="register"
+              initialCategoryId={catIdFromPath ? Number(catIdFromPath) : undefined}
+              onNavigate={navigateTo}
+              onSelectConference={handleSelectConference}
+            />
+          );
+        }
+      }
       return (
         <RegistrationPage
           initialConferenceSlug={slugFromPath || undefined}
           initialCategoryId={catIdFromPath ? Number(catIdFromPath) : undefined}
-          lockConference={!!slugFromPath}
+          lockConference={Boolean(slugFromPath)}
           onNavigate={navigateTo}
           onSelectConference={handleSelectConference}
         />
       );
     }
 
-    if (currentPath === '/abstract' || currentPath.startsWith('/abstract/')) {
-      const slugFromPath = currentPath.startsWith('/abstract/') ? currentPath.replace('/abstract/', '') : undefined;
+    if (
+      currentPath === '/abstract' ||
+      currentPath.startsWith('/abstract/') ||
+      currentPath === '/submit-abstract' ||
+      currentPath.startsWith('/submit-abstract/')
+    ) {
+      let slugFromPath: string | undefined;
+      if (currentPath.startsWith('/abstract/')) {
+        slugFromPath = currentPath.replace('/abstract/', '');
+      } else if (currentPath.startsWith('/submit-abstract/')) {
+        slugFromPath = currentPath.replace('/submit-abstract/', '');
+      }
+      if (slugFromPath) {
+        const conf = conferences.find(c => c.slug === slugFromPath || String(c.id) === slugFromPath);
+        if (conf) {
+          return (
+            <ConferenceDetailsPage
+              conference={conf}
+              activeAction="submit-abstract"
+              onNavigate={navigateTo}
+              onSelectConference={handleSelectConference}
+            />
+          );
+        }
+      }
       const abstractConference =
-        (slugFromPath && conferences.find(c => c.slug === slugFromPath)) || activeConference;
+        (slugFromPath && conferences.find(c => c.slug === slugFromPath || String(c.id) === slugFromPath)) || activeConference;
       return (
-        <ConferenceDetailsPage
+        <AbstractSubmissionPage
           conference={abstractConference}
+          conferences={conferences}
+          lockConference={true}
           onNavigate={navigateTo}
           onSelectConference={handleSelectConference}
-          autoOpenAbstract={true}
         />
       );
     }
 
     if (currentPath.startsWith('/conferences/')) {
-      const slugFromPath = currentPath.replace('/conferences/', '').split('#')[0].split('?')[0];
-      const detailsConference = conferences.find(c => c.slug === slugFromPath) || activeConference;
+      const cleanPath = currentPath.split('#')[0].split('?')[0];
+      const afterConferences = cleanPath.replace('/conferences/', '');
+      const parts = afterConferences.split('/').filter(Boolean);
+      const slugFromPath = parts[0];
+      const action = parts[1];
+      const extra = parts[2];
+
+      if (!slugFromPath) {
+        return (
+          <ConferencesListPage
+            conferences={conferences}
+            onSelectConference={handleSelectConference}
+            onNavigate={navigateTo}
+          />
+        );
+      }
+
+      const conf = conferences.find(c => c.slug === slugFromPath || String(c.id) === slugFromPath);
+      if (!conf) {
+        if (!isConferencesLoaded) {
+          return (
+            <div className="min-h-screen bg-[#F8FAFC] flex items-center justify-center pt-20">
+              <div className="text-center space-y-3">
+                <div className="w-8 h-8 border-3 border-teal-600 border-t-transparent rounded-full animate-spin mx-auto" />
+                <p className="text-xs text-slate-500 font-medium">Loading conference...</p>
+              </div>
+            </div>
+          );
+        }
+        return <NotFoundPage onNavigate={navigateTo} />;
+      }
+
+      const recognizedActions = [
+        'download-brochure',
+        'brochure',
+        'submit-abstract',
+        'abstract',
+        'register'
+      ];
+
+      if (action && !recognizedActions.includes(action)) {
+        return <NotFoundPage onNavigate={navigateTo} />;
+      }
+
+      // Preserve conference page in the background and open modal for action URLs
       return (
         <ConferenceDetailsPage
-          conference={detailsConference}
+          conference={conf}
+          activeAction={action}
+          initialCategoryId={extra ? Number(extra) : undefined}
           onNavigate={navigateTo}
           onSelectConference={handleSelectConference}
         />
       );
     }
 
-    switch (currentPath) {
+    const baseRoute = cleanCurrent.split('#')[0].split('?')[0] || '/';
+
+    switch (baseRoute) {
       case '/conferences':
         return (
           <ConferencesListPage
@@ -309,30 +467,15 @@ export default function App() {
             onNavigate={navigateTo}
           />
         );
-      case '/proposals':
-      case '/call-for-proposals':
-        return (
-          <CallForProposalsPage
-            conferences={conferences}
-            onNavigate={navigateTo}
-            onSelectConference={handleSelectConference}
-          />
-        );
-      case '/publications':
-        return <PublicationsPage publications={publications} onNavigate={navigateTo} />;
-      case '/speakers':
-        return (
-          <SpeakersDirectoryPage
-            speakers={speakers}
-            onSelectConference={handleSelectConference}
-          />
-        );
       case '/about':
         return <AboutPage onNavigate={navigateTo} />;
       case '/contact':
         return <ContactPage />;
+      case '/terms':
+      case '/terms-and-conditions':
+        return <TermsAndConditionsPage onNavigate={navigateTo} />;
+      case '':
       case '/':
-      default:
         return (
           <HomePage
             conferences={conferences}
@@ -343,30 +486,48 @@ export default function App() {
             onOpenSearch={() => setIsSearchOpen(true)}
           />
         );
+      default:
+        return <NotFoundPage onNavigate={navigateTo} />;
     }
   };
 
   const isAdmin = currentPath === '/admin' || currentPath.startsWith('/admin/') || currentPath === '/login';
-  const isConferenceDetails = currentPath.startsWith('/conferences/');
+
+  // Dedicated conference pages and form pages hide the main website header, navigation, and footer
+  const isConferenceOrFormFlow =
+    currentPath.startsWith('/conferences/') ||
+    currentPath.startsWith('/checkout/') ||
+    currentPath === '/register' ||
+    currentPath.startsWith('/register/') ||
+    currentPath === '/registration' ||
+    currentPath === '/abstract' ||
+    currentPath.startsWith('/abstract/') ||
+    currentPath === '/submit-abstract' ||
+    currentPath.startsWith('/submit-abstract/') ||
+    currentPath === '/brochure' ||
+    currentPath.startsWith('/brochure/');
+
+  const showWebsiteHeaderAndFooter = !isAdmin && !isConferenceOrFormFlow;
 
   return (
     <div className={`min-h-screen ${isAdmin ? 'bg-white' : 'bg-[#F8FAFC]'} text-slate-900 flex flex-col font-sans selection:bg-teal-500 selection:text-white`}>
-      {/* Top Navbar (Public app only, hidden on conference details routes) */}
-      {!isAdmin && !isConferenceDetails && (
+      {/* Top Navbar (Public catalog app only; hidden on conference pages and dedicated form pages/modals) */}
+      {showWebsiteHeaderAndFooter && (
         <Navbar
           currentPath={currentPath}
           onNavigate={navigateTo}
           onOpenSearch={() => setIsSearchOpen(true)}
           onSelectConference={handleSelectConference}
           onOpenSubmit={() => setIsGlobalAbstractModalOpen(true)}
+          onOpenContact={() => setIsContactModalOpen(true)}
         />
       )}
 
       {/* Main Dynamic View */}
       <main className="flex-1">{renderCurrentView()}</main>
 
-      {/* Global Footer (shown on all public views except conference details, which has its own condensed footer) */}
-      {!isAdmin && !isConferenceDetails && (
+      {/* Global Footer (shown on public catalog views only; hidden on conference pages and dedicated form pages/modals) */}
+      {showWebsiteHeaderAndFooter && (
         <Footer
           onNavigate={navigateTo}
           onSelectConference={handleSelectConference}
@@ -379,9 +540,7 @@ export default function App() {
         isOpen={isSearchOpen}
         onClose={() => setIsSearchOpen(false)}
         conferences={conferences}
-        speakers={speakers}
         sessions={SESSIONS_20}
-        publications={PUBLICATIONS}
         onSelectConference={handleSelectConference}
         onNavigate={navigateTo}
       />
@@ -400,8 +559,17 @@ export default function App() {
         conference={activeConference}
       />
 
+      {/* Global Contact Us Modal */}
+      <ContactUsModal
+        isOpen={isContactModalOpen}
+        onClose={() => setIsContactModalOpen(false)}
+      />
+
       {/* Public Context Menu with Open in New Tab & Open in New Window */}
       <PublicContextMenu isAdmin={isAdmin} />
+
+      {/* Floating WhatsApp Contact Button (Across all public pages; hidden on admin/login) */}
+      {!isAdmin && <FloatingWhatsApp />}
     </div>
   );
 }

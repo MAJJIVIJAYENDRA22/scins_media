@@ -23,6 +23,9 @@ export interface Conference {
   country: string;
   venue: string;
   venue_address?: string;
+  venue_photo?: string;
+  venue_maps_url?: string;
+  venue_description?: string;
   timezone: string;
   start_date: string;
   end_date: string;
@@ -83,7 +86,20 @@ export interface Conference {
   indexing_partners?: string[];
   journal_name?: string;
   journal_issn?: string;
+  hotel_name?: string;
+  accommodation_price_per_day?: number;
+  support_email?: string;
+  support_phone?: string;
+  support_label?: string;
+  support_turnaround?: string;
+  secretariat_section_title?: string;
+  secretariat_section_description?: string;
+  secretariat_association_title?: string;
+  secretariat_conference_name?: string;
+  secretariat_dates?: string;
+  secretariat_location?: string;
   created_at?: string;
+  updated_at?: string;
   settings?: ConferenceSettings;
   gallery?: ConferenceGalleryImage[];
   committee?: CommitteeMember[];
@@ -257,6 +273,8 @@ export interface RegistrationCategory {
   is_active?: boolean;
   display_order?: number;
   payment_gateway_link?: string;
+  max_quantity?: number;
+  available_slots?: number;
 }
 
 export type PaymentStatus = 'pending' | 'completed' | 'failed' | 'refunded';
@@ -275,11 +293,20 @@ export interface Registration {
   phone: string;
   country: string;
   institution: string;
+  billing_address?: string;
   department?: string;
   designation: string;
   research_area?: string;
   attendance_mode: 'In-Person' | 'Virtual' | 'Hybrid';
+  selected_categories?: Array<{ id: number; name: string; price: number; quantity?: number; subtotal?: number; currency?: string }>;
+  selected_category_ids?: number[];
   accommodation_required: boolean;
+  accommodation_days?: number;
+  accommodation_rate?: number;
+  accommodation_amount?: number;
+  hotel_name?: string;
+  check_in_date?: string;
+  check_out_date?: string;
   meal_preference?: string;
   special_requirements?: string;
   amount: number;
@@ -406,9 +433,11 @@ export interface MediaPartner {
   name: string;
   logo_url: string;
   website: string;
-  country: string;
+  country?: string;
   description?: string;
   conference_id?: number;
+  category?: string;
+  display_order?: number;
 }
 
 export interface Testimonial {
@@ -461,6 +490,7 @@ export interface ContactEnquiry {
   message: string;
   conference_id?: number;
   conference_code?: string;
+  conference_title?: string;
   status: 'new' | 'in_progress' | 'responded' | 'closed' | 'archived';
   created_at: string;
 }
@@ -530,4 +560,32 @@ export interface ApiResponse<T = any> {
     page?: number;
     limit?: number;
   };
+}
+
+export interface BrochureEnquiry {
+  id: number;
+  conference_id?: number;
+  conference_name: string;
+  full_name: string;
+  email: string;
+  mobile_number: string;
+  country: string;
+  query_message: string;
+  action?: string;
+  created_at: string;
+}
+
+export interface TermsSection {
+  id: string | number;
+  heading: string;
+  points: string[];
+}
+
+export interface TermsContent {
+  badge?: string;
+  title?: string;
+  description?: string;
+  effective_date?: string;
+  sections: TermsSection[];
+  updated_at?: string;
 }

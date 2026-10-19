@@ -250,7 +250,7 @@ export const StripePaymentSection: React.FC<StripePaymentSectionProps> = ({
       <div className="pt-3 border-t border-slate-200 flex flex-wrap items-center justify-between gap-2 text-[10px] text-slate-500">
         <div className="flex items-center space-x-1.5">
           <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-          <span>PCI-DSS Level 1 Compliant • 256-Bit TLS Encryption</span>
+          <span>End-to-End Encrypted Checkout</span>
         </div>
         <div className="flex items-center space-x-2">
           <span>Stripe Radar Fraud Shield</span>

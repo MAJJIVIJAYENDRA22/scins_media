@@ -5,6 +5,7 @@
 -- =============================================================================
 
 SET FOREIGN_KEY_CHECKS = 0;
+DROP TABLE IF EXISTS media_assets;
 DROP TABLE IF EXISTS audit_logs;
 DROP TABLE IF EXISTS payments;
 DROP TABLE IF EXISTS notifications;
@@ -14,6 +15,7 @@ DROP TABLE IF EXISTS newsletter_subscribers;
 DROP TABLE IF EXISTS quote_requests;
 DROP TABLE IF EXISTS career_applications;
 DROP TABLE IF EXISTS career_positions;
+DROP TABLE IF EXISTS brochure_enquiries;
 DROP TABLE IF EXISTS contact_enquiries;
 DROP TABLE IF EXISTS faqs;
 DROP TABLE IF EXISTS faq_categories;
@@ -106,6 +108,9 @@ CREATE TABLE conferences (
     country VARCHAR(100) NOT NULL,
     venue VARCHAR(200) NOT NULL,
     venue_address TEXT,
+    venue_photo TEXT,
+    venue_maps_url TEXT,
+    venue_description TEXT,
     timezone VARCHAR(50) DEFAULT 'UTC',
     start_date DATE NOT NULL,
     end_date DATE NOT NULL,
@@ -118,6 +123,7 @@ CREATE TABLE conferences (
     logo_url VARCHAR(255) DEFAULT NULL,
     flyer_url VARCHAR(255),
     sample_abstract_url VARCHAR(255) DEFAULT NULL,
+    accommodation_price_per_day DECIMAL(10, 2) DEFAULT 120.00,
     featured_badge VARCHAR(100) DEFAULT '2nd Edition',
     display_order INT DEFAULT 0,
     about_heading VARCHAR(255),
@@ -334,6 +340,8 @@ CREATE TABLE registrations (
     research_area VARCHAR(150),
     attendance_mode ENUM('In-Person', 'Virtual', 'Hybrid') DEFAULT 'In-Person',
     accommodation_required BOOLEAN DEFAULT FALSE,
+    accommodation_days INT DEFAULT 0,
+    selected_categories JSON DEFAULT NULL,
     meal_preference VARCHAR(50) DEFAULT 'Standard',
     special_requirements TEXT,
     amount DECIMAL(10, 2) NOT NULL,
@@ -685,6 +693,44 @@ CREATE TABLE audit_logs (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (admin_id) REFERENCES admins(id) ON DELETE SET NULL,
     INDEX idx_created_at (created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE media_assets (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    file_name VARCHAR(255) NOT NULL UNIQUE,
+    file_path VARCHAR(500) NOT NULL,
+    file_type VARCHAR(100) NOT NULL,
+    file_size INT NOT NULL,
+    category VARCHAR(100) DEFAULT 'general',
+    file_data LONGTEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_media_filename (file_name),
+    INDEX idx_media_category (category)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE terms_sections (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    heading VARCHAR(255) NOT NULL,
+    points JSON NOT NULL,
+    display_order INT DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_terms_order (display_order)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE brochure_enquiries (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    conference_id INT NULL,
+    conference_name VARCHAR(255) NOT NULL,
+    full_name VARCHAR(150) NOT NULL,
+    email VARCHAR(150) NOT NULL,
+    mobile_number VARCHAR(50) NOT NULL,
+    country VARCHAR(100) NOT NULL,
+    query_message TEXT NOT NULL,
+    action VARCHAR(50) DEFAULT 'download_brochure',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_brochure_conf_id (conference_id),
+    INDEX idx_brochure_created (created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- -----------------------------------------------------------------------------

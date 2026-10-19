@@ -520,19 +520,37 @@ export const ConferenceManager: React.FC<ConferenceManagerProps> = ({
     const currentList = editingConference.categories || [];
     let updatedList: RegistrationCategory[];
 
+    const acad = Number(editingPricingCategory.academic_price ?? editingPricingCategory.early_bird_price ?? editingPricingCategory.early_bird_fee ?? 599);
+    const ind = Number(editingPricingCategory.industry_price ?? editingPricingCategory.price ?? editingPricingCategory.standard_fee ?? 799);
+    const stud = Number(editingPricingCategory.student_price ?? Math.round(acad * 0.7) ?? 399);
+    const mid = Math.round((acad + ind) / 2);
+
+    const fullCategoryPayload = {
+      ...editingPricingCategory,
+      academic_price: acad,
+      industry_price: ind,
+      student_price: stud,
+      price: ind,
+      standard_fee: ind,
+      tier3_price: ind,
+      early_bird_price: acad,
+      early_bird_fee: acad,
+      tier1_price: acad,
+      tier2_price: mid,
+      is_active: editingPricingCategory.is_active !== undefined ? editingPricingCategory.is_active : true
+    };
+
     if (editingPricingCategory.id) {
       updatedList = currentList.map(cat =>
-        cat.id === editingPricingCategory.id ? ({ ...cat, ...editingPricingCategory } as RegistrationCategory) : cat
+        cat.id === editingPricingCategory.id ? ({ ...cat, ...fullCategoryPayload } as RegistrationCategory) : cat
       );
     } else {
       const newCategory: RegistrationCategory = {
+        ...fullCategoryPayload,
         id: Date.now(),
         conference_id: editingConference.id || 1,
         name: editingPricingCategory.name || '',
         description: editingPricingCategory.description || '',
-        academic_price: Number(editingPricingCategory.academic_price ?? 599),
-        industry_price: Number(editingPricingCategory.industry_price ?? 799),
-        student_price: Number(editingPricingCategory.student_price ?? 399),
         features: editingPricingCategory.features && editingPricingCategory.features.length > 0
           ? editingPricingCategory.features
           : [
@@ -541,7 +559,6 @@ export const ConferenceManager: React.FC<ConferenceManagerProps> = ({
               'Networking luncheon & refreshment breaks',
               'Official certificate of participation'
             ],
-        is_active: true,
         display_order: currentList.length + 1
       };
       updatedList = [...currentList, newCategory];
@@ -568,7 +585,8 @@ export const ConferenceManager: React.FC<ConferenceManagerProps> = ({
 
     const errors: Record<string, string> = {};
     if (!editingConference.title?.trim()) errors.title = 'Conference title is required';
-    if (!editingConference.short_title?.trim()) errors.short_title = 'Short title is required';
+    const badgeText = editingConference.featured_badge?.trim() || editingConference.short_title?.trim();
+    if (!badgeText) errors.featured_badge = 'Featured ribbon badge is required';
     if (!editingConference.conference_code?.trim()) errors.conference_code = 'Conference code is required';
     if (!editingConference.city?.trim()) errors.city = 'City is required';
     if (!editingConference.country?.trim()) errors.country = 'Country is required';
@@ -584,15 +602,18 @@ export const ConferenceManager: React.FC<ConferenceManagerProps> = ({
     setIsSaving(true);
     try {
       // Auto-generate slug if empty
+      const badgeValue = editingConference.featured_badge?.trim() || editingConference.short_title?.trim() || 'FEATURED';
       const slug =
         editingConference.slug ||
-        (editingConference.short_title || editingConference.title || 'conf')
+        (badgeValue || editingConference.title || 'conf')
           .toLowerCase()
           .replace(/[^a-z0-9]+/g, '-')
           .replace(/^-|-$/g, '');
 
       const payload: Partial<Conference> = {
         ...editingConference,
+        featured_badge: badgeValue,
+        short_title: badgeValue,
         slug,
         status: forceStatus || editingConference.status || 'draft',
         display_order: Number(editingConference.display_order ?? 1)
@@ -1087,19 +1108,25 @@ export const ConferenceManager: React.FC<ConferenceManagerProps> = ({
                       {formErrors.title && <p className="text-[11px] text-red-500">{formErrors.title}</p>}
                     </div>
 
-                    {/* Short Title / Acronym */}
+                    {/* Featured Ribbon Badge */}
                     <div className="space-y-1">
                       <label className="text-xs font-bold text-slate-700">
-                        Short Name / Conference Label <span className="text-red-500">*</span>
+                        Featured Ribbon Badge <span className="text-red-500">*</span>
                       </label>
                       <input
                         type="text"
-                        value={editingConference.short_title || ''}
-                        onChange={e => setEditingConference({ ...editingConference, short_title: e.target.value })}
-                        placeholder="e.g., Biopolymers 2026"
-                        className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:bg-white focus:outline-none focus:border-teal-500"
+                        value={editingConference.featured_badge ?? editingConference.short_title ?? ''}
+                        onChange={e => setEditingConference({
+                          ...editingConference,
+                          featured_badge: e.target.value,
+                          short_title: e.target.value
+                        })}
+                        placeholder="e.g., FEATURED, UPCOMING, or QUANTUM 2026"
+                        className={`w-full p-2.5 bg-slate-50 border rounded-xl text-xs text-slate-900 focus:bg-white focus:outline-none ${
+                          formErrors.featured_badge ? 'border-red-400 bg-red-50/20' : 'border-slate-200 focus:border-teal-500'
+                        }`}
                       />
-                      {formErrors.short_title && <p className="text-[11px] text-red-500">{formErrors.short_title}</p>}
+                      {formErrors.featured_badge && <p className="text-[11px] text-red-500">{formErrors.featured_badge}</p>}
                     </div>
 
                     {/* Conference Code */}
@@ -1924,17 +1951,6 @@ export const ConferenceManager: React.FC<ConferenceManagerProps> = ({
                       </select>
                     </div>
 
-                    {/* Featured Badge */}
-                    <div className="space-y-1">
-                      <label className="text-xs font-bold text-slate-700">Card Badge (Optional)</label>
-                      <input
-                        type="text"
-                        value={editingConference.featured_badge || ''}
-                        onChange={e => setEditingConference({ ...editingConference, featured_badge: e.target.value })}
-                        placeholder="e.g., 2nd Edition Flagship"
-                        className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:bg-white focus:outline-none focus:border-teal-500"
-                      />
-                    </div>
 
                     {/* URL Slug */}
                     <div className="space-y-1">
@@ -2700,6 +2716,27 @@ export const ConferenceManager: React.FC<ConferenceManagerProps> = ({
                     </button>
                   </div>
 
+                  {/* Hotel Accommodation Rate Configuration */}
+                  <div className="p-4 bg-teal-50/60 border border-teal-200 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
+                    <div>
+                      <h5 className="text-xs font-bold text-slate-900">Hotel Accommodation Nightly Rate ($ USD / Night)</h5>
+                      <p className="text-[11px] text-slate-500 mt-0.5">Admin-configured daily rate applied when attendees choose accommodation during registration.</p>
+                    </div>
+                    <div className="flex items-center space-x-2 shrink-0">
+                      <span className="text-xs font-bold text-slate-700">$</span>
+                      <input
+                        type="number"
+                        min={0}
+                        step={5}
+                        value={editingConference.accommodation_price_per_day ?? 120}
+                        onChange={e => setEditingConference({ ...editingConference, accommodation_price_per_day: Number(e.target.value) || 0 })}
+                        className="w-24 p-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-900 focus:outline-none focus:border-teal-500"
+                        placeholder="120"
+                      />
+                      <span className="text-xs text-slate-500 font-mono">/ night</span>
+                    </div>
+                  </div>
+
                   {/* Inline Form for Adding/Editing Pricing Tier */}
                   {isPricingFormOpen && editingPricingCategory && (
                     <div className="bg-slate-50 border-2 border-teal-600/30 rounded-2xl p-5 space-y-4 shadow-sm animate-in fade-in slide-in-from-top-2">
@@ -2864,33 +2901,42 @@ export const ConferenceManager: React.FC<ConferenceManagerProps> = ({
                             className="p-4 bg-white border border-slate-200 rounded-2xl shadow-2xs hover:border-slate-300 transition-colors flex flex-col justify-between"
                           >
                             <div className="space-y-2">
-                              <div className="flex items-center justify-between">
-                                <h6 className="text-xs font-bold text-slate-900 truncate">
-                                  {cat.name}
-                                </h6>
-                                <span className="text-xs font-mono font-bold text-teal-800 bg-teal-50 border border-teal-200 px-2 py-0.5 rounded-lg shrink-0">
-                                  ${cat.academic_price}
-                                </span>
-                              </div>
-                              {cat.description && (
-                                <p className="text-[11px] text-slate-500 line-clamp-2">
-                                  {cat.description}
-                                </p>
-                              )}
-                              <div className="grid grid-cols-3 gap-1 pt-1 text-[10px] text-center">
-                                <div className="bg-slate-50 p-1 rounded border border-slate-100">
-                                  <div className="text-slate-400 font-medium">Acad</div>
-                                  <div className="font-bold text-slate-800 font-mono">${cat.academic_price}</div>
-                                </div>
-                                <div className="bg-slate-50 p-1 rounded border border-slate-100">
-                                  <div className="text-slate-400 font-medium">Ind</div>
-                                  <div className="font-bold text-slate-800 font-mono">${cat.industry_price}</div>
-                                </div>
-                                <div className="bg-slate-50 p-1 rounded border border-slate-100">
-                                  <div className="text-slate-400 font-medium">Stud</div>
-                                  <div className="font-bold text-slate-800 font-mono">${cat.student_price}</div>
-                                </div>
-                              </div>
+                              {(() => {
+                                const acadPrice = cat.academic_price ?? cat.early_bird_price ?? cat.early_bird_fee ?? cat.tier1_price ?? 599;
+                                const indPrice = cat.industry_price ?? cat.price ?? cat.standard_fee ?? cat.tier3_price ?? 799;
+                                const studPrice = cat.student_price ?? Math.round(Number(acadPrice) * 0.7);
+                                return (
+                                  <>
+                                    <div className="flex items-center justify-between">
+                                      <h6 className="text-xs font-bold text-slate-900 truncate">
+                                        {cat.name}
+                                      </h6>
+                                      <span className="text-xs font-mono font-bold text-teal-800 bg-teal-50 border border-teal-200 px-2 py-0.5 rounded-lg shrink-0">
+                                        ${acadPrice}
+                                      </span>
+                                    </div>
+                                    {cat.description && (
+                                      <p className="text-[11px] text-slate-500 line-clamp-2">
+                                        {cat.description}
+                                      </p>
+                                    )}
+                                    <div className="grid grid-cols-3 gap-1 pt-1 text-[10px] text-center">
+                                      <div className="bg-slate-50 p-1 rounded border border-slate-100">
+                                        <div className="text-slate-400 font-medium">Acad</div>
+                                        <div className="font-bold text-slate-800 font-mono">${acadPrice}</div>
+                                      </div>
+                                      <div className="bg-slate-50 p-1 rounded border border-slate-100">
+                                        <div className="text-slate-400 font-medium">Ind</div>
+                                        <div className="font-bold text-slate-800 font-mono">${indPrice}</div>
+                                      </div>
+                                      <div className="bg-slate-50 p-1 rounded border border-slate-100">
+                                        <div className="text-slate-400 font-medium">Stud</div>
+                                        <div className="font-bold text-slate-800 font-mono">${studPrice}</div>
+                                      </div>
+                                    </div>
+                                  </>
+                                );
+                              })()}
                               {cat.features && cat.features.length > 0 && (
                                 <ul className="text-[10px] text-slate-600 space-y-1 pt-1 border-t border-slate-100">
                                   {cat.features.slice(0, 3).map((f, i) => (
@@ -2913,7 +2959,19 @@ export const ConferenceManager: React.FC<ConferenceManagerProps> = ({
                                 type="button"
                                 title="Edit Tier"
                                 onClick={() => {
-                                  setEditingPricingCategory({ ...cat });
+                                  const acad = Number(cat.academic_price ?? cat.early_bird_price ?? cat.early_bird_fee ?? cat.tier1_price ?? 599);
+                                  const ind = Number(cat.industry_price ?? cat.price ?? cat.standard_fee ?? cat.tier3_price ?? 799);
+                                  const stud = Number(cat.student_price ?? Math.round(acad * 0.7) ?? 399);
+                                  setEditingPricingCategory({
+                                    ...cat,
+                                    academic_price: acad,
+                                    industry_price: ind,
+                                    student_price: stud,
+                                    price: ind,
+                                    standard_fee: ind,
+                                    early_bird_price: acad,
+                                    early_bird_fee: acad
+                                  });
                                   setIsPricingFormOpen(true);
                                 }}
                                 className="p-1.5 text-slate-500 hover:text-teal-700 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"

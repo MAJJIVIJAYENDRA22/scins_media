@@ -753,6 +753,11 @@ export const RegistrationManager: React.FC<RegistrationManagerProps> = ({
                           <span className="block text-[10px] text-slate-400 uppercase font-mono">
                             {r.attendance_mode}
                           </span>
+                          {r.accommodation_required && (
+                            <span className="inline-flex items-center space-x-1 mt-0.5 text-[10px] font-semibold text-teal-800 bg-teal-50 border border-teal-200 px-1.5 py-0.2 rounded">
+                              <span>🏨 {r.hotel_name || 'Hotel'} ({r.accommodation_days || 0}n)</span>
+                            </span>
+                          )}
                         </td>
                         <td className="p-3 font-mono text-slate-900 font-bold">${r.amount} USD</td>
                         <td className="p-3">

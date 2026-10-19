@@ -20,7 +20,8 @@ import {
   Conference,
   CommitteeMember,
   Speaker,
-  Session
+  Session,
+  RegistrationCategory
 } from '../types';
 import {
   INITIAL_CONFERENCES,
@@ -33,16 +34,21 @@ import {
 import { AbstractSubmissionModal } from '../components/AbstractSubmissionModal';
 import { RegistrationModal } from '../components/RegistrationModal';
 import { ProposalSubmissionModal } from '../components/ProposalSubmissionModal';
+import { BrochureEnquiryModal } from '../components/BrochureEnquiryModal';
 import { CommitteeModal } from '../components/CommitteeModal';
 import { SessionDetailModal } from '../components/SessionDetailModal';
 import { ScientificSessionsSection } from '../components/ScientificSessionsSection';
+import { ConferenceContactSection } from '../components/ConferenceContactSection';
 import { sortByStartTime } from '../utils/timeUtils';
 import { api } from '../services/api';
+import { setConferenceDetailSeo } from '../utils/seo';
 
 interface ConferenceDetailsPageProps {
   conference?: Conference;
   onNavigate?: (path: string) => void;
   onSelectConference?: (slug: string) => void;
+  activeAction?: string;
+  initialCategoryId?: number;
   autoOpenAbstract?: boolean;
 }
 
@@ -50,6 +56,8 @@ export const ConferenceDetailsPage: React.FC<ConferenceDetailsPageProps> = ({
   conference: initialConference = INITIAL_CONFERENCES[0],
   onNavigate,
   onSelectConference,
+  activeAction,
+  initialCategoryId,
   autoOpenAbstract = false
 }) => {
   const [activeConf, setActiveConf] = useState<Conference>(initialConference);
@@ -95,20 +103,12 @@ export const ConferenceDetailsPage: React.FC<ConferenceDetailsPageProps> = ({
 
   const conference = activeConf || initialConference;
 
-  // Real-time SEO Meta Tag Reflection
+  // Real-time SEO Meta Tag & Structured Data Reflection
   useEffect(() => {
-    if (typeof document !== 'undefined') {
-      if (conference.meta_title || conference.title) {
-        document.title = conference.meta_title || `${conference.title} | SCINS Media`;
-      }
-      if (conference.meta_description) {
-        const metaDesc = document.querySelector('meta[name="description"]');
-        if (metaDesc) {
-          metaDesc.setAttribute('content', conference.meta_description);
-        }
-      }
+    if (conference) {
+      setConferenceDetailSeo(conference);
     }
-  }, [conference.meta_title, conference.title, conference.meta_description]);
+  }, [conference]);
 
   // Active states
   const [activeDay, setActiveDay] = useState<'Day 1' | 'Day 2'>('Day 1');
@@ -153,18 +153,128 @@ export const ConferenceDetailsPage: React.FC<ConferenceDetailsPageProps> = ({
   // Modals
   const [isAbstractModalOpen, setIsAbstractModalOpen] = useState(false);
   const [isRegisterModalOpen, setIsRegisterModalOpen] = useState(false);
+  const [selectedRegisterCategoryId, setSelectedRegisterCategoryId] = useState<number | undefined>(undefined);
   const [isProposalModalOpen, setIsProposalModalOpen] = useState(false);
+  const [isBrochureEnquiryModalOpen, setIsBrochureEnquiryModalOpen] = useState(false);
   const [selectedCommitteeMember, setSelectedCommitteeMember] = useState<CommitteeMember | null>(null);
   const [selectedSpeaker, setSelectedSpeaker] = useState<Speaker | null>(null);
   const [selectedSessionModal, setSelectedSessionModal] = useState<Session | null>(null);
 
-  // Auto-open the abstract submission modal when arriving via a direct /abstract link
+  // Deep-link & Action URL synchronization (browser refresh, direct links, popstate)
   useEffect(() => {
-    if (autoOpenAbstract) {
-      setIsAbstractModalOpen(true);
+    if (initialCategoryId) {
+      setSelectedRegisterCategoryId(initialCategoryId);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoOpenAbstract, conference.id]);
+  }, [initialCategoryId]);
+
+  useEffect(() => {
+    if (activeAction === 'download-brochure' || activeAction === 'brochure') {
+      setIsBrochureEnquiryModalOpen(true);
+      setIsAbstractModalOpen(false);
+      setIsRegisterModalOpen(false);
+    } else if (activeAction === 'submit-abstract' || activeAction === 'abstract' || autoOpenAbstract) {
+      setIsAbstractModalOpen(true);
+      setIsBrochureEnquiryModalOpen(false);
+      setIsRegisterModalOpen(false);
+    } else if (activeAction === 'register') {
+      if (initialCategoryId) {
+        setSelectedRegisterCategoryId(initialCategoryId);
+      }
+      setIsRegisterModalOpen(true);
+      setIsBrochureEnquiryModalOpen(false);
+      setIsAbstractModalOpen(false);
+    } else if (!activeAction) {
+      if (typeof window !== 'undefined') {
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.get('session_id') || urlParams.get('payment_status')) {
+          setIsRegisterModalOpen(true);
+          return;
+        }
+      }
+      setIsBrochureEnquiryModalOpen(false);
+      setIsAbstractModalOpen(false);
+      setIsRegisterModalOpen(false);
+    }
+  }, [activeAction, initialCategoryId, autoOpenAbstract, conference.id, conference.slug]);
+
+  // Open action modal and update URL without page reload
+  const handleOpenAction = (action: 'download-brochure' | 'submit-abstract' | 'register', catId?: number) => {
+    const slug = conference.slug;
+    const targetUrl = catId ? `/conferences/${slug}/register/${catId}` : `/conferences/${slug}/${action}`;
+
+    if (action === 'download-brochure') {
+      setIsBrochureEnquiryModalOpen(true);
+      setIsAbstractModalOpen(false);
+      setIsRegisterModalOpen(false);
+    } else if (action === 'submit-abstract') {
+      setIsAbstractModalOpen(true);
+      setIsBrochureEnquiryModalOpen(false);
+      setIsRegisterModalOpen(false);
+    } else if (action === 'register') {
+      if (catId) setSelectedRegisterCategoryId(catId);
+      setIsRegisterModalOpen(true);
+      setIsBrochureEnquiryModalOpen(false);
+      setIsAbstractModalOpen(false);
+    }
+
+    if (onNavigate) {
+      onNavigate(targetUrl);
+    } else if (typeof window !== 'undefined') {
+      window.history.pushState({}, '', targetUrl);
+    }
+  };
+
+  // Close action modal and restore base conference URL without page reload
+  const handleCloseAction = () => {
+    setIsBrochureEnquiryModalOpen(false);
+    setIsAbstractModalOpen(false);
+    setIsRegisterModalOpen(false);
+
+    const baseConfUrl = `/conferences/${conference.slug}`;
+    if (onNavigate) {
+      onNavigate(baseConfUrl);
+    } else if (typeof window !== 'undefined') {
+      window.history.pushState({}, '', baseConfUrl);
+    }
+  };
+
+  // Direct Stripe payment gateway redirect for Registration Categories
+  const [redirectingCatId, setRedirectingCatId] = useState<number | null>(null);
+
+  const handleRegisterAndPay = async (cat: RegistrationCategory) => {
+    // 1. If category has a custom live payment link (and not a placeholder scins_ link), redirect directly
+    const customLink = (cat.payment_gateway_link || '').trim();
+    if (customLink.startsWith('http') && !customLink.includes('scins_c') && !customLink.includes('scins_pkg_')) {
+      window.location.href = customLink;
+      return;
+    }
+
+    // 2. Otherwise create Stripe checkout session immediately and redirect to Stripe payment gateway
+    try {
+      setRedirectingCatId(cat.id);
+      const fee = Number(cat.early_bird_fee || cat.price || cat.standard_fee) || 499;
+      const res = await api.createStripeCheckoutSession({
+        conference_id: conference.id,
+        conference_title: conference.title,
+        category_name: cat.name,
+        amount: fee,
+        currency: cat.currency || 'USD',
+        return_url: window.location.origin + `/conferences/${conference.slug}`
+      });
+
+      const checkoutData = (res as any)?.data || res;
+      if (checkoutData?.url) {
+        window.location.href = checkoutData.url;
+      } else {
+        handleOpenAction('register', cat.id);
+      }
+    } catch (err) {
+      console.error('Direct checkout session creation error, opening registration modal:', err);
+      handleOpenAction('register', cat.id);
+    } finally {
+      setRedirectingCatId(null);
+    }
+  };
 
   // Interactive 2-item scroll/carousel state (1. Welcome Address, 2. Industry Exhibitors)
   const carouselScrollRef = useRef<HTMLDivElement>(null);
@@ -260,22 +370,30 @@ export const ConferenceDetailsPage: React.FC<ConferenceDetailsPageProps> = ({
         ? REGISTRATION_CATEGORIES.filter(c => c.conference_id === conference.id)
         : (conference.id === 1 ? REGISTRATION_CATEGORIES : []));
     const list = confCategories;
-    return list.map(c => ({
-      ...c,
-      code: c.code || `PASS-${c.id}`,
-      early_bird_fee: c.early_bird_fee ?? c.academic_price ?? c.early_bird_price ?? 399,
-      standard_fee: c.standard_fee ?? c.industry_price ?? c.price ?? 499,
-      benefits: (c.benefits && c.benefits.length > 0)
-        ? c.benefits
-        : (c.features && c.features.length > 0)
-          ? c.features
-          : [
-              'Access to all scientific sessions & keynotes',
-              'Conference kit, badge & printed abstracts book',
-              'Daily organic networking luncheon & coffee breaks',
-              'Official Certificate of Attendance / Presentation'
-            ]
-    }));
+    return list.map(c => {
+      const stdPrice = Number(c.price ?? c.standard_fee ?? c.industry_price ?? c.tier3_price ?? 799);
+      const earlyPrice = Number(c.early_bird_price ?? c.early_bird_fee ?? c.academic_price ?? c.tier1_price ?? (stdPrice > 100 ? stdPrice - 100 : stdPrice));
+      return {
+        ...c,
+        code: c.code || `PASS-${c.id}`,
+        price: stdPrice,
+        standard_fee: stdPrice,
+        tier3_price: stdPrice,
+        early_bird_price: earlyPrice,
+        early_bird_fee: earlyPrice,
+        tier1_price: earlyPrice,
+        benefits: (c.benefits && c.benefits.length > 0)
+          ? c.benefits
+          : (c.features && c.features.length > 0)
+            ? c.features
+            : [
+                'Access to all scientific sessions & keynotes',
+                'Conference kit, badge & printed abstracts book',
+                'Daily organic networking luncheon & coffee breaks',
+                'Official Certificate of Attendance / Presentation'
+              ]
+      };
+    });
   }, [conference.categories, conference.id]);
 
   // Organizing Committee strictly isolated for this conference
@@ -333,9 +451,8 @@ export const ConferenceDetailsPage: React.FC<ConferenceDetailsPageProps> = ({
     { id: 'committee-section', label: 'Committee' },
     ...(speakersList.length > 0 ? [{ id: 'speakers-section', label: 'Speakers' }] : []),
     { id: 'sessions-section', label: 'Scientific Sessions' },
-    { id: 'schedule-section', label: '2-Day Schedule' },
-    { id: 'registration-section', label: 'Registration' },
-    { id: 'abstract-section', label: 'Submit Abstract' }
+    { id: 'schedule-section', label: 'Schedule' },
+    { id: 'venue-section', label: 'Venue' }
   ];
 
   return (
@@ -359,10 +476,10 @@ export const ConferenceDetailsPage: React.FC<ConferenceDetailsPageProps> = ({
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-center">
             {/* Left Column: Items 1 to 5 */}
             <div className="lg:col-span-7 space-y-4">
-              {/* 1. Short Name / Conference Label */}
+              {/* 1. Conference Short Name / Acronym Badge */}
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-xs font-bold uppercase tracking-wider bg-teal-500 text-slate-950 px-3 py-1 rounded-full shadow-sm">
-                  {conference.short_title || `${conference.domain} Flagship`}
+                  {conference.short_title || conference.conference_code || conference.title}
                 </span>
               </div>
 
@@ -440,34 +557,19 @@ export const ConferenceDetailsPage: React.FC<ConferenceDetailsPageProps> = ({
             <div className="lg:col-span-5 w-full">
               <div className="flex flex-col gap-3 w-full max-w-md mx-auto lg:max-w-none p-6 sm:p-7 rounded-3xl bg-slate-900/80 border border-slate-800 shadow-2xl backdrop-blur-md">
                 {/* Download Brochure */}
-                {conference.flyer_url ? (
-                  <a
-                    href={conference.flyer_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="w-full py-3.5 px-4 bg-slate-950/80 hover:bg-slate-800 text-white border border-slate-700/80 font-semibold rounded-2xl text-xs sm:text-sm transition-all flex items-center justify-center space-x-2 shadow-xs group cursor-pointer"
-                  >
-                    <Download className="w-4 h-4 text-teal-300 group-hover:scale-110 transition-transform shrink-0" />
-                    <span>Download Brochure</span>
-                  </a>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const el = document.getElementById('about-section');
-                      el?.scrollIntoView({ behavior: 'smooth' });
-                    }}
-                    className="w-full py-3.5 px-4 bg-slate-950/80 hover:bg-slate-800 text-white border border-slate-700/80 font-semibold rounded-2xl text-xs sm:text-sm transition-all flex items-center justify-center space-x-2 shadow-xs group cursor-pointer"
-                  >
-                    <Download className="w-4 h-4 text-teal-300 group-hover:scale-110 transition-transform shrink-0" />
-                    <span>Download Brochure</span>
-                  </button>
-                )}
+                <button
+                  type="button"
+                  onClick={() => handleOpenAction('download-brochure')}
+                  className="w-full py-3.5 px-4 bg-slate-950/80 hover:bg-slate-800 text-white border border-slate-700/80 font-semibold rounded-2xl text-xs sm:text-sm transition-all flex items-center justify-center space-x-2 shadow-xs group cursor-pointer"
+                >
+                  <Download className="w-4 h-4 text-teal-300 group-hover:scale-110 transition-transform shrink-0" />
+                  <span>Download Brochure</span>
+                </button>
 
                 {/* Submit Abstract */}
                 <button
                   type="button"
-                  onClick={() => setIsAbstractModalOpen(true)}
+                  onClick={() => handleOpenAction('submit-abstract')}
                   className="w-full py-3.5 px-4 bg-slate-950/80 hover:bg-slate-800 text-white border border-slate-700/80 font-semibold rounded-2xl text-xs sm:text-sm transition-all flex items-center justify-center space-x-2 shadow-xs group cursor-pointer"
                 >
                   <FileText className="w-4 h-4 text-teal-400 group-hover:scale-110 transition-transform shrink-0" />
@@ -477,10 +579,7 @@ export const ConferenceDetailsPage: React.FC<ConferenceDetailsPageProps> = ({
                 {/* Register Now */}
                 <button
                   type="button"
-                  onClick={() => {
-                    const el = document.getElementById('registration-section');
-                    el?.scrollIntoView({ behavior: 'smooth' });
-                  }}
+                  onClick={() => handleOpenAction('register')}
                   className="w-full py-3.5 px-4 bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold rounded-2xl text-xs sm:text-sm shadow-lg shadow-teal-500/20 transition-all flex items-center justify-center space-x-2 hover:scale-[1.02] cursor-pointer"
                 >
                   <CreditCard className="w-4 h-4 shrink-0" />
@@ -498,20 +597,16 @@ export const ConferenceDetailsPage: React.FC<ConferenceDetailsPageProps> = ({
         aria-label="Conference Section Navigation"
         className="sticky top-0 z-30 bg-white border-b border-slate-200/90 shadow-xs transition-all duration-200"
       >
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between h-14 sm:h-16">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between h-14 sm:h-16 overflow-x-auto scrollbar-none gap-4">
           {/* Navigation Items (Standardized ~16px font-size, 600 font-weight, ~24px line-height) */}
-          <div className="flex items-center space-x-1 sm:space-x-2 md:space-x-3 lg:space-x-4 overflow-x-auto scrollbar-none py-1">
+          <div className="flex items-center space-x-1 sm:space-x-2 md:space-x-3 lg:space-x-4 shrink-0 py-1">
             {navSections.map(sec => (
               <button
                 key={sec.id}
                 type="button"
                 onClick={() => {
-                  if (sec.id === 'abstract-section') {
-                    setIsAbstractModalOpen(true);
-                  } else {
-                    const el = document.getElementById(sec.id);
-                    el?.scrollIntoView({ behavior: 'smooth' });
-                  }
+                  const el = document.getElementById(sec.id);
+                  el?.scrollIntoView({ behavior: 'smooth' });
                 }}
                 className="px-3 py-1.5 rounded-xl text-[16px] font-semibold leading-[24px] text-slate-700 hover:text-[#0E7490] hover:bg-slate-100/80 transition-colors cursor-pointer shrink-0 whitespace-nowrap"
               >
@@ -520,17 +615,40 @@ export const ConferenceDetailsPage: React.FC<ConferenceDetailsPageProps> = ({
             ))}
           </div>
 
-          {/* Right Action: ONLY Register (Duplicate Submit Abstract removed) */}
-          <div className="flex items-center shrink-0 ml-4">
+          {/* Action Buttons: Download Brochure, Submit Abstract, Register, Contact Us */}
+          <div className="flex items-center space-x-2 sm:space-x-3 shrink-0 ml-4">
             <button
               type="button"
-              onClick={() => {
-                const el = document.getElementById('registration-section');
-                el?.scrollIntoView({ behavior: 'smooth' });
-              }}
+              onClick={() => handleOpenAction('download-brochure')}
+              className="px-5 py-2 bg-[#0A2540] hover:bg-[#0E7490] text-white rounded-xl text-[16px] font-semibold leading-[24px] transition-colors cursor-pointer shadow-xs whitespace-nowrap"
+            >
+              Download Brochure
+            </button>
+            <button
+              type="button"
+              onClick={() => handleOpenAction('submit-abstract')}
+              className="px-5 py-2 bg-[#0A2540] hover:bg-[#0E7490] text-white rounded-xl text-[16px] font-semibold leading-[24px] transition-colors cursor-pointer shadow-xs whitespace-nowrap"
+            >
+              Submit Abstract
+            </button>
+            <button
+              type="button"
+              onClick={() => handleOpenAction('register')}
               className="px-5 py-2 bg-[#0A2540] hover:bg-[#0E7490] text-white rounded-xl text-[16px] font-semibold leading-[24px] transition-colors cursor-pointer shadow-xs whitespace-nowrap"
             >
               Register
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                const el = document.getElementById('contact-section');
+                if (el) {
+                  el.scrollIntoView({ behavior: 'smooth' });
+                }
+              }}
+              className="px-5 py-2 border border-teal-600/40 text-teal-800 bg-teal-50 hover:bg-teal-100 rounded-xl text-[16px] font-semibold leading-[24px] transition-colors cursor-pointer shadow-xs whitespace-nowrap"
+            >
+              Contact Us
             </button>
           </div>
         </div>
@@ -963,11 +1081,167 @@ export const ConferenceDetailsPage: React.FC<ConferenceDetailsPageProps> = ({
         </div>
       </section>
 
+      {/* 9. CONGRESS VENUE & LOCATION SECTION */}
+      <section id="venue-section" className="scroll-mt-20 py-20 bg-slate-50 border-b border-slate-200/90">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          {/* Section Header */}
+          <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 pb-6 mb-10 border-b border-slate-200">
+            <div>
+              <div className="flex items-center space-x-2">
+                <span className="text-[11px] font-bold uppercase tracking-wider bg-teal-100 text-teal-800 px-3 py-1 rounded-full font-mono">
+                  Congress Location & Venue
+                </span>
+                <span className="text-xs text-slate-500 font-medium">
+                  {conference.city}, {conference.country}
+                </span>
+              </div>
+              <h2 className="text-3xl font-bold text-slate-900 font-display mt-2">
+                Venue & Destination
+              </h2>
+            </div>
+            {conference.venue_maps_url ? (
+              <a
+                href={conference.venue_maps_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center space-x-2 px-5 py-2.5 bg-slate-900 hover:bg-teal-700 text-white rounded-xl text-xs sm:text-sm font-bold shadow-xs hover:shadow-md transition-all self-start sm:self-auto cursor-pointer"
+              >
+                <MapPin className="w-4 h-4 text-teal-300" />
+                <span>Open in Google Maps</span>
+                <ExternalLink className="w-3.5 h-3.5 opacity-80" />
+              </a>
+            ) : (
+              <a
+                href={`https://maps.google.com/?q=${encodeURIComponent(`${conference.venue || ''} ${conference.venue_address || conference.city || ''}`)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center space-x-2 px-5 py-2.5 bg-slate-900 hover:bg-teal-700 text-white rounded-xl text-xs sm:text-sm font-bold shadow-xs hover:shadow-md transition-all self-start sm:self-auto cursor-pointer"
+              >
+                <MapPin className="w-4 h-4 text-teal-300" />
+                <span>Open in Google Maps</span>
+                <ExternalLink className="w-3.5 h-3.5 opacity-80" />
+              </a>
+            )}
+          </div>
+
+          {/* 2-Column Responsive Layout */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+            {/* Left Column: Venue Details, Photo & Amenities */}
+            <div className="lg:col-span-5 space-y-6">
+              {/* Venue Card */}
+              <div className="bg-white rounded-3xl border border-slate-200/90 p-6 sm:p-7 shadow-xs space-y-5">
+                <div>
+                  <div className="text-[11px] font-bold uppercase tracking-wider text-teal-700 font-mono">
+                    Official Congress Facility
+                  </div>
+                  <h3 className="text-xl sm:text-2xl font-bold text-slate-900 font-display mt-1 leading-snug">
+                    {conference.venue || 'International Convention Centre'}
+                  </h3>
+                </div>
+
+                {/* Venue Address */}
+                <div className="flex items-start space-x-3 p-4 bg-slate-50 border border-slate-200/80 rounded-2xl">
+                  <MapPin className="w-5 h-5 text-teal-600 shrink-0 mt-0.5" />
+                  <div className="text-xs sm:text-sm text-slate-700 leading-relaxed font-medium">
+                    {conference.venue_address || `${conference.city}, ${conference.country}`}
+                  </div>
+                </div>
+
+                {/* Description */}
+                {conference.venue_description && (
+                  <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
+                    {conference.venue_description}
+                  </p>
+                )}
+
+                {/* Amenities / Key Badges */}
+                <div className="pt-2 border-t border-slate-100">
+                  <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-3">
+                    Facility Highlights
+                  </div>
+                  <div className="grid grid-cols-2 gap-2.5 text-xs text-slate-700">
+                    <div className="flex items-center space-x-2">
+                      <div className="w-2 h-2 rounded-full bg-teal-500 shrink-0" />
+                      <span>Auditorium Plenaries</span>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <div className="w-2 h-2 rounded-full bg-teal-500 shrink-0" />
+                      <span>Breakout Session Halls</span>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <div className="w-2 h-2 rounded-full bg-teal-500 shrink-0" />
+                      <span>High-Speed WiFi</span>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <div className="w-2 h-2 rounded-full bg-teal-500 shrink-0" />
+                      <span>Transit Connected</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Saved Photo Card (if photo is available) */}
+              {(conference.venue_photo || conference.hero_image) && (
+                <div className="relative overflow-hidden rounded-3xl border border-slate-200 shadow-md aspect-[16/10] group">
+                  <img
+                    src={conference.venue_photo || conference.hero_image}
+                    alt={conference.venue || 'Congress Venue Photo'}
+                    className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-transparent to-transparent pointer-events-none" />
+                  <div className="absolute bottom-4 left-5 right-5 text-white">
+                    <div className="text-[10px] font-bold uppercase tracking-wider bg-teal-500 text-slate-950 px-2.5 py-0.5 rounded-full inline-block font-semibold">
+                      Venue Exterior & Grounds
+                    </div>
+                    <div className="text-sm font-bold text-white mt-1 drop-shadow-xs font-display">
+                      {conference.venue || 'Convention Center'}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Right Column: Google Maps Interactive Embed */}
+            <div className="lg:col-span-7 space-y-4">
+              <div className="bg-white rounded-3xl border border-slate-200/90 p-3 sm:p-4 shadow-xs overflow-hidden">
+                <div className="relative w-full h-[450px] sm:h-[500px] lg:h-[560px] rounded-2xl overflow-hidden bg-slate-100 border border-slate-200">
+                  <iframe
+                    title="Conference Venue Location Map"
+                    width="100%"
+                    height="100%"
+                    style={{ border: 0 }}
+                    loading="lazy"
+                    allowFullScreen
+                    referrerPolicy="no-referrer-when-downgrade"
+                    src={`https://maps.google.com/maps?q=${encodeURIComponent(`${conference.venue || ''} ${conference.venue_address || conference.city || ''} ${conference.country || ''}`)}&t=&z=14&ie=UTF8&iwloc=&output=embed`}
+                  />
+                </div>
+                <div className="flex items-center justify-between px-3 py-2 text-xs text-slate-500">
+                  <span className="flex items-center space-x-1.5">
+                    <MapPin className="w-3.5 h-3.5 text-teal-600" />
+                    <span>Interactive Map • {conference.city}, {conference.country}</span>
+                  </span>
+                  <a
+                    href={conference.venue_maps_url || `https://maps.google.com/?q=${encodeURIComponent(`${conference.venue || ''} ${conference.venue_address || conference.city || ''}`)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-teal-700 hover:text-teal-900 font-bold flex items-center space-x-1 transition-colors"
+                  >
+                    <span>View Larger Map</span>
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* 10. REGISTRATION PRICING SECTION */}
       <section id="registration-section" className="scroll-mt-24 sm:scroll-mt-28 py-20 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center max-w-2xl mx-auto mb-12">
           <h2 className="text-3xl font-bold text-slate-900 font-display mt-2">
-            Delegate Registration Tiers
+            Registration Categories
           </h2>
           <p className="text-xs text-slate-500 mt-1">
             Early bird pricing active through June 30, 2026. Instant confirmation & formal invoice provided.
@@ -1021,19 +1295,22 @@ export const ConferenceDetailsPage: React.FC<ConferenceDetailsPageProps> = ({
                   <div className="pt-6">
                     <button
                       id={`register-pay-pkg-${cat.id}`}
-                      onClick={() => {
-                        if (cat.payment_gateway_link && cat.payment_gateway_link.trim().startsWith('http')) {
-                          window.open(cat.payment_gateway_link.trim(), '_blank', 'noopener,noreferrer');
-                        } else if (onNavigate) {
-                          onNavigate(`/register/${conference.slug}/${cat.id}`);
-                        } else {
-                          setIsRegisterModalOpen(true);
-                        }
-                      }}
-                      className="w-full py-2.5 bg-[#0A2540] hover:bg-[#0E7490] text-white rounded-xl text-xs font-semibold transition-colors shadow-xs cursor-pointer flex items-center justify-center space-x-1.5 group"
+                      disabled={redirectingCatId === cat.id}
+                      onClick={() => handleRegisterAndPay(cat)}
+                      className="w-full py-2.5 bg-[#0A2540] hover:bg-[#0E7490] text-white rounded-xl text-xs font-semibold transition-colors shadow-xs cursor-pointer flex items-center justify-center space-x-1.5 group disabled:opacity-50"
+                      title={`Register and pay for ${cat.name}`}
                     >
-                      <span>Register & Pay</span>
-                      <ExternalLink className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
+                      {redirectingCatId === cat.id ? (
+                        <>
+                          <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin inline-block" />
+                          <span>Redirecting to Payment Gateway...</span>
+                        </>
+                      ) : (
+                        <>
+                          <span>Register & Pay</span>
+                          <ExternalLink className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
+                        </>
+                      )}
                     </button>
                   </div>
                 </div>
@@ -1042,59 +1319,7 @@ export const ConferenceDetailsPage: React.FC<ConferenceDetailsPageProps> = ({
         </div>
       </section>
 
-      {/* 10. SUBMIT ABSTRACT CTA SECTION */}
-      <section id="abstract-section" className="scroll-mt-20 py-12 bg-white border-b border-slate-200">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 bg-slate-50 border border-slate-200/90 rounded-3xl p-8 flex flex-col md:flex-row items-center justify-between gap-6">
-          <div className="space-y-1">
-            <h3 className="text-xl font-bold font-display text-slate-900">
-              Submit Your Scientific Abstract
-            </h3>
-            <p className="text-xs text-slate-500 max-w-md leading-relaxed">
-              Peer evaluation decisions are dispatched within 7 business days. Present your findings to the global delegation.
-            </p>
-            {/* Journal publication & indexing credentials if available */}
-            {(conference.journal_name || conference.indexing_partners || conference.cme_credits_eligible) && (
-              <div className="mt-3 pt-3 border-t border-slate-200/70 flex flex-wrap items-center gap-3 text-xs text-slate-600">
-                {conference.journal_name && (
-                  <div className="flex items-center gap-2">
-                    {conference.journal_logo_url && (
-                      <img
-                        src={conference.journal_logo_url}
-                        alt={conference.journal_name}
-                        className="h-6 w-auto max-w-[80px] object-contain rounded bg-white p-0.5 border border-slate-200 shadow-xs"
-                      />
-                    )}
-                    <div className="flex items-center gap-1.5">
-                      <span className="font-semibold text-slate-800">Official Journal:</span>
-                      <span className="text-[#0E7490] font-medium">{conference.journal_name}</span>
-                      {conference.journal_issn && <span className="text-slate-400 font-mono">(ISSN: {conference.journal_issn})</span>}
-                    </div>
-                  </div>
-                )}
-                {conference.indexing_partners && (
-                  <div className="flex items-center gap-1.5">
-                    <span className="font-semibold text-slate-800">Indexed In:</span>
-                    <span className="bg-slate-200/80 text-slate-700 px-2 py-0.5 rounded text-[11px] font-medium">{conference.indexing_partners}</span>
-                  </div>
-                )}
-                {conference.cme_credits_eligible && (
-                  <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded text-[11px] font-bold">
-                    CME Eligible
-                  </span>
-                )}
-              </div>
-            )}
-          </div>
-          <button
-            onClick={() => setIsAbstractModalOpen(true)}
-            className="px-6 py-3 bg-[#0A2540] hover:bg-[#0E7490] text-white font-semibold rounded-xl text-xs whitespace-nowrap transition-colors cursor-pointer shadow-xs"
-          >
-            Launch Submission Wizard
-          </button>
-        </div>
-      </section>
-
-      {/* 12. SPONSORS & PARTNERS (SIDE-BY-SIDE AUTO-SCROLLING CAROUSELS) */}
+      {/* 11. SPONSORS & PARTNERS (SIDE-BY-SIDE AUTO-SCROLLING CAROUSELS) */}
       {(sponsorsList.length > 0 || mediaPartnersList.length > 0) && (
         <section id="partners-section" className="scroll-mt-[150px] lg:scroll-mt-[180px] py-14 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 border-t border-slate-200">
           <div className="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-slate-200">
@@ -1197,16 +1422,20 @@ export const ConferenceDetailsPage: React.FC<ConferenceDetailsPageProps> = ({
         </section>
       )}
 
+      {/* 9. CONTACT US FORM SECTION */}
+      <ConferenceContactSection conference={conference} />
+
       {/* CONDENSED CONFERENCE FOOTER (kept short, no lengthy about-us text) */}
       <footer className="bg-[#0A192F] text-slate-300 py-8 border-t border-slate-800">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs">
           <span className="text-slate-400">
             © {new Date().getFullYear()} SCINS Media. {conference.short_title || conference.title}.
           </span>
-          <div className="flex items-center gap-4">
+          <div className="flex flex-wrap items-center gap-4">
             <a href="mailto:scinsmedia@gmail.com" className="text-teal-400 hover:text-teal-300 transition-colors">
               scinsmedia@gmail.com
             </a>
+            <span className="text-slate-600 hidden sm:inline">•</span>
             <button
               type="button"
               onClick={() => (onNavigate ? onNavigate('/conferences') : undefined)}
@@ -1214,6 +1443,19 @@ export const ConferenceDetailsPage: React.FC<ConferenceDetailsPageProps> = ({
             >
               All Conferences
             </button>
+            <span className="text-slate-600 hidden sm:inline">•</span>
+            <a
+              href="/terms-and-conditions"
+              onClick={(e) => {
+                if (!e.ctrlKey && !e.metaKey && e.button === 0 && onNavigate) {
+                  e.preventDefault();
+                  onNavigate('/terms-and-conditions');
+                }
+              }}
+              className="text-slate-400 hover:text-teal-300 transition-colors cursor-pointer"
+            >
+              Terms & Conditions
+            </a>
           </div>
         </div>
       </footer>
@@ -1222,25 +1464,28 @@ export const ConferenceDetailsPage: React.FC<ConferenceDetailsPageProps> = ({
       {/* MODALS */}
       <AbstractSubmissionModal
         isOpen={isAbstractModalOpen}
-        onClose={() => {
-          setIsAbstractModalOpen(false);
-          if (autoOpenAbstract && onNavigate) {
-            onNavigate(`/conferences/${conference.slug}`);
-          }
-        }}
+        onClose={handleCloseAction}
         conference={conference}
       />
 
       <RegistrationModal
         isOpen={isRegisterModalOpen}
-        onClose={() => setIsRegisterModalOpen(false)}
+        onClose={handleCloseAction}
         conference={conference}
+        initialCategoryId={selectedRegisterCategoryId}
+        onNavigate={onNavigate}
       />
 
       <ProposalSubmissionModal
         isOpen={isProposalModalOpen}
         onClose={() => setIsProposalModalOpen(false)}
         defaultConferenceId={conference.id}
+      />
+
+      <BrochureEnquiryModal
+        isOpen={isBrochureEnquiryModalOpen}
+        onClose={handleCloseAction}
+        conference={conference}
       />
 
       <CommitteeModal
@@ -1288,7 +1533,7 @@ export const ConferenceDetailsPage: React.FC<ConferenceDetailsPageProps> = ({
       <SessionDetailModal
         session={selectedSessionModal}
         onClose={() => setSelectedSessionModal(null)}
-        onSubmitAbstractForSession={() => setIsAbstractModalOpen(true)}
+        onSubmitAbstractForSession={() => handleOpenAction('submit-abstract')}
       />
     </div>
   );

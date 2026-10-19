@@ -1,0 +1,13 @@
+User-agent: *
+Allow: /
+Allow: /conferences
+Allow: /about
+Allow: /contact
+Allow: /terms
+Allow: /uploads/
+Disallow: /admin
+Disallow: /admin/
+Disallow: /api/
+Disallow: /database/
+
+Sitemap: https://scinsmedia.com/sitemap.xml

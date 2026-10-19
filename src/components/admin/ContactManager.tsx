@@ -45,9 +45,9 @@ export const ContactManager: React.FC<ContactManagerProps> = ({
     } catch (err) {
       console.warn('Direct server contact export notice, using client fallback:', err);
       const targetSubmissions = filtered.length > 0 ? filtered : submissions;
-      const header = 'ID,Name,Email,Phone,Subject,Message,Status,Date\n';
+      const header = 'ID,Conference,Name,Email,Phone,Subject,Message,Status,Date\n';
       const rows = targetSubmissions.map(c =>
-        `"${c.id}","${(c.name || '').replace(/"/g, '""')}","${c.email}","${c.phone || ''}","${(c.subject || '').replace(/"/g, '""')}","${(c.message || '').replace(/"/g, '""')}","${c.status}","${c.created_at}"`
+        `"${c.id}","${(c.conference_title || (c.conference_id ? `Conference #${c.conference_id}` : 'General Inquiry')).replace(/"/g, '""')}","${(c.name || '').replace(/"/g, '""')}","${c.email}","${c.phone || ''}","${(c.subject || '').replace(/"/g, '""')}","${(c.message || '').replace(/"/g, '""')}","${c.status}","${c.created_at}"`
       ).join('\n');
       const filename = `scinsmedia-contacts-${statusFilter.toLowerCase()}-${Date.now()}.csv`;
       api.downloadCsvFile(header + rows, filename);
@@ -66,6 +66,7 @@ export const ContactManager: React.FC<ContactManagerProps> = ({
         item.name.toLowerCase().includes(q) ||
         item.email.toLowerCase().includes(q) ||
         (item.phone && item.phone.toLowerCase().includes(q)) ||
+        (item.conference_title && item.conference_title.toLowerCase().includes(q)) ||
         item.subject.toLowerCase().includes(q) ||
         item.message.toLowerCase().includes(q);
 
@@ -291,6 +292,13 @@ export const ContactManager: React.FC<ContactManagerProps> = ({
 
                     {/* Subject & Message Preview */}
                     <td className="p-4 align-top">
+                      {item.conference_title && (
+                        <div className="mb-1.5">
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold bg-teal-50 text-teal-800 border border-teal-200/80">
+                            {item.conference_title}
+                          </span>
+                        </div>
+                      )}
                       <div className="font-semibold text-slate-900 text-xs">
                         {item.subject}
                       </div>
@@ -370,6 +378,12 @@ export const ContactManager: React.FC<ContactManagerProps> = ({
             {/* Modal Content */}
             <div className="p-6 space-y-4">
               <div className="grid grid-cols-2 gap-3 bg-slate-50 p-4 rounded-xl border border-slate-200">
+                <div className="col-span-2">
+                  <div className="text-[10px] uppercase font-bold text-slate-400">Associated Conference</div>
+                  <div className="text-xs font-bold text-teal-900 mt-0.5">
+                    {selectedEnquiry.conference_title || (selectedEnquiry.conference_id ? `Conference ID #${selectedEnquiry.conference_id}` : 'General Inquiry / Website Header')}
+                  </div>
+                </div>
                 <div>
                   <div className="text-[10px] uppercase font-bold text-slate-400">Name</div>
                   <div className="text-xs font-bold text-slate-900 mt-0.5">{selectedEnquiry.name}</div>

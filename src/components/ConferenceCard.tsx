@@ -1,5 +1,5 @@
 import React from 'react';
-import { Calendar, MapPin, Sparkles, ArrowRight, FileText, CheckCircle } from 'lucide-react';
+import { Calendar, MapPin, ArrowRight, FileText, CheckCircle } from 'lucide-react';
 import { Conference } from '../types';
 
 interface ConferenceCardProps {
@@ -29,17 +29,11 @@ export const ConferenceCard: React.FC<ConferenceCardProps> = ({
         />
         <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-transparent to-black/30" />
 
-        {/* Top Badges */}
-        <div className="absolute top-3 left-3 right-3 flex items-center justify-between">
-          <span className="text-[10px] font-bold uppercase tracking-wider bg-slate-900/80 backdrop-blur-md text-white border border-white/20 px-2.5 py-1 rounded-full">
-            {conference.domain}
+        {/* Top Short Name / Acronym Badge */}
+        <div className="absolute top-3 left-3 flex items-center">
+          <span className="text-[10px] font-bold uppercase tracking-wider bg-slate-900/80 backdrop-blur-md text-white border border-white/20 px-2.5 py-1 rounded-full shadow-sm">
+            {conference.short_title || conference.conference_code || conference.title}
           </span>
-          {conference.featured_badge && (
-            <span className="text-[10px] font-bold uppercase tracking-wider bg-teal-500 text-slate-950 px-2.5 py-1 rounded-full shadow-md flex items-center space-x-1">
-              <Sparkles className="w-3 h-3" />
-              <span>{conference.featured_badge}</span>
-            </span>
-          )}
         </div>
 
         {/* Bottom City Overlay */}

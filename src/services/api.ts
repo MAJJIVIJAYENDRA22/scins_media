@@ -12,7 +12,6 @@ import {
   Registration,
   AbstractSubmission,
   ProposalSubmission,
-  Publication,
   Sponsor,
   MediaPartner,
   Testimonial,
@@ -23,7 +22,10 @@ import {
   ApiResponse,
   ContactEnquiry,
   NewsletterSubscriber,
-  MediaAsset
+  MediaAsset,
+  BrochureEnquiry,
+  TermsSection,
+  TermsContent
 } from '../types';
 
 const API_BASE = '/api/v1';
@@ -58,7 +60,7 @@ async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
     },
     ...options
   });
-  
+
   if (!response.ok) {
     if (response.status === 401 && typeof window !== 'undefined') {
       const path = window.location.pathname;
@@ -76,7 +78,7 @@ async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
     });
     throw new Error(errorData.message || `HTTP Error ${response.status}`);
   }
-  
+
   const result: ApiResponse<T> = await response.json();
   return result.data as T;
 }
@@ -125,7 +127,7 @@ export async function downloadExport(
     try {
       const errJson = await res.json();
       if (errJson?.message) errMsg = errJson.message;
-    } catch {}
+    } catch { }
     throw new Error(errMsg);
   }
 
@@ -411,6 +413,10 @@ export const api = {
       method: 'PATCH',
       body: JSON.stringify(data)
     }),
+  deleteAbstract: (id: number) =>
+    fetchJson<{ success: boolean; message: string }>(`${API_BASE}/abstracts/${id}`, {
+      method: 'DELETE'
+    }),
 
   // Proposals (Workshops, Keynote Forums, Posters, Symposia)
   getProposals: (params?: { type?: string; status?: string; conference_id?: number }) => {
@@ -488,6 +494,27 @@ export const api = {
       body: JSON.stringify(data)
     }),
 
+  // Brochure Enquiries
+  submitBrochureEnquiry: (data: Partial<BrochureEnquiry>) =>
+    fetchJson<{ message: string; brochure_url?: string; conference_title?: string; id?: number }>(`${API_BASE}/brochure-enquiries`, {
+      method: 'POST',
+      body: JSON.stringify(data)
+    }),
+  getBrochureEnquiries: (params?: { conference_id?: number | string; search?: string; startDate?: string; endDate?: string; sort?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.conference_id && params.conference_id !== 'all') query.append('conference_id', String(params.conference_id));
+    if (params?.search) query.append('search', params.search);
+    if (params?.startDate) query.append('startDate', params.startDate);
+    if (params?.endDate) query.append('endDate', params.endDate);
+    if (params?.sort) query.append('sort', params.sort);
+    const qs = query.toString();
+    return fetchJson<BrochureEnquiry[]>(`${API_BASE}/brochure-enquiries${qs ? `?${qs}` : ''}`);
+  },
+  deleteBrochureEnquiry: (id: number) =>
+    fetchJson<{ message: string; id: number }>(`${API_BASE}/brochure-enquiries/${id}`, {
+      method: 'DELETE'
+    }),
+
   // Newsletter Subscribers
   getSubscribers: (params?: { status?: string; search?: string }) => {
     const query = new URLSearchParams();
@@ -540,6 +567,30 @@ export const api = {
       status: string;
       isLiveStripe: boolean;
     }>(`${API_BASE}/stripe/create-payment-intent`, {
+      method: 'POST',
+      body: JSON.stringify(data)
+    }),
+
+  createStripeCheckoutSession: (data: any) =>
+    fetchJson<{
+      url: string;
+      sessionId: string;
+      registration_id: string;
+    }>(`${API_BASE}/stripe/create-checkout-session`, {
+      method: 'POST',
+      body: JSON.stringify(data)
+    }),
+
+  verifyStripePaymentSession: (data: { session_id: string; registration_id?: string | number }) =>
+    fetchJson<{
+      status: string;
+      payment_status: string;
+      transaction_id?: string;
+      receipt_id?: string;
+      created_at?: string;
+      registration?: any;
+      message?: string;
+    }>(`${API_BASE}/stripe/verify-session`, {
       method: 'POST',
       body: JSON.stringify(data)
     }),
@@ -611,35 +662,20 @@ export const api = {
       body: JSON.stringify(config)
     }),
 
-  // Publications
-  getPublications: (params?: { search?: string; domain?: string; journal?: string }) => {
-    const query = new URLSearchParams();
-    if (params?.search) query.append('search', params.search);
-    if (params?.domain && params.domain !== 'All') query.append('domain', params.domain);
-    if (params?.journal && params.journal !== 'All') query.append('journal', params.journal);
-    const qs = query.toString();
-    return fetchJson<Publication[]>(`${API_BASE}/publications${qs ? `?${qs}` : ''}`);
-  },
-  createPublication: (data: Partial<Publication>) =>
-    fetchJson<Publication>(`${API_BASE}/publications`, {
-      method: 'POST',
-      body: JSON.stringify(data)
-    }),
-  updatePublication: (id: number, data: Partial<Publication>) =>
-    fetchJson<Publication>(`${API_BASE}/publications/${id}`, {
-      method: 'PUT',
-      body: JSON.stringify(data)
-    }),
-  deletePublication: (id: number) =>
-    fetchJson<{ message: string; id: number }>(`${API_BASE}/publications/${id}`, {
-      method: 'DELETE'
-    }),
 
   // Media Library
   getMediaLibrary: (category?: string) => {
     const qs = category ? `?category=${encodeURIComponent(category)}` : '';
     return fetchJson<{ success: boolean; data: MediaAsset[] }>(`${API_BASE}/media-library${qs}`);
   },
+
+  // Terms & Conditions
+  getTerms: () => fetchJson<{ success: boolean; data: TermsContent }>(`${API_BASE}/terms`),
+  updateTerms: (data: TermsContent) =>
+    fetchJson<ApiResponse<TermsContent>>(`${API_BASE}/terms`, {
+      method: 'PUT',
+      body: JSON.stringify(data)
+    }),
 
   // Auth
   login: (credentials: { email: string; password: string }) =>

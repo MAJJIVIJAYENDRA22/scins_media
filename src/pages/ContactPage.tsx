@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Mail, MapPin, Phone, Send, CheckCircle2, Shield } from 'lucide-react';
+import { Mail, MapPin, Phone, Send, CheckCircle2, Shield, AlertCircle } from 'lucide-react';
 import { api } from '../services/api';
 import { INITIAL_ORGANIZATION_INFO, OrganizationLocationInfo } from '../data/initialData';
 
@@ -32,15 +32,18 @@ export const ContactPage: React.FC = () => {
   });
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
+    setErrorMessage(null);
     try {
       await api.submitContact(formData);
       setSubmitted(true);
-    } catch (err) {
-      setSubmitted(true);
+    } catch (err: any) {
+      console.error('Contact submission error:', err);
+      setErrorMessage(err?.message || 'Failed to dispatch inquiry to Secretariat. Please check your network and try again.');
     } finally {
       setSubmitting(false);
     }
@@ -71,34 +74,28 @@ export const ContactPage: React.FC = () => {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
           {/* Secretariats & Visa Info */}
           <div className="lg:col-span-5 space-y-4">
-            <div className="bg-white p-6 rounded-3xl border border-slate-200/90 shadow-xs space-y-4">
-              <h3 className="text-base font-bold text-slate-900 font-display">
-                {orgInfo.headquarters_title || 'European Headquarters & Secretariat'}
-              </h3>
-              <div className="space-y-2 text-xs text-slate-600">
-                <div className="flex items-start">
-                  <MapPin className="w-4 h-4 text-[#0E7490] mr-2 flex-shrink-0 mt-0.5" />
-                  <span>{orgInfo.headquarters_location || 'Estonia, Europe'}</span>
-                </div>
-                <div className="flex items-center">
-                  <Mail className="w-4 h-4 text-[#0E7490] mr-2 flex-shrink-0" />
-                  <span className="font-mono text-[#0E7490] font-medium">{orgInfo.secretariat_email || 'scinsmedia@gmail.com'}</span>
-                </div>
+            <div className="bg-white p-6 sm:p-7 rounded-3xl border border-slate-200/90 shadow-xs space-y-4">
+              <div>
+                <span className="text-[11px] font-bold uppercase tracking-wider text-[#0E7490] font-mono block mb-1">
+                  Secretariat & Location
+                </span>
+                <h3 className="text-lg font-bold text-slate-900 font-display">
+                  European Secretariat
+                </h3>
               </div>
-            </div>
-
-            <div className="bg-white p-6 rounded-3xl border border-slate-200/90 shadow-xs space-y-4">
-              <h3 className="text-base font-bold text-slate-900 font-display">
-                {orgInfo.editorial_title || 'Editorial & Publications Secretariat'}
-              </h3>
-              <div className="space-y-2 text-xs text-slate-600">
+              <div className="space-y-3 text-xs sm:text-sm text-slate-600">
                 <div className="flex items-start">
-                  <MapPin className="w-4 h-4 text-[#0E7490] mr-2 flex-shrink-0 mt-0.5" />
-                  <span>{orgInfo.editorial_location || 'Estonia, Europe'}</span>
+                  <MapPin className="w-4 h-4 text-[#0E7490] mr-2.5 flex-shrink-0 mt-0.5" />
+                  <span className="text-slate-700 font-medium">{orgInfo.headquarters_location || 'Estonia, Europe'}</span>
                 </div>
                 <div className="flex items-center">
-                  <Mail className="w-4 h-4 text-[#0E7490] mr-2 flex-shrink-0" />
-                  <span className="font-mono text-[#0E7490] font-medium">{orgInfo.editorial_email || 'scinsmedia@gmail.com'}</span>
+                  <Mail className="w-4 h-4 text-[#0E7490] mr-2.5 flex-shrink-0" />
+                  <a
+                    href={`mailto:${orgInfo.secretariat_email || 'scinsmedia@gmail.com'}`}
+                    className="text-[#0E7490] hover:text-[#0A2540] font-medium transition-colors hover:underline"
+                  >
+                    {orgInfo.secretariat_email || 'scinsmedia@gmail.com'}
+                  </a>
                 </div>
               </div>
             </div>
@@ -144,6 +141,12 @@ export const ContactPage: React.FC = () => {
               </div>
             ) : (
               <form onSubmit={handleSubmit} className="space-y-4">
+                {errorMessage && (
+                  <div className="p-3 bg-red-50 border border-red-200 rounded-xl flex items-center space-x-2 text-xs text-red-700 animate-in fade-in">
+                    <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
+                    <span>{errorMessage}</span>
+                  </div>
+                )}
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   <div>
                     <label className="block text-xs font-semibold text-slate-800 mb-1">Your Full Name *</label>

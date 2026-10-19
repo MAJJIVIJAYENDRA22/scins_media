@@ -6,3 +6,10 @@ coverage/
 .env*
 !.env.example
 cookies.txt
+certs/
+*.pem
+*.key
+*.crt
+*.csr
+*.srl
+database/local_*.json

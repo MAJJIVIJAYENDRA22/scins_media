@@ -5,7 +5,6 @@ import {
   LayoutDashboard,
   Calendar,
   Users,
-  Mic,
   BookOpen,
   FileCheck2,
   CreditCard,
@@ -28,10 +27,12 @@ import {
   BarChart3,
   Mail,
   Send,
-  Presentation,
-  Database,
   LogOut,
-  Bookmark
+  Phone,
+  FileText,
+  Database,
+  FileDown,
+  Scale
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -52,44 +53,40 @@ import {
   Session,
   Registration,
   AbstractSubmission,
-  ProposalSubmission,
   AuditLog,
   Sponsor,
   ContactEnquiry,
   NewsletterSubscriber,
-  AdminUser,
-  Publication
+  BrochureEnquiry,
+  AdminUser
 } from '../types';
 import {
   INITIAL_CONFERENCES,
   COMMITTEE_MEMBERS,
-  SPEAKERS,
   SESSIONS_20,
   INITIAL_REGISTRATIONS,
   INITIAL_ABSTRACTS,
-  INITIAL_PROPOSALS,
   AUDIT_LOGS,
   INITIAL_ADMIN_USER,
   SPONSORS,
   INITIAL_CONTACT_ENQUIRIES,
   INITIAL_SUBSCRIBERS,
   INITIAL_ORGANIZATION_INFO,
-  OrganizationLocationInfo,
-  PUBLICATIONS
+  OrganizationLocationInfo
 } from '../data/initialData';
 import { api, getStoredAdminToken, isTokenValid, clearAdminSession } from '../services/api';
 import { CongressWizard } from '../components/admin/CongressWizard';
 import { ConferenceManager } from '../components/admin/ConferenceManager';
 import { CommitteeManager } from '../components/admin/CommitteeManager';
-import { SpeakerManager } from '../components/admin/SpeakerManager';
 import { SessionManager } from '../components/admin/SessionManager';
 import { SponsorManager } from '../components/admin/SponsorManager';
 import { ContactManager } from '../components/admin/ContactManager';
 import { SubscriberManager } from '../components/admin/SubscriberManager';
-import { ProposalManager } from '../components/admin/ProposalManager';
 import { RegistrationManager } from '../components/admin/RegistrationManager';
+import { BrochureEnquiryManager } from '../components/admin/BrochureEnquiryManager';
 import { DatabaseManager } from '../components/admin/DatabaseManager';
-import { PublicationManager } from '../components/admin/PublicationManager';
+import { AbstractManager } from '../components/admin/AbstractManager';
+import { TermsManager } from '../components/admin/TermsManager';
 import { AdminLoginPage } from './AdminLoginPage';
 
 interface AdminDashboardPageProps {
@@ -168,31 +165,29 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
     | 'wizard'
     | 'conferences'
     | 'committee'
-    | 'speakers'
     | 'sessions'
     | 'registrations'
     | 'abstracts'
-    | 'proposals'
     | 'sponsors'
     | 'contacts'
+    | 'brochure-enquiries'
     | 'subscribers'
     | 'database'
+    | 'terms'
     | 'settings'
   >('overview');
 
   // Core Data States
   const [conferences, setConferences] = useState<Conference[]>([...INITIAL_CONFERENCES]);
   const [committee, setCommittee] = useState<CommitteeMember[]>([...COMMITTEE_MEMBERS]);
-  const [speakers, setSpeakers] = useState<Speaker[]>([...SPEAKERS]);
   const [sessions, setSessions] = useState<Session[]>([...SESSIONS_20]);
   const [registrations, setRegistrations] = useState<Registration[]>([...INITIAL_REGISTRATIONS]);
   const [abstracts, setAbstracts] = useState<AbstractSubmission[]>([...INITIAL_ABSTRACTS]);
-  const [proposals, setProposals] = useState<ProposalSubmission[]>([...INITIAL_PROPOSALS]);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([...AUDIT_LOGS]);
   const [sponsors, setSponsors] = useState<Sponsor[]>([...SPONSORS]);
-  const [publications, setPublications] = useState<Publication[]>([...PUBLICATIONS]);
   const [contactSubmissions, setContactSubmissions] = useState<ContactEnquiry[]>([...INITIAL_CONTACT_ENQUIRIES]);
   const [subscribers, setSubscribers] = useState<NewsletterSubscriber[]>([...INITIAL_SUBSCRIBERS]);
+  const [brochureEnquiries, setBrochureEnquiries] = useState<BrochureEnquiry[]>([]);
 
   // Initial Sync from Backend Database
   useEffect(() => {
@@ -200,33 +195,29 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
     let mounted = true;
     async function loadData() {
       try {
-        const [c, com, spk, ses, spo, abs, propsData, reg, logs, conSub, subs, pubs] = await Promise.all([
+        const [c, com, ses, spo, abs, reg, logs, conSub, subs, bEnqs] = await Promise.all([
           api.getConferences().catch(() => INITIAL_CONFERENCES),
           api.getCommitteeMembers().catch(() => COMMITTEE_MEMBERS),
-          api.getSpeakers().catch(() => SPEAKERS),
           api.getSessions().catch(() => SESSIONS_20),
           api.getSponsors().catch(() => SPONSORS),
           api.getAbstracts().catch(() => INITIAL_ABSTRACTS),
-          api.getProposals().catch(() => INITIAL_PROPOSALS),
           api.getRegistrations().catch(() => INITIAL_REGISTRATIONS),
           api.getAuditLogs().catch(() => AUDIT_LOGS),
           api.getContactSubmissions().catch(() => INITIAL_CONTACT_ENQUIRIES),
           api.getSubscribers().catch(() => INITIAL_SUBSCRIBERS),
-          api.getPublications().catch(() => PUBLICATIONS)
+          api.getBrochureEnquiries().catch(() => [] as BrochureEnquiry[])
         ]);
         if (mounted) {
           if (c && c.length) setConferences(c);
           if (com && com.length) setCommittee(com);
-          if (spk && spk.length) setSpeakers(spk);
           if (ses && ses.length) setSessions(ses);
           if (spo && spo.length) setSponsors(spo);
           if (abs && abs.length) setAbstracts(abs);
-          if (propsData && propsData.length) setProposals(propsData);
           if (reg && reg.length) setRegistrations(reg);
           if (logs && logs.length) setAuditLogs(logs);
           if (conSub && conSub.length) setContactSubmissions(conSub);
           if (subs && subs.length) setSubscribers(subs);
-          if (pubs && pubs.length) setPublications(pubs);
+          if (bEnqs) setBrochureEnquiries(bEnqs);
         }
       } catch (err) {
         console.warn('Backend initial fetch error, using local state:', err);
@@ -238,27 +229,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
     };
   }, [isAuthenticated, isVerifying]);
 
-  // Reviewer Modal State
-  const [reviewingAbstract, setReviewingAbstract] = useState<AbstractSubmission | null>(null);
-  const [reviewerNotes, setReviewerNotes] = useState('');
-  const [reviewerStatus, setReviewerStatus] = useState<string>('accepted');
-  const [isExportingAbstracts, setIsExportingAbstracts] = useState(false);
 
-  const handleExportAbstracts = async () => {
-    setIsExportingAbstracts(true);
-    try {
-      await api.downloadExport('abstracts', undefined, `scinsmedia-abstracts-${Date.now()}.csv`);
-    } catch (err) {
-      console.warn('Backend export failed, falling back to local abstracts dataset:', err);
-      const header = 'SubmissionID,Title,PrimaryAuthor,Email,Country,Affiliation,Domain,Status,Date\n';
-      const rows = abstracts.map(a =>
-        `"${a.submission_id}","${(a.title || '').replace(/"/g, '""')}","${a.primary_author_name}","${a.primary_author_email}","${a.primary_author_country}","${a.primary_author_affiliation}","${a.research_domain}","${a.status}","${a.created_at}"`
-      ).join('\n');
-      api.downloadCsvFile(header + rows, `scinsmedia-abstracts-${Date.now()}.csv`);
-    } finally {
-      setIsExportingAbstracts(false);
-    }
-  };
 
 
 
@@ -440,35 +411,7 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
     });
   };
 
-  // Update Abstract Status
-  const handleReviewAbstract = async () => {
-    if (!reviewingAbstract) return;
-    try {
-      await api.updateAbstractStatus(reviewingAbstract.id, {
-        status: reviewerStatus as any,
-        reviewer_notes: reviewerNotes,
-        assigned_reviewer_name: INITIAL_ADMIN_USER.name
-      });
-      setAbstracts(
-        abstracts.map(a =>
-          a.id === reviewingAbstract.id
-            ? { ...a, status: reviewerStatus as any, reviewer_notes: reviewerNotes }
-            : a
-        )
-      );
-      setReviewingAbstract(null);
-      alert('Abstract status and reviewer notes updated successfully.');
-    } catch (e) {
-      setAbstracts(
-        abstracts.map(a =>
-          a.id === reviewingAbstract.id
-            ? { ...a, status: reviewerStatus as any, reviewer_notes: reviewerNotes }
-            : a
-        )
-      );
-      setReviewingAbstract(null);
-    }
-  };
+
 
   // Authentication Guard Check - Never display blank/white screen if unauthenticated
   if (!isAuthenticated) {
@@ -519,9 +462,6 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
             <h1 className="text-sm sm:text-base font-bold text-slate-900 font-display">
               Operations Management Portal
             </h1>
-            <p className="text-xs text-slate-500">
-              Authenticated Workspace • cPanel MySQL Relational Active • Administrator: {currentUser.name} ({currentUser.email})
-            </p>
           </div>
         </div>
 
@@ -574,16 +514,15 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
             },
             { id: 'conferences', label: `Conferences (${conferences.length})`, icon: Calendar },
             { id: 'database', label: 'cPanel SQL Database', icon: Database, badge: 'GoDaddy' },
-            { id: 'abstracts', label: `Abstracts Review (${pendingAbstractsCount})`, icon: FileCheck2 },
-            { id: 'proposals', label: `Proposals (${proposals.length})`, icon: Presentation, badge: 'Global' },
+            { id: 'abstracts', label: `Abstract Submissions (${abstracts.length})`, icon: FileCheck2 },
             { id: 'registrations', label: `Registrations (${registrations.length})`, icon: CreditCard },
-            { id: 'publications', label: `Publications (${publications.length})`, icon: Bookmark },
+            { id: 'brochure-enquiries', label: `Brochure Enquiries (${brochureEnquiries.length})`, icon: FileDown },
             { id: 'committee', label: `Committee (${committee.length})`, icon: Users },
-            { id: 'speakers', label: `Speakers (${speakers.length})`, icon: Mic },
             { id: 'sessions', label: `Program / Schedule (${sessions.length})`, icon: BookOpen },
             { id: 'sponsors', label: `Sponsors & Partners (${sponsors.length})`, icon: Building },
             { id: 'contacts', label: `Contact Submissions (${contactSubmissions.length})`, icon: Mail },
             { id: 'subscribers', label: `Newsletter Subscribers (${subscribers.length})`, icon: Send },
+            { id: 'terms', label: 'Terms & Conditions', icon: Scale },
             { id: 'settings', label: 'Security & Auth', icon: Settings }
           ].map(item => {
             const Icon = item.icon;
@@ -892,155 +831,13 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
             />
           )}
 
-          {/* TAB 4: ABSTRACT REVIEW PIPELINE */}
+          {/* TAB 4: ABSTRACT SUBMISSIONS MANAGER */}
           {activeTab === 'abstracts' && (
-            <div className="space-y-4">
-              {/* Sample Abstract Templates — per-conference upload */}
-              <div className="p-5 bg-white border border-slate-200 rounded-2xl shadow-xs space-y-4">
-                <div>
-                  <h3 className="text-sm font-bold text-slate-900">Sample Abstract Templates</h3>
-                  <p className="text-xs text-slate-500">
-                    Upload the reference abstract PDF/DOCX for each conference. Delegates can download this from the
-                    "Sample" button next to Submit Abstract on that conference's page.
-                  </p>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {conferences.map(conf => (
-                    <div key={conf.id} className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-semibold text-slate-800 truncate pr-2">{conf.short_title || conf.title}</span>
-                        <div className="flex items-center gap-2 shrink-0">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const link = `${window.location.origin}/abstract/${conf.slug}`;
-                              navigator.clipboard?.writeText(link);
-                              alert(`Copied: ${link}`);
-                            }}
-                            title="Copy direct abstract submission link"
-                            className="text-[10px] font-semibold text-slate-600 hover:text-slate-800 flex items-center space-x-1"
-                          >
-                            <LinkIcon className="w-3 h-3" />
-                            <span>Copy Link</span>
-                          </button>
-                          {conf.sample_abstract_url && (
-                            <a
-                              href={conf.sample_abstract_url}
-                              download
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-[10px] font-semibold text-teal-700 hover:text-teal-800 flex items-center space-x-1"
-                            >
-                              <Download className="w-3 h-3" />
-                              <span>Preview</span>
-                            </a>
-                          )}
-                        </div>
-                      </div>
-                      <MediaUploadInput
-                        label=""
-                        value={conf.sample_abstract_url || ''}
-                        onChange={async (url) => {
-                          const updated = { ...conf, sample_abstract_url: url };
-                          setConferences(prev => prev.map(c => (c.id === conf.id ? updated : c)));
-                          try {
-                            await api.updateConference(conf.id, { sample_abstract_url: url });
-                          } catch (e) {
-                            // Local state already updated; ignore network sync failure in demo mode
-                          }
-                        }}
-                        accept="pdf"
-                        maxSizeMB={10}
-                        category="sample_abstract"
-                        placeholder="https://scinsmedia.org/abstracts/sample.pdf"
-                      />
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-base font-bold text-slate-900 font-display">
-                    Scientific Abstract Review Pipeline
-                  </h3>
-                  <p className="text-xs text-slate-500">Single-blind peer evaluation and acceptance decisions</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={handleExportAbstracts}
-                  disabled={isExportingAbstracts || abstracts.length === 0}
-                  className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 rounded-xl text-xs font-semibold flex items-center space-x-1.5 cursor-pointer disabled:opacity-60 transition-colors"
-                  title="Export scientific abstracts to CSV"
-                >
-                  {isExportingAbstracts ? (
-                    <div className="w-3.5 h-3.5 border-2 border-teal-700 border-t-transparent rounded-full animate-spin" />
-                  ) : (
-                    <Download className="w-3.5 h-3.5 text-teal-700" />
-                  )}
-                  <span>{isExportingAbstracts ? 'Exporting...' : 'Export CSV'}</span>
-                </button>
-              </div>
-
-              <div className="space-y-3">
-                {abstracts.map(abs => (
-                  <div
-                    key={abs.id}
-                    className="p-5 bg-white border border-slate-200 rounded-2xl shadow-xs space-y-3"
-                  >
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div className="flex items-center space-x-2">
-                        <span className="font-mono text-teal-800 bg-teal-50 px-2 py-0.5 rounded border border-teal-200 text-xs font-bold">
-                          {abs.submission_id}
-                        </span>
-                        <span className="text-xs text-slate-500">• {abs.primary_author_country}</span>
-                      </div>
-                      <span
-                        className={`text-[10px] font-bold uppercase px-2.5 py-0.5 rounded-full ${
-                          abs.status === 'accepted'
-                            ? 'bg-teal-50 text-teal-800 border border-teal-200'
-                            : abs.status === 'rejected'
-                            ? 'bg-red-50 text-red-800 border border-red-200'
-                            : 'bg-amber-50 text-amber-800 border border-amber-200'
-                        }`}
-                      >
-                        {abs.status.replace('_', ' ')}
-                      </span>
-                    </div>
-
-                    <h4 className="text-sm font-bold text-slate-900">{abs.title}</h4>
-                    <p className="text-xs text-slate-500">
-                      Author: <span className="text-slate-800 font-semibold">{abs.primary_author_name}</span> ({abs.primary_author_affiliation})
-                    </p>
-
-                    <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs text-slate-700 leading-relaxed line-clamp-3 italic">
-                      "{abs.abstract_text}"
-                    </div>
-
-                    <div className="pt-2 flex items-center justify-between text-xs border-t border-slate-100">
-                      <span className="text-slate-500">Keywords: {abs.keywords}</span>
-                      <button
-                        onClick={() => {
-                          setReviewingAbstract(abs);
-                          setReviewerStatus(abs.status);
-                          setReviewerNotes(abs.reviewer_notes || '');
-                        }}
-                        className="px-3.5 py-1.5 bg-teal-800 hover:bg-teal-900 text-white rounded-lg text-xs font-semibold shadow-xs"
-                      >
-                        Conduct Peer Evaluation
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* TAB: GLOBAL PROPOSALS (WORKSHOPS, KEYNOTES, POSTERS, SYMPOSIA) */}
-          {activeTab === 'proposals' && (
-            <ProposalManager
-              proposals={proposals}
-              onProposalsChange={setProposals}
+            <AbstractManager
+              abstracts={abstracts}
+              conferences={conferences}
+              onAbstractsChange={setAbstracts}
+              onConferencesChange={setConferences}
             />
           )}
 
@@ -1054,30 +851,12 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
             />
           )}
 
-          {/* TAB: PUBLICATIONS CRUD MANAGER */}
-          {activeTab === 'publications' && (
-            <PublicationManager
-              publications={publications}
-              conferences={conferences}
-              onPublicationsChange={setPublications}
-            />
-          )}
-
           {/* TAB 6: COMMITTEE MEMBERS CRUD MANAGER */}
           {activeTab === 'committee' && (
             <CommitteeManager
               committee={committee}
               conferences={conferences}
               onCommitteeChange={setCommittee}
-            />
-          )}
-
-          {/* TAB 7: SPEAKERS CRUD MANAGER */}
-          {activeTab === 'speakers' && (
-            <SpeakerManager
-              speakers={speakers}
-              conferences={conferences}
-              onSpeakersChange={setSpeakers}
             />
           )}
 
@@ -1096,6 +875,15 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
               sponsors={sponsors}
               conferences={conferences}
               onSponsorsChange={setSponsors}
+            />
+          )}
+
+          {/* TAB: BROCHURE ENQUIRIES */}
+          {activeTab === 'brochure-enquiries' && (
+            <BrochureEnquiryManager
+              enquiries={brochureEnquiries}
+              conferences={conferences}
+              onEnquiriesChange={setBrochureEnquiries}
             />
           )}
 
@@ -1233,6 +1021,19 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
                       className="w-full bg-white border border-slate-300 rounded-xl px-3.5 py-2 text-xs text-slate-900 focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600"
                     />
                   </div>
+                  <div className="sm:col-span-2">
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">Official WhatsApp Business Contact Number</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. +91 6300638396 or +44 7123456789"
+                      value={orgInfo.whatsapp_number || ''}
+                      onChange={e => setOrgInfo(prev => ({ ...prev, whatsapp_number: e.target.value }))}
+                      className="w-full bg-white border border-slate-300 rounded-xl px-3.5 py-2 text-xs text-slate-900 focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600"
+                    />
+                    <p className="text-[11px] text-slate-500 mt-1">
+                      This number is linked to the floating WhatsApp chat button across all public pages.
+                    </p>
+                  </div>
                 </div>
 
                 <button
@@ -1249,66 +1050,15 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
               </div>
             </div>
           )}
+
+          {/* TAB: TERMS & CONDITIONS MANAGEMENT */}
+          {activeTab === 'terms' && (
+            <TermsManager onNavigate={onNavigate} />
+          )}
         </main>
       </div>
 
-      {/* Reviewer Modal (White Palette) */}
-      {reviewingAbstract && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs"
-          onClick={() => setReviewingAbstract(null)}
-        >
-          <div
-            className="w-full max-w-xl bg-white border border-slate-200 rounded-3xl p-6 sm:p-8 space-y-4 shadow-2xl"
-            onClick={e => e.stopPropagation()}
-          >
-            <h3 className="text-base font-bold text-slate-900 font-display">
-              Scientific Review: {reviewingAbstract.submission_id}
-            </h3>
-            <p className="text-xs text-teal-800 font-semibold">{reviewingAbstract.title}</p>
 
-            <div className="space-y-2">
-              <label className="block text-xs font-semibold text-slate-700">Committee Review Decision</label>
-              <select
-                value={reviewerStatus}
-                onChange={e => setReviewerStatus(e.target.value)}
-                className="w-full bg-white border border-slate-300 rounded-xl px-3.5 py-2 text-xs text-slate-900 font-semibold focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600"
-              >
-                <option value="accepted">Accepted for Oral Presentation</option>
-                <option value="revision_required">Revision Required by Author</option>
-                <option value="rejected">Rejected (Does Not Meet Scope)</option>
-                <option value="under_review">Under Secondary Evaluation</option>
-              </select>
-            </div>
-
-            <div className="space-y-2">
-              <label className="block text-xs font-semibold text-slate-700">Reviewer Notes & Feedback</label>
-              <textarea
-                rows={4}
-                placeholder="Enter feedback for the author regarding experimental rigor, data analysis, or oral slot timing..."
-                value={reviewerNotes}
-                onChange={e => setReviewerNotes(e.target.value)}
-                className="w-full bg-white border border-slate-300 rounded-xl p-3 text-xs text-slate-900 leading-relaxed focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600"
-              />
-            </div>
-
-            <div className="flex justify-end space-x-2 pt-2">
-              <button
-                onClick={() => setReviewingAbstract(null)}
-                className="px-4 py-2 text-xs text-slate-600 hover:text-slate-900"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleReviewAbstract}
-                className="px-5 py-2 bg-teal-800 hover:bg-teal-900 text-white font-bold rounded-xl text-xs shadow-xs"
-              >
-                Submit Review Decision
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

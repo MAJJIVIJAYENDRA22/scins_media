@@ -1,16 +1,13 @@
 import React, { useState } from 'react';
 import {
-  Shield,
   CheckCircle2,
   Calendar,
-  BookOpen,
-  UserCheck,
   CreditCard,
   Building,
+  MapPin,
   Mail,
-  ExternalLink,
-  ArrowRight,
-  Globe
+  Shield,
+  Lock
 } from 'lucide-react';
 import { api } from '../services/api';
 import { INITIAL_ORGANIZATION_INFO, OrganizationLocationInfo } from '../data/initialData';
@@ -144,15 +141,6 @@ export const Footer: React.FC<FooterProps> = ({
               </li>
               <li>
                 <a
-                  href="/speakers"
-                  onClick={(e) => handleLink(e, '/speakers')}
-                  className="hover:text-teal-300 transition-colors text-left cursor-pointer inline-block"
-                >
-                  Distinguished Keynotes
-                </a>
-              </li>
-              <li>
-                <a
                   href="/conferences"
                   onClick={(e) => handleLink(e, '/conferences')}
                   className="hover:text-teal-300 transition-colors text-left cursor-pointer inline-block"
@@ -191,15 +179,6 @@ export const Footer: React.FC<FooterProps> = ({
               </li>
               <li>
                 <a
-                  href="/publications"
-                  onClick={(e) => handleLink(e, '/publications')}
-                  className="hover:text-teal-300 transition-colors text-left cursor-pointer inline-block"
-                >
-                  Peer-Reviewed Journals & Articles
-                </a>
-              </li>
-              <li>
-                <a
                   href="/contact"
                   onClick={(e) => handleLink(e, '/contact')}
                   className="hover:text-teal-300 transition-colors text-left cursor-pointer inline-block"
@@ -216,22 +195,52 @@ export const Footer: React.FC<FooterProps> = ({
                   Institutional Bank Transfer / Invoice
                 </a>
               </li>
+              <li>
+                <a
+                  href="/terms-and-conditions"
+                  onClick={(e) => handleLink(e, '/terms-and-conditions')}
+                  className="hover:text-teal-300 transition-colors text-left cursor-pointer inline-block"
+                >
+                  Terms & Conditions
+                </a>
+              </li>
             </ul>
           </div>
 
-          {/* Col 4: Secretariats & Administration (3 cols) */}
+          {/* Col 4: Secretariat & Location (3 cols) */}
           <div className="lg:col-span-3 space-y-3">
             <h4 className="text-xs font-bold uppercase tracking-wider text-white font-mono flex items-center space-x-1.5">
-              <Building className="w-3.5 h-3.5 text-teal-400" />
+              <Building className="w-3.5 h-3.5 text-teal-400 shrink-0" />
               <span>Secretariat & Location</span>
             </h4>
-            <div className="space-y-2 text-xs text-slate-300">
-              <div>
-                <span className="font-semibold text-slate-200 block">European Secretariat:</span>
-                <span className="text-[11px] text-slate-400 block">{orgInfo.headquarters_location || 'Estonia, Europe'}</span>
+            <div className="space-y-2.5 text-xs text-slate-300">
+              <div className="font-bold text-slate-100 font-display text-sm tracking-tight">
+                European Secretariat
               </div>
-              <div className="pt-1">
-                <span className="text-[11px] text-teal-400 font-mono">{orgInfo.secretariat_email || 'scinsmedia@gmail.com'}</span>
+              <div className="flex items-start space-x-2 text-slate-300">
+                <MapPin className="w-3.5 h-3.5 text-teal-400 shrink-0 mt-0.5" />
+                <span>{orgInfo.headquarters_location || 'Estonia, Europe'}</span>
+              </div>
+              <div className="flex items-center space-x-2 pt-0.5">
+                <Mail className="w-3.5 h-3.5 text-teal-400 shrink-0" />
+                <a
+                  href={`mailto:${orgInfo.secretariat_email || 'scinsmedia@gmail.com'}`}
+                  className="text-teal-400 hover:text-teal-300 transition-colors font-medium hover:underline"
+                >
+                  {orgInfo.secretariat_email || 'scinsmedia@gmail.com'}
+                </a>
+              </div>
+              <div className="pt-2">
+                <button
+                  type="button"
+                  id="footer-admin-portal-link"
+                  onClick={() => handleLink('/admin')}
+                  className="inline-flex items-center space-x-1.5 text-slate-300 hover:text-teal-300 transition-colors text-xs font-semibold bg-slate-800/90 hover:bg-slate-700/80 px-3 py-1.5 rounded-lg border border-slate-700/70 hover:border-teal-500/40 cursor-pointer shadow-xs"
+                  title="SCINS Media Administrator Portal"
+                >
+                  <Lock className="w-3 h-3 text-teal-400" />
+                  <span>Admin Portal</span>
+                </button>
               </div>
             </div>
           </div>
@@ -242,22 +251,24 @@ export const Footer: React.FC<FooterProps> = ({
           <div className="flex flex-wrap items-center gap-2">
             <span>© {new Date().getFullYear()} SCINS Media Scientific Ecosystem. All rights reserved.</span>
             <span>•</span>
-
           </div>
 
           <div className="flex flex-wrap items-center gap-4 text-[11px]">
-            <span className="flex items-center space-x-1 text-slate-300">
-              <Shield className="w-3.5 h-3.5 text-teal-400" />
-              <span>PCI-DSS & SSL Encrypted</span>
-            </span>
-            <span>•</span>
             <button
               type="button"
               onClick={() => handleLink('/about')}
               className="hover:text-slate-200 transition-colors cursor-pointer"
             >
-              Ethics & Malpractice Statement
+              About
             </button>
+            <span>•</span>
+            <a
+              href="/terms-and-conditions"
+              onClick={(e) => handleLink(e, '/terms-and-conditions')}
+              className="hover:text-slate-200 transition-colors cursor-pointer inline-block"
+            >
+              Terms & Conditions
+            </a>
             <span>•</span>
             <button
               type="button"
@@ -265,6 +276,17 @@ export const Footer: React.FC<FooterProps> = ({
               className="hover:text-slate-200 transition-colors cursor-pointer"
             >
               Contact Support
+            </button>
+            <span>•</span>
+            <button
+              type="button"
+              id="footer-bottom-admin-login"
+              onClick={() => handleLink('/admin')}
+              className="hover:text-teal-300 text-slate-300 font-semibold transition-colors cursor-pointer inline-flex items-center space-x-1"
+              title="Administrator Sign In"
+            >
+              <Shield className="w-3 h-3 text-teal-400" />
+              <span>Admin Login</span>
             </button>
           </div>
         </div>

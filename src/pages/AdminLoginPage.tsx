@@ -24,9 +24,16 @@ export const AdminLoginPage: React.FC<AdminLoginPageProps> = ({
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [rememberMe, setRememberMe] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+
+  // Always ensure any stale session tokens are purged when on login screen
+  React.useEffect(() => {
+    sessionStorage.removeItem('scins_admin_token');
+    sessionStorage.removeItem('scins_admin_user');
+    localStorage.removeItem('scins_admin_token');
+    localStorage.removeItem('scins_admin_user');
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -40,9 +47,10 @@ export const AdminLoginPage: React.FC<AdminLoginPageProps> = ({
     setIsLoading(true);
 
     try {
-      const response = await api.login({ email, password });
+      const response = await api.login({ email: email.trim(), password: password.trim() });
       
       if (response && response.user && response.token) {
+        // Store only in sessionStorage for the active window session
         sessionStorage.setItem('scins_admin_token', response.token);
         sessionStorage.setItem('scins_admin_user', JSON.stringify(response.user));
         localStorage.removeItem('scins_admin_token');
@@ -140,7 +148,7 @@ export const AdminLoginPage: React.FC<AdminLoginPageProps> = ({
               )}
 
               {/* Form */}
-              <form onSubmit={handleSubmit} className="space-y-4">
+              <form onSubmit={handleSubmit} className="space-y-4" autoComplete="off">
                 {/* Email */}
                 <div className="space-y-1.5">
                   <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500">
@@ -149,8 +157,10 @@ export const AdminLoginPage: React.FC<AdminLoginPageProps> = ({
                   <div className="relative">
                     <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
                     <input
+                      id="admin-login-email-input"
                       type="email"
                       required
+                      autoComplete="off"
                       value={email}
                       onChange={e => setEmail(e.target.value)}
                       placeholder="Enter administrator email..."
@@ -171,8 +181,10 @@ export const AdminLoginPage: React.FC<AdminLoginPageProps> = ({
                   <div className="relative">
                     <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
                     <input
+                      id="admin-login-password-input"
                       type={showPassword ? 'text' : 'password'}
                       required
+                      autoComplete="new-password"
                       value={password}
                       onChange={e => setPassword(e.target.value)}
                       placeholder="Enter security password..."
@@ -188,19 +200,6 @@ export const AdminLoginPage: React.FC<AdminLoginPageProps> = ({
                       {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                     </button>
                   </div>
-                </div>
-
-                {/* Checkboxes & Remember Me */}
-                <div className="flex items-center justify-between text-xs text-slate-500 pt-0.5">
-                  <label className="flex items-center space-x-2 cursor-pointer select-none">
-                    <input
-                      type="checkbox"
-                      checked={rememberMe}
-                      onChange={e => setRememberMe(e.target.checked)}
-                      className="w-4 h-4 rounded border-slate-300 bg-white text-teal-600 focus:ring-teal-500 focus:ring-offset-0"
-                    />
-                    <span className="text-slate-600 font-medium">Keep session active</span>
-                  </label>
                 </div>
 
                 {/* Submit Button */}

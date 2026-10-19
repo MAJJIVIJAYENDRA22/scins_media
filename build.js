@@ -6,6 +6,11 @@ const path = require('path');
 const { build: esbuildBuild } = require('esbuild');
 
 async function run() {
+  const isExplicitBuild =
+    process.env.npm_lifecycle_event === 'build' ||
+    process.argv.includes('--force') ||
+    process.env.FORCE_BUILD === 'true';
+
   const hasPrebuilt =
     fs.existsSync('dist/index.html') &&
     fs.existsSync('dist/server.cjs') &&
@@ -18,7 +23,7 @@ async function run() {
     Boolean(process.env.PASSENGER_APP_ENV) ||
     process.env.NODE_ENV === 'production';
 
-  if (hasPrebuilt && (isCloudOrProd || process.env.FORCE_BUILD !== 'true')) {
+  if (!isExplicitBuild && hasPrebuilt && isCloudOrProd) {
     console.log('[build] Verified pre-built production assets in dist/. Skipping heavy memory compilation for fast, reliable deployment.');
     return;
   }
@@ -42,6 +47,24 @@ async function run() {
     fs.copyFileSync('dist/server.cjs', 'dist/server.js');
   } catch (err) {
     console.warn('[build] Copy notice:', err.message);
+  }
+
+  try {
+    const pubUploads = path.join(__dirname, 'public', 'uploads');
+    const distUploads = path.join(__dirname, 'dist', 'uploads');
+    if (!fs.existsSync(distUploads)) fs.mkdirSync(distUploads, { recursive: true });
+    if (fs.existsSync(pubUploads)) {
+      const files = fs.readdirSync(pubUploads);
+      for (const file of files) {
+        const src = path.join(pubUploads, file);
+        const dest = path.join(distUploads, file);
+        if (fs.statSync(src).isFile() && !fs.existsSync(dest)) {
+          fs.copyFileSync(src, dest);
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('[build] Uploads mirror notice:', err.message);
   }
 
   console.log('[build] Production build completed successfully!');

@@ -1,11 +1,11 @@
-import React, { useState, useMemo } from 'react';
+import React, { useMemo, useEffect } from 'react';
 import {
   ArrowRight,
   Search,
   Sparkles,
   CheckCircle2
 } from 'lucide-react';
-import { parseConferenceDate, isConferenceCompleted, isConferenceOngoing } from '../utils/dateUtils';
+import { sortConferencesDynamically } from '../utils/dateUtils';
 import { HeroVisual } from '../components/HeroVisual';
 import { ConferenceCard } from '../components/ConferenceCard';
 import { Conference, Speaker, Testimonial } from '../types';
@@ -26,53 +26,33 @@ interface HomePageProps {
 
 export const HomePage: React.FC<HomePageProps> = ({
   conferences = INITIAL_CONFERENCES,
-  speakers = SPEAKERS,
+  speakers: _speakers = SPEAKERS,
   testimonials: _testimonials = TESTIMONIALS,
   onSelectConference = (_slug: string) => {},
   onNavigate = (_path: string) => {},
   onOpenSearch = () => {}
 }) => {
-  // Discovery Filter States
-  const [selectedDomain, setSelectedDomain] = useState<string>('All');
-  const [selectedCountry, setSelectedCountry] = useState<string>('All');
-  const [selectedMode, setSelectedMode] = useState<string>('All');
-  const [searchQuery, setSearchQuery] = useState<string>('');
-  const [timelineFilter, setTimelineFilter] = useState<'all' | 'ongoing' | 'completed'>('all');
+  // Smooth scroll support on direct URL access or refresh with hash anchor
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.location.hash) {
+      const hash = window.location.hash.slice(1);
+      const tryScroll = (retries = 8) => {
+        const el = document.getElementById(hash);
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth' });
+        } else if (retries > 0) {
+          setTimeout(() => tryScroll(retries - 1), 100);
+        }
+      };
+      setTimeout(() => tryScroll(8), 120);
+    }
+  }, []);
 
-  // Real-time automatic counts based on conference database dates
-  const ongoingCount = useMemo(() => {
-    return conferences.filter(c => (c.status === 'published' || !c.status) && isConferenceOngoing(c)).length;
+  // Display upcoming conferences dynamically sorted by date
+  const ongoingConferences = useMemo(() => {
+    const published = conferences.filter(c => c.status === 'published' || !c.status);
+    return sortConferencesDynamically(published).slice(0, 3);
   }, [conferences]);
-
-  const completedCount = useMemo(() => {
-    return conferences.filter(c => (c.status === 'published' || !c.status) && isConferenceCompleted(c)).length;
-  }, [conferences]);
-
-  // Filter conferences automatically based on dates and existing filters
-  const filteredConferences = conferences
-    .filter(c => {
-      const isPublished = c.status === 'published' || !c.status;
-      if (!isPublished) return false;
-
-      const matchesTimeline =
-        timelineFilter === 'all' ||
-        (timelineFilter === 'ongoing' && isConferenceOngoing(c)) ||
-        (timelineFilter === 'completed' && isConferenceCompleted(c));
-
-      if (!matchesTimeline) return false;
-
-      const matchDomain = selectedDomain === 'All' || c.domain.toLowerCase().includes(selectedDomain.toLowerCase());
-      const matchCountry = selectedCountry === 'All' || c.country.toLowerCase().includes(selectedCountry.toLowerCase());
-      const matchMode = selectedMode === 'All' || c.mode.toLowerCase() === selectedMode.toLowerCase();
-      const matchQuery = !searchQuery ||
-        c.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        c.theme.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        c.city.toLowerCase().includes(searchQuery.toLowerCase());
-      return matchDomain && matchCountry && matchMode && matchQuery;
-    })
-    .sort((a, b) => {
-      return parseConferenceDate(a.start_date) - parseConferenceDate(b.start_date);
-    });
 
   return (
     <div id="scinsmedia-home-page" className="min-h-screen bg-[#F8FAFC] text-slate-900 overflow-x-hidden pt-20">
@@ -103,11 +83,15 @@ export const HomePage: React.FC<HomePageProps> = ({
           {/* Primary Action Buttons */}
           <div className="pt-4 flex flex-col sm:flex-row items-center justify-center gap-3.5 max-w-md mx-auto">
             <a
-              href="/conferences/biopolymers-bioplastics-2026"
+              href="/conferences"
               onClick={(e) => {
                 if (!e.ctrlKey && !e.metaKey && e.button === 0) {
                   e.preventDefault();
-                  onSelectConference('biopolymers-bioplastics-2026');
+                  if (onNavigate) {
+                    onNavigate('/conferences');
+                  } else {
+                    window.location.href = '/conferences';
+                  }
                 }
               }}
               className="w-full sm:w-auto px-7 py-3.5 bg-[#0A2540] hover:bg-[#0E7490] text-white rounded-2xl text-sm font-semibold shadow-lg shadow-slate-900/10 flex items-center justify-center space-x-2 transition-all hover:scale-[1.02] cursor-pointer text-center"
@@ -117,7 +101,7 @@ export const HomePage: React.FC<HomePageProps> = ({
             </a>
             <button
               onClick={() => {
-                const el = document.getElementById('conference-discovery-section');
+                const el = document.getElementById('upcoming-conferences') || document.getElementById('conference-discovery-section');
                 el?.scrollIntoView({ behavior: 'smooth' });
               }}
               className="w-full sm:w-auto px-7 py-3.5 bg-white hover:bg-slate-50 text-slate-800 border border-slate-200 hover:border-slate-300 rounded-2xl text-sm font-semibold shadow-xs transition-all cursor-pointer"
@@ -226,232 +210,56 @@ export const HomePage: React.FC<HomePageProps> = ({
         </div>
       </section>
 
-      {/* 5. MULTI-FACETED CONFERENCE DISCOVERY INTERFACE */}
-      <section id="conference-discovery-section" className="scroll-mt-[90px] lg:scroll-mt-[110px] pt-6 pb-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      {/* 5. UPCOMING INTERNATIONAL CONGRESSES */}
+      <section id="upcoming-conferences" className="scroll-mt-[90px] lg:scroll-mt-[110px] pt-6 pb-16 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div id="conference-discovery-section" className="scroll-mt-[90px] lg:scroll-mt-[110px]" />
         <div className="space-y-8">
-          <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
-            <div>
-              <h2 className="text-3xl sm:text-4xl font-bold text-[#0A2540] font-display tracking-tight mb-2.5">
-                Conference
-              </h2>
-              <span className="block text-xs font-bold uppercase tracking-wider text-[#0E7490]">
-                Conference Directory
-              </span>
-              <h3 className="text-2xl sm:text-3xl font-bold text-slate-900 font-display mt-1">
-                Upcoming International Congresses
-              </h3>
-              <p className="text-sm text-slate-600 mt-1">
-                Filter by academic domain, hosting country, format, or search keywords.
-              </p>
-            </div>
-
-            <div className="text-xs text-slate-600 font-medium">
-              Showing <b>{filteredConferences.length}</b> verified scientific congresses
-            </div>
-          </div>
-
-          {/* Filter Bar */}
-          <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-sm grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
-            {/* Search */}
-            <div className="relative">
-              <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">Search Keywords</label>
-              <div className="relative">
-                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
-                <input
-                  type="text"
-                  placeholder="e.g. Biopolymers, Paris..."
-                  value={searchQuery}
-                  onChange={e => setSearchQuery(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-3 py-2 text-xs text-slate-900 focus:bg-white focus:outline-none focus:border-teal-500"
-                />
-              </div>
-            </div>
-
-            {/* Domain */}
-            <div>
-              <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">Academic Domain</label>
-              <select
-                value={selectedDomain}
-                onChange={e => setSelectedDomain(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 focus:bg-white focus:outline-none focus:border-teal-500"
-              >
-                <option value="All">All Scientific Domains</option>
-                <option value="Biotechnology">Biotechnology & Materials</option>
-                <option value="Nanomedicine">Nanomedicine & Oncology</option>
-                <option value="Artificial Intelligence">Artificial Intelligence in Health</option>
-                <option value="Green Chemistry">Green Chemistry & Energy</option>
-                <option value="Quantum Physics">Quantum Optics & Computing</option>
-              </select>
-            </div>
-
-            {/* Country */}
-            <div>
-              <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">Host Country</label>
-              <select
-                value={selectedCountry}
-                onChange={e => setSelectedCountry(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 focus:bg-white focus:outline-none focus:border-teal-500"
-              >
-                <option value="All">All Global Locations</option>
-                <option value="France">France (Paris)</option>
-                <option value="United States">United States (Boston)</option>
-                <option value="Switzerland">Switzerland (Zurich)</option>
-                <option value="Japan">Japan (Tokyo)</option>
-                <option value="United Kingdom">United Kingdom (Cambridge)</option>
-              </select>
-            </div>
-
-            {/* Mode */}
-            <div>
-              <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">Delivery Format</label>
-              <select
-                value={selectedMode}
-                onChange={e => setSelectedMode(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 focus:bg-white focus:outline-none focus:border-teal-500"
-              >
-                <option value="All">All Formats</option>
-                <option value="hybrid">Hybrid (In-Person & Virtual)</option>
-                <option value="in-person">In-Person Only</option>
-                <option value="virtual">Virtual Interactive</option>
-              </select>
-            </div>
-          </div>
-
-          {/* Ongoing & Completed Timeline Filter Buttons */}
-          <div className="flex items-center justify-between flex-wrap gap-3 -mt-2">
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setTimelineFilter(prev => prev === 'ongoing' ? 'all' : 'ongoing')}
-                className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center space-x-2 ${
-                  timelineFilter === 'ongoing'
-                    ? 'bg-teal-800 text-white shadow-xs ring-2 ring-teal-600/30'
-                    : 'bg-white text-slate-700 hover:bg-slate-50 hover:text-teal-900 border border-slate-200 shadow-2xs'
-                }`}
-                title="Show conferences scheduled for today or in the future"
-              >
-                <span className={`w-2 h-2 rounded-full ${timelineFilter === 'ongoing' ? 'bg-emerald-300 animate-pulse' : 'bg-emerald-500'}`} />
-                <span>Ongoing</span>
-                <span className={`text-[11px] px-2 py-0.5 rounded-full font-mono font-semibold ${
-                  timelineFilter === 'ongoing' ? 'bg-teal-900/60 text-teal-100' : 'bg-slate-100 text-slate-600'
-                }`}>
-                  {ongoingCount}
-                </span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setTimelineFilter(prev => prev === 'completed' ? 'all' : 'completed')}
-                className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center space-x-2 ${
-                  timelineFilter === 'completed'
-                    ? 'bg-slate-800 text-white shadow-xs ring-2 ring-slate-600/30'
-                    : 'bg-white text-slate-700 hover:bg-slate-50 hover:text-slate-900 border border-slate-200 shadow-2xs'
-                }`}
-                title="Show conferences whose dates have already passed"
-              >
-                <span className={`w-2 h-2 rounded-full ${timelineFilter === 'completed' ? 'bg-slate-300' : 'bg-slate-400'}`} />
-                <span>Completed</span>
-                <span className={`text-[11px] px-2 py-0.5 rounded-full font-mono font-semibold ${
-                  timelineFilter === 'completed' ? 'bg-slate-900/60 text-slate-200' : 'bg-slate-100 text-slate-600'
-                }`}>
-                  {completedCount}
-                </span>
-              </button>
-
-              {timelineFilter !== 'all' && (
-                <button
-                  type="button"
-                  onClick={() => setTimelineFilter('all')}
-                  className="text-xs font-medium text-slate-500 hover:text-slate-800 underline ml-1 cursor-pointer"
-                >
-                  Reset to All
-                </button>
-              )}
-            </div>
-
-            <div className="text-xs text-slate-500 font-medium">
-              Showing <b className="text-slate-900">{filteredConferences.length}</b> {filteredConferences.length === 1 ? 'conference' : 'conferences'}
-            </div>
+          <div>
+            <h2 className="text-2xl sm:text-3xl font-bold text-slate-900 font-display">
+              Upcoming International Congresses
+            </h2>
           </div>
 
           {/* Conference Cards Grid */}
-          {filteredConferences.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {filteredConferences.map(conf => (
-                <ConferenceCard
-                  key={conf.id}
-                  conference={conf}
-                  onSelect={onSelectConference}
-                />
-              ))}
-            </div>
+          {ongoingConferences.length > 0 ? (
+            <>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {ongoingConferences.map(conf => (
+                  <ConferenceCard
+                    key={conf.id}
+                    conference={conf}
+                    onSelect={onSelectConference}
+                  />
+                ))}
+              </div>
+
+              {/* Centered Show More Button */}
+              <div className="pt-2 flex justify-center">
+                <a
+                  href="/conferences"
+                  onClick={(e) => {
+                    if (!e.ctrlKey && !e.metaKey && e.button === 0) {
+                      e.preventDefault();
+                      onNavigate('/conferences');
+                    }
+                  }}
+                  className="inline-flex items-center justify-center space-x-1.5 px-6 py-2.5 text-xs font-semibold text-slate-700 hover:text-teal-900 bg-white hover:bg-slate-50 border border-slate-300 hover:border-teal-500 rounded-full shadow-xs hover:shadow-sm transition-all cursor-pointer"
+                >
+                  <span>Show More ↓</span>
+                </a>
+              </div>
+            </>
           ) : (
             <div className="py-16 text-center text-slate-400 bg-white rounded-3xl border border-slate-200">
               <Search className="w-10 h-10 mx-auto text-slate-300 mb-3" />
               <h3 className="text-base font-bold text-slate-700">No upcoming conferences found</h3>
-              <p className="text-xs text-slate-400 mt-1">Try resetting your filter parameters or search terms.</p>
+              <p className="text-xs text-slate-400 mt-1">Check back soon for new congress schedules.</p>
             </div>
           )}
-        </div>
-      </section>
-
-      {/* KEYNOTE SPEAKERS SHOWCASE */}
-      <section className="pt-6 pb-16 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex flex-col sm:flex-row sm:items-end justify-between mb-10">
-          <div>
-            <h2 className="text-3xl sm:text-4xl font-bold text-[#0A2540] font-display tracking-tight mb-2.5">
-              Speakers
-            </h2>
-            <span className="block text-xs font-bold uppercase tracking-wider text-[#0E7490]">
-              Distinguished Faculty
-            </span>
-            <h3 className="text-2xl sm:text-3xl font-bold text-slate-900 font-display mt-1">
-              Distinguished Speakers
-            </h3>
-          </div>
-          <button
-            onClick={() => onNavigate('/speakers')}
-            className="mt-3 sm:mt-0 text-xs font-semibold text-[#0E7490] hover:text-[#0A2540] flex items-center space-x-1 cursor-pointer transition-colors"
-          >
-            <span>View All Speakers</span>
-            <ArrowRight className="w-3.5 h-3.5" />
-          </button>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-          {speakers.slice(0, 4).map(spk => (
-            <div
-              key={spk.id}
-              className="bg-white rounded-3xl border border-slate-200 overflow-hidden hover:shadow-lg transition-all group"
-            >
-              <div className="relative aspect-square overflow-hidden bg-slate-100">
-                <img
-                  src={spk.photo_url}
-                  alt={spk.name}
-                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                />
-                <div className="absolute top-3 left-3">
-                  <span className="text-[10px] font-bold uppercase tracking-wider bg-slate-900/80 text-white px-2.5 py-0.5 rounded-full backdrop-blur-sm">
-                    {spk.speaker_type}
-                  </span>
-                </div>
-              </div>
-              <div className="p-5 space-y-2">
-                <h3 className="text-base font-bold text-slate-900 group-hover:text-teal-900 transition-colors">
-                  {spk.name}
-                </h3>
-                <p className="text-xs text-slate-500 font-medium">{spk.institution} • {spk.country}</p>
-                {spk.presentation_title && (
-                  <p className="text-xs text-teal-800 italic line-clamp-2 pt-1">
-                    "{spk.presentation_title}"
-                  </p>
-                )}
-              </div>
-            </div>
-          ))}
         </div>
       </section>
 
     </div>
   );
 };
+

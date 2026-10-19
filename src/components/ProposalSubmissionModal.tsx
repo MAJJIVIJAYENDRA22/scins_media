@@ -136,36 +136,8 @@ export const ProposalSubmissionModal: React.FC<ProposalSubmissionModalProps> = (
         onProposalSubmitted(result);
       }
     } catch (err: any) {
-      console.warn('API proposal submission fallback to local state:', err);
-      const fallback: ProposalSubmission = {
-        id: Date.now(),
-        proposal_code: `PROP-${proposalType.toUpperCase().slice(0, 4)}-2026-${Math.floor(100 + Math.random() * 900)}`,
-        conference_id: selectedConf ? selectedConf.id : 1,
-        conference_title: selectedConf ? selectedConf.title : 'SCINS International Congress',
-        conference_city: selectedConf ? selectedConf.city : 'Paris',
-        conference_country: selectedConf ? selectedConf.country : 'France',
-        proposal_type: proposalType,
-        title: title.trim(),
-        proposer_title: proposerTitle,
-        proposer_name: proposerName.trim(),
-        proposer_email: proposerEmail.trim(),
-        proposer_phone: proposerPhone.trim(),
-        proposer_affiliation: proposerAffiliation.trim(),
-        proposer_department: proposerDepartment.trim(),
-        proposer_country: proposerCountry,
-        proposer_bio: proposerBio.trim(),
-        co_presenters: coPresenters.trim(),
-        abstract: abstractText.trim(),
-        learning_objectives: learningObjectives.trim(),
-        target_audience: targetAudience.trim(),
-        duration_format: durationFormat,
-        av_requirements: avRequirements.trim(),
-        file_name: uploadedFileName || 'proposal-document.pdf',
-        status: 'received',
-        created_at: new Date().toISOString().replace('T', ' ').slice(0, 19)
-      };
-      setSubmittedProposal(fallback);
-      if (onProposalSubmitted) onProposalSubmitted(fallback);
+      console.error('Proposal submission error:', err);
+      setErrorMsg(err?.message || 'Failed to submit proposal to Secretariat. Please check your network and try again.');
     } finally {
       setIsSubmitting(false);
     }

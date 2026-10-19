@@ -53,6 +53,10 @@ import {
   Save,
   CreditCard,
   Link as LinkIcon,
+  Hotel,
+  Mail,
+  Phone,
+  Headphones,
   ArrowUp,
   ArrowDown
 } from 'lucide-react';
@@ -292,7 +296,7 @@ const buildInitialFormData = (conf?: Conference | null) => {
   if (conf) {
     return {
       title: conf.title || '',
-      short_title: conf.short_title || '',
+      short_title: conf.short_title || conf.featured_badge || '',
       slug: conf.slug || '',
       conference_code: conf.conference_code || '',
       display_order: typeof conf.display_order === 'number' ? conf.display_order : 1,
@@ -305,6 +309,9 @@ const buildInitialFormData = (conf?: Conference | null) => {
       country: conf.country || '',
       venue: conf.venue || '',
       venue_address: conf.venue_address || '',
+      venue_photo: conf.venue_photo || '',
+      venue_maps_url: conf.venue_maps_url || '',
+      venue_description: conf.venue_description || '',
       timezone: conf.timezone || 'UTC',
       abstract_deadline: conf.abstract_deadline || '',
       early_bird_deadline: conf.early_bird_deadline || '',
@@ -313,7 +320,7 @@ const buildInitialFormData = (conf?: Conference | null) => {
       cme_credits_eligible: conf.cme_credits_eligible ?? true,
       mode: (conf.mode || 'hybrid') as ConferenceMode,
       status: (conf.status || 'published') as ConferenceStatus,
-      featured_badge: conf.featured_badge || '',
+      featured_badge: conf.featured_badge || conf.short_title || '',
       primary_language: conf.primary_language || 'English',
       max_attendees: conf.max_attendees || 500,
       hero_image: conf.hero_image || 'https://images.unsplash.com/photo-1532094349884-543bc11b234d?auto=format&fit=crop&w=1600&q=80',
@@ -369,18 +376,32 @@ const buildInitialFormData = (conf?: Conference | null) => {
       speakers: conf.speakers ? conf.speakers.map(s => ({ ...s })) : [],
       sessions: conf.sessions ? conf.sessions.map(s => ({ ...s })) : [],
       categories: (conf.categories && conf.categories.length > 0)
-        ? conf.categories.map((c, idx) => ({
-            ...c,
-            id: c.id || (idx + 1),
-            currency: c.currency || 'USD',
-            early_bird_fee: c.early_bird_fee || c.early_bird_price || 649,
-            standard_fee: c.standard_fee || c.price || 799,
-            price: c.price || c.standard_fee || 799,
-            early_bird_price: c.early_bird_price || c.early_bird_fee || 649,
-            is_active: c.is_active !== undefined ? Boolean(c.is_active) : true,
-            display_order: Number(c.display_order ?? (idx + 1)),
-            payment_gateway_link: c.payment_gateway_link || `https://buy.stripe.com/scins_c${conf.id || 1}_p${c.id || (idx + 1)}_${(c.name || 'pass').toLowerCase().replace(/[^a-z0-9]+/g, '_')}`
-          }))
+        ? conf.categories.map((c, idx) => {
+            const std = Number(c.price ?? c.standard_fee ?? c.industry_price ?? c.tier3_price ?? 799);
+            const early = Number(c.early_bird_price ?? c.early_bird_fee ?? c.academic_price ?? c.tier1_price ?? 649);
+            const acad = Number(c.academic_price ?? early);
+            const ind = Number(c.industry_price ?? std);
+            const stud = Number(c.student_price ?? Math.round(acad * 0.7));
+            const mid = Number(c.tier2_price ?? Math.round((early + std) / 2));
+            return {
+              ...c,
+              id: c.id || (idx + 1),
+              currency: c.currency || 'USD',
+              price: std,
+              standard_fee: std,
+              tier3_price: std,
+              industry_price: ind,
+              early_bird_price: early,
+              early_bird_fee: early,
+              tier1_price: early,
+              academic_price: acad,
+              student_price: stud,
+              tier2_price: mid,
+              is_active: c.is_active !== undefined ? Boolean(c.is_active) : true,
+              display_order: Number(c.display_order ?? (idx + 1)),
+              payment_gateway_link: c.payment_gateway_link || `https://buy.stripe.com/scins_c${conf.id || 1}_p${c.id || (idx + 1)}_${(c.name || 'pass').toLowerCase().replace(/[^a-z0-9]+/g, '_')}`
+            };
+          })
         : (REGISTRATION_CATEGORIES.filter(c => c.conference_id === conf.id).length > 0
           ? REGISTRATION_CATEGORIES.filter(c => c.conference_id === conf.id).map((c, idx) => ({
               ...c,
@@ -426,7 +447,19 @@ const buildInitialFormData = (conf?: Conference | null) => {
         ? conf.schedule.map(s => ({ ...s }))
         : (SCHEDULE_ITEMS.filter(s => s.conference_id === conf.id).length > 0
           ? SCHEDULE_ITEMS.filter(s => s.conference_id === conf.id).map(s => ({ ...s }))
-          : SCHEDULE_ITEMS.filter(s => s.conference_id === 1).map(s => ({ ...s })))
+          : SCHEDULE_ITEMS.filter(s => s.conference_id === 1).map(s => ({ ...s }))),
+      hotel_name: conf.hotel_name || 'Official Partner 4-Star Congress Hotel',
+      accommodation_price_per_day: typeof conf.accommodation_price_per_day === 'number' ? conf.accommodation_price_per_day : 120,
+      support_email: conf.support_email || 'scinsmedia@gmail.com',
+      support_phone: conf.support_phone || '+1 (415) 800-3490',
+      support_label: conf.support_label || 'Secretariat Desk',
+      support_turnaround: conf.support_turnaround || 'Typical response turnaround is within 24 hours on business days.',
+      secretariat_section_title: conf.secretariat_section_title || 'Contact Congress Secretariat',
+      secretariat_section_description: conf.secretariat_section_description || 'Have questions regarding registration, abstract acceptance, visa invitation letters, or exhibition opportunities? Submit your inquiry directly to the organizing committee.',
+      secretariat_association_title: conf.secretariat_association_title || 'Conference Association',
+      secretariat_conference_name: conf.secretariat_conference_name || conf.title || '',
+      secretariat_dates: conf.secretariat_dates || (conf.start_date && conf.end_date ? `${conf.start_date} – ${conf.end_date}` : conf.start_date || ''),
+      secretariat_location: conf.secretariat_location || (conf.city && conf.country ? `${conf.city}, ${conf.country}` : conf.city || conf.country || '')
     };
   }
 
@@ -445,6 +478,9 @@ const buildInitialFormData = (conf?: Conference | null) => {
     country: 'United States',
     venue: 'Boston Convention & Exhibition Center',
     venue_address: '415 Summer St, Boston, MA 02210, United States',
+    venue_photo: 'https://images.unsplash.com/photo-1517048676732-d65bc937f952?auto=format&fit=crop&w=1200&q=80',
+    venue_maps_url: 'https://maps.google.com/?q=415+Summer+St+Boston+MA+02210+United+States',
+    venue_description: 'Premier convention hall featuring state-of-the-art keynote auditoriums, specialized scientific breakout rooms, and expansive exhibition space.',
     timezone: 'America/New_York (UTC-4)',
     abstract_deadline: '2026-07-15',
     early_bird_deadline: '2026-06-30',
@@ -626,7 +662,19 @@ const buildInitialFormData = (conf?: Conference | null) => {
     speakers_description: 'World-renowned experts delivering visionary insights and pioneering research findings',
     sponsors: SPONSORS.slice(0, 4).map((s, idx) => ({ ...s, id: idx + 1, conference_id: 1 })),
     media_partners: MEDIA_PARTNERS.slice(0, 4).map((m, idx) => ({ ...m, id: idx + 1, conference_id: 1 })),
-    schedule: SCHEDULE_ITEMS.filter(s => s.conference_id === 1).map((s, idx) => ({ ...s, id: idx + 1 }))
+    schedule: SCHEDULE_ITEMS.filter(s => s.conference_id === 1).map((s, idx) => ({ ...s, id: idx + 1 })),
+    hotel_name: 'Official Partner 4-Star Congress Hotel',
+    accommodation_price_per_day: 120,
+    support_email: 'scinsmedia@gmail.com',
+    support_phone: '+1 (415) 800-3490',
+    support_label: 'Secretariat Desk',
+    support_turnaround: 'Typical response turnaround is within 24 hours on business days.',
+    secretariat_section_title: 'Contact Congress Secretariat',
+    secretariat_section_description: 'Have questions regarding registration, abstract acceptance, visa invitation letters, or exhibition opportunities? Submit your inquiry directly to the organizing committee.',
+    secretariat_association_title: 'Conference Association',
+    secretariat_conference_name: '3rd International Congress on Quantum Computing & Advanced Materials',
+    secretariat_dates: '2026-09-14 – 2026-09-16',
+    secretariat_location: 'Boston, United States'
   };
 };
 
@@ -705,7 +753,7 @@ export const CongressWizard: React.FC<CongressWizardProps> = ({
     return {
       id: initialConference?.id || 999999,
       title: formData.title || 'Untitled Scientific Congress',
-      short_title: formData.short_title || 'Congress 2026',
+      short_title: formData.featured_badge || formData.short_title || 'FEATURED',
       slug: formData.slug || 'untitled-conference-2026',
       conference_code: formData.conference_code || 'SCINS-CONF-2026',
       display_order: typeof formData.display_order === 'number' ? formData.display_order : 1,
@@ -721,6 +769,9 @@ export const CongressWizard: React.FC<CongressWizardProps> = ({
       country: formData.country || 'United States',
       venue: formData.venue || 'Convention Center',
       venue_address: formData.venue_address || '',
+      venue_photo: formData.venue_photo || '',
+      venue_maps_url: formData.venue_maps_url || '',
+      venue_description: formData.venue_description || '',
       timezone: formData.timezone || 'UTC',
       start_date: formData.start_date || '2026-10-12',
       end_date: formData.end_date || '2026-10-14',
@@ -759,6 +810,18 @@ export const CongressWizard: React.FC<CongressWizardProps> = ({
       sponsors: formData.sponsors || [],
       media_partners: formData.media_partners || [],
       schedule: formData.schedule || [],
+      hotel_name: formData.hotel_name || 'Official Partner 4-Star Congress Hotel',
+      accommodation_price_per_day: Number(formData.accommodation_price_per_day) || 120,
+      support_email: formData.support_email || 'scinsmedia@gmail.com',
+      support_phone: formData.support_phone || '+1 (415) 800-3490',
+      support_label: formData.support_label || 'Secretariat Desk',
+      support_turnaround: formData.support_turnaround || 'Typical response turnaround is within 24 hours on business days.',
+      secretariat_section_title: formData.secretariat_section_title || 'Contact Congress Secretariat',
+      secretariat_section_description: formData.secretariat_section_description || 'Have questions regarding registration, abstract acceptance, visa invitation letters, or exhibition opportunities? Submit your inquiry directly to the organizing committee.',
+      secretariat_association_title: formData.secretariat_association_title || 'Conference Association',
+      secretariat_conference_name: formData.secretariat_conference_name || formData.title || '',
+      secretariat_dates: formData.secretariat_dates || (formData.start_date && formData.end_date ? `${formData.start_date} – ${formData.end_date}` : formData.start_date || ''),
+      secretariat_location: formData.secretariat_location || (formData.city && formData.country ? `${formData.city}, ${formData.country}` : formData.city || formData.country || ''),
       created_at: initialConference?.created_at || new Date().toISOString()
     } as Conference;
   }, [formData, initialConference]);
@@ -796,25 +859,6 @@ export const CongressWizard: React.FC<CongressWizardProps> = ({
       ...prev,
       slug,
       conference_code: code
-    }));
-  };
-
-  // Step 1 Quick Fill Presets
-  const applyDomainPreset = (chosenDomain: string) => {
-    const defaultTitle = `4th World Congress on ${chosenDomain} & Emerging Frontiers`;
-    const defaultShort = `${chosenDomain.split(' ')[0]} 2026`;
-    const newSlug = defaultTitle.toLowerCase().replace(/[^a-z0-9\s-]/g, '').replace(/\s+/g, '-');
-    const newCode = `SCINS-${chosenDomain.substring(0, 4).toUpperCase()}-2026`;
-
-    setFormData(prev => ({
-      ...prev,
-      domain: chosenDomain,
-      title: defaultTitle,
-      short_title: defaultShort,
-      slug: newSlug,
-      conference_code: newCode,
-      theme: `Advancing Global Innovation and Translational Breakthroughs in ${chosenDomain}`,
-      tagline: `Connecting Minds, Inspiring Innovation across ${chosenDomain}`
     }));
   };
 
@@ -1072,9 +1116,36 @@ export const CongressWizard: React.FC<CongressWizardProps> = ({
 
   // Step 12: Pricing Edit & Add/Remove Handlers
   const handleUpdateCategory = (idx: number, field: string, value: any) => {
-    const updated = [...formData.categories];
-    updated[idx] = { ...updated[idx], [field]: value };
-    setFormData(prev => ({ ...prev, categories: updated }));
+    setFormData(prev => {
+      const updated = [...(prev.categories || [])];
+      if (!updated[idx]) return prev;
+      let patch: any = { [field]: value };
+      if (field === 'price' || field === 'standard_fee') {
+        const num = Number(value);
+        const early = Number(updated[idx].early_bird_price ?? updated[idx].early_bird_fee ?? 0);
+        patch = {
+          ...patch,
+          price: num,
+          standard_fee: num,
+          tier3_price: num,
+          industry_price: num,
+          tier2_price: Math.round((early + num) / 2)
+        };
+      } else if (field === 'early_bird_price' || field === 'early_bird_fee') {
+        const num = Number(value);
+        const std = Number(updated[idx].price ?? updated[idx].standard_fee ?? 0);
+        patch = {
+          ...patch,
+          early_bird_price: num,
+          early_bird_fee: num,
+          tier1_price: num,
+          academic_price: num,
+          tier2_price: Math.round((num + std) / 2)
+        };
+      }
+      updated[idx] = { ...updated[idx], ...patch };
+      return { ...prev, categories: updated };
+    });
   };
 
   const handleAddCategory = () => {
@@ -1316,7 +1387,8 @@ export const CongressWizard: React.FC<CongressWizardProps> = ({
 
       const year = new Date().getFullYear();
       const safeTitle = formData.title?.trim() || `Scientific Congress ${year + 1}`;
-      const safeShortTitle = formData.short_title?.trim() || safeTitle.split(' ').slice(0, 4).join(' ');
+      const safeBadge = formData.featured_badge?.trim() || formData.short_title?.trim() || 'FEATURED';
+      const safeShortTitle = safeBadge;
       const safeSlug = formData.slug?.trim() || safeTitle.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
       const safeCode = formData.conference_code?.trim() || `SCINS-CONF-${year}-${Math.floor(100 + Math.random() * 900)}`;
 
@@ -1373,6 +1445,9 @@ export const CongressWizard: React.FC<CongressWizardProps> = ({
         country: formData.country || 'France',
         venue: formData.venue || 'Paris Convention Centre',
         venue_address: formData.venue_address || '2 Place de la Porte Maillot, 75017 Paris, France',
+        venue_photo: formData.venue_photo || '',
+        venue_maps_url: formData.venue_maps_url || '',
+        venue_description: formData.venue_description || '',
         timezone: formData.timezone || 'Europe/Paris (UTC+2)',
         start_date: formData.start_date || `${year + 1}-06-15`,
         end_date: formData.end_date || `${year + 1}-06-17`,
@@ -1386,7 +1461,7 @@ export const CongressWizard: React.FC<CongressWizardProps> = ({
         program_image: formData.program_image || 'https://images.unsplash.com/photo-1517245386807-bb43f82c33c4?auto=format&fit=crop&w=1200&q=80',
         flyer_url: formData.flyer_url || '',
         sample_abstract_url: formData.sample_abstract_url || '',
-        featured_badge: formData.featured_badge || 'Flagship Edition',
+        featured_badge: safeBadge,
         welcome_heading: formData.welcome_heading || 'Message from the General Chair',
         welcome_message: formData.welcome_message || 'Welcome to this premier global scientific gathering fostering cross-border research excellence.',
         welcome_speaker_name: formData.welcome_speaker_name || 'Prof. Henriette Dubois, Ph.D.',
@@ -1412,6 +1487,18 @@ export const CongressWizard: React.FC<CongressWizardProps> = ({
         journal_name: formData.journal_name || '',
         journal_issn: formData.journal_issn || '',
         journal_logo_url: formData.journal_logo_url || '',
+        hotel_name: formData.hotel_name || 'Official Partner 4-Star Congress Hotel',
+        accommodation_price_per_day: Number(formData.accommodation_price_per_day) || 120,
+        support_email: formData.support_email || 'scinsmedia@gmail.com',
+        support_phone: formData.support_phone || '+1 (415) 800-3490',
+        support_label: formData.support_label || 'Secretariat Desk',
+        support_turnaround: formData.support_turnaround || 'Typical response turnaround is within 24 hours on business days.',
+        secretariat_section_title: formData.secretariat_section_title || 'Contact Congress Secretariat',
+        secretariat_section_description: formData.secretariat_section_description || 'Have questions regarding registration, abstract acceptance, visa invitation letters, or exhibition opportunities? Submit your inquiry directly to the organizing committee.',
+        secretariat_association_title: formData.secretariat_association_title || 'Conference Association',
+        secretariat_conference_name: formData.secretariat_conference_name || formData.title || '',
+        secretariat_dates: formData.secretariat_dates || (formData.start_date && formData.end_date ? `${formData.start_date} – ${formData.end_date}` : formData.start_date || ''),
+        secretariat_location: formData.secretariat_location || (formData.city && formData.country ? `${formData.city}, ${formData.country}` : formData.city || formData.country || ''),
         committee_heading: formData.committee_heading || 'Organizing Committee & Chairs',
         committee_description: formData.committee_description || 'Distinguished scholars and experts guiding the scientific program and conference vision',
         speakers_badge: formData.speakers_badge || 'Distinguished Lineup',
@@ -1697,30 +1784,6 @@ export const CongressWizard: React.FC<CongressWizardProps> = ({
                 </div>
               </div>
 
-              {/* Quick Template Preset Switcher */}
-              <div className="bg-slate-50 border border-slate-200 p-3 rounded-2xl space-y-2">
-                <div className="flex items-center space-x-1.5 text-xs font-semibold text-slate-700">
-                  <Sparkles className="w-3.5 h-3.5 text-teal-700" />
-                  <span>1-Click Domain Quick-Fill Presets:</span>
-                </div>
-                <div className="flex flex-wrap gap-1.5">
-                  {SCIENTIFIC_DOMAINS.slice(0, 6).map(dom => (
-                    <button
-                      key={dom}
-                      type="button"
-                      onClick={() => applyDomainPreset(dom)}
-                      className={`text-[11px] px-2.5 py-1 rounded-lg font-medium border transition-colors ${
-                        formData.domain === dom
-                          ? 'bg-teal-800 text-white border-teal-800 shadow-2xs'
-                          : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
-                      }`}
-                    >
-                      {dom.split(' ')[0]}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
               {/* Full Congress Title */}
               <div>
                 <label className="block text-xs font-bold text-slate-800 mb-1">
@@ -1739,17 +1802,18 @@ export const CongressWizard: React.FC<CongressWizardProps> = ({
                 <p className="text-[11px] text-slate-400 mt-1">Official scholarly title rendered on publications, certificates, and badges.</p>
               </div>
 
-              {/* Short Title & Conference Code */}
+              {/* Featured Ribbon Badge & Conference Code */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-bold text-slate-800 mb-1">Short Title / Acronym</label>
+                  <label className="block text-xs font-bold text-slate-800 mb-1">Featured Ribbon Badge</label>
                   <input
                     type="text"
-                    value={formData.short_title}
-                    onChange={e => setFormData({ ...formData, short_title: e.target.value })}
-                    placeholder="e.g. Biopolymers 2026"
+                    value={formData.featured_badge || formData.short_title || ''}
+                    onChange={e => setFormData({ ...formData, featured_badge: e.target.value, short_title: e.target.value })}
+                    placeholder="e.g. FEATURED, UPCOMING, or QUANTUM 2026"
                     className="w-full bg-white border border-slate-300 rounded-xl px-3.5 py-2.5 text-xs text-slate-900 focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600"
                   />
+                  <p className="text-[11px] text-slate-400 mt-1">Short badge displayed on conference cards and hero banner.</p>
                 </div>
 
                 <div>
@@ -2121,31 +2185,18 @@ export const CongressWizard: React.FC<CongressWizardProps> = ({
                 </div>
               </div>
 
-              {/* Status & Featured Badge */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-800 mb-1">Database Publication Status</label>
-                  <select
-                    value={formData.status}
-                    onChange={e => setFormData({ ...formData, status: e.target.value as ConferenceStatus })}
-                    className="w-full bg-white border border-slate-300 rounded-xl px-3.5 py-2.5 text-xs text-slate-900 font-semibold focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600"
-                  >
-                    <option value="published">Published (Live to Global Network)</option>
-                    <option value="draft">Draft (Internal Review Only)</option>
-                    <option value="archived">Archived (Past Edition)</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-800 mb-1">Featured Ribbon Badge</label>
-                  <input
-                    type="text"
-                    value={formData.featured_badge}
-                    onChange={e => setFormData({ ...formData, featured_badge: e.target.value })}
-                    placeholder="e.g. Flagship Edition | Scopus Indexed"
-                    className="w-full bg-white border border-slate-300 rounded-xl px-3.5 py-2.5 text-xs text-slate-900 focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600"
-                  />
-                </div>
+              {/* Database Publication Status */}
+              <div>
+                <label className="block text-xs font-bold text-slate-800 mb-1">Database Publication Status</label>
+                <select
+                  value={formData.status}
+                  onChange={e => setFormData({ ...formData, status: e.target.value as ConferenceStatus })}
+                  className="w-full bg-white border border-slate-300 rounded-xl px-3.5 py-2.5 text-xs text-slate-900 font-semibold focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600"
+                >
+                  <option value="published">Published (Live to Global Network)</option>
+                  <option value="draft">Draft (Internal Review Only)</option>
+                  <option value="archived">Archived (Past Edition)</option>
+                </select>
               </div>
 
               {/* Language & Max Attendees */}
@@ -2342,9 +2393,9 @@ export const CongressWizard: React.FC<CongressWizardProps> = ({
                   onChange={(url) => setFormData({ ...formData, sample_abstract_url: url })}
                   accept="pdf"
                   maxSizeMB={10}
-                  category="sample_abstract"
-                  placeholder="https://scinsmedia.org/abstracts/sample-abstract.pdf"
-                  helperText="When provided, delegates can preview the expected structure before submitting their own abstract. If empty, the Sample link opens the submission form directly."
+                  category={initialConference?.id ? `template_conf_${initialConference.id}` : 'template_conf_new'}
+                  placeholder="Upload conference-specific PDF template..."
+                  helperText="When provided, delegates can preview the expected structure before submitting their own abstract. If empty, delegates will be shown a pending message."
                 />
               </div>
             </div>
@@ -3606,6 +3657,27 @@ export const CongressWizard: React.FC<CongressWizardProps> = ({
                 );
               })()}
 
+              {/* Hotel Accommodation Rate Configuration */}
+              <div className="p-4 bg-teal-50/60 border border-teal-200 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <h4 className="text-xs font-bold text-slate-900">Hotel Accommodation Nightly Rate (Per Day/Night)</h4>
+                  <p className="text-[11px] text-slate-500 mt-0.5">Admin-configured daily rate applied when attendees select accommodation during delegate registration.</p>
+                </div>
+                <div className="flex items-center space-x-2 shrink-0">
+                  <span className="text-xs font-bold text-slate-700">$</span>
+                  <input
+                    type="number"
+                    min="0"
+                    step="5"
+                    value={formData.accommodation_price_per_day ?? 120}
+                    onChange={e => setFormData(prev => ({ ...prev, accommodation_price_per_day: Number(e.target.value) || 0 }))}
+                    className="w-24 bg-white border border-slate-300 rounded-xl px-3 py-1.5 text-xs text-slate-900 font-bold focus:outline-none focus:border-teal-700"
+                    placeholder="120"
+                  />
+                  <span className="text-xs text-slate-500 font-mono">/ night</span>
+                </div>
+              </div>
+
               {/* Pricing Cards Grid */}
               <div className="space-y-4 max-h-[460px] overflow-y-auto pr-1">
                 {(formData.categories || []).map((cat, cIdx) => {
@@ -3717,11 +3789,7 @@ export const CongressWizard: React.FC<CongressWizardProps> = ({
                               type="number"
                               min="0"
                               value={cat.early_bird_price ?? cat.early_bird_fee ?? 0}
-                              onChange={e => {
-                                const val = Number(e.target.value);
-                                handleUpdateCategory(cIdx, 'early_bird_price', val);
-                                handleUpdateCategory(cIdx, 'early_bird_fee', val);
-                              }}
+                              onChange={e => handleUpdateCategory(cIdx, 'early_bird_price', Number(e.target.value))}
                               className="w-full bg-white border border-slate-300 rounded-xl px-3 py-1.5 text-xs text-teal-900 font-bold focus:outline-none focus:border-teal-700"
                               placeholder="649"
                               required
@@ -3738,11 +3806,7 @@ export const CongressWizard: React.FC<CongressWizardProps> = ({
                               type="number"
                               min="1"
                               value={cat.price ?? cat.standard_fee ?? 0}
-                              onChange={e => {
-                                const val = Number(e.target.value);
-                                handleUpdateCategory(cIdx, 'price', val);
-                                handleUpdateCategory(cIdx, 'standard_fee', val);
-                              }}
+                              onChange={e => handleUpdateCategory(cIdx, 'price', Number(e.target.value))}
                               className="w-full bg-white border border-slate-300 rounded-xl px-3 py-1.5 text-xs text-slate-900 font-bold focus:outline-none focus:border-teal-700"
                               placeholder="799"
                               required
@@ -4181,6 +4245,462 @@ export const CongressWizard: React.FC<CongressWizardProps> = ({
                 })}
               </div>
 
+              {/* Official Hotel Accommodation Configuration (Section 14) */}
+              <div className="bg-white border border-teal-200/90 rounded-2xl p-5 shadow-xs space-y-4">
+                <div className="flex items-center space-x-3 border-b border-slate-100 pb-3">
+                  <div className="w-9 h-9 rounded-xl bg-teal-50 border border-teal-200 text-teal-800 flex items-center justify-center shrink-0">
+                    <Hotel className="w-5 h-5 text-teal-700" />
+                  </div>
+                  <div className="flex-1">
+                    <h4 className="text-sm font-bold text-slate-900 font-display flex items-center space-x-2">
+                      <span>Official Hotel Accommodation</span>
+                      <span className="text-[10px] uppercase font-mono font-bold bg-teal-100/70 text-teal-900 px-2 py-0.5 rounded-full">
+                        Section 14
+                      </span>
+                    </h4>
+                    <p className="text-xs text-slate-500">
+                      Configure the official partner hotel and nightly room rate for this conference. Fetched dynamically by the registration and payment gateway.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 block mb-1">
+                      Official Partner Hotel Name <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      id="wizard-hotel-name-input"
+                      value={formData.hotel_name || ''}
+                      onChange={e => setFormData(prev => ({ ...prev, hotel_name: e.target.value }))}
+                      placeholder="e.g. Grand Hyatt Boston / Official 4-Star Congress Hotel"
+                      className="w-full text-xs font-semibold bg-slate-50 border border-slate-300 rounded-xl px-3 py-2.5 text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-600 focus:bg-white transition-all shadow-2xs"
+                    />
+                    <span className="text-[11px] text-slate-400 mt-1 block">
+                      Displayed to delegates in the registration portal and invoice breakdown.
+                    </span>
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 block mb-1">
+                      Nightly Price per Room (USD / base rate) <span className="text-red-500">*</span>
+                    </label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-2.5 text-xs font-bold text-slate-400">$</span>
+                      <input
+                        type="number"
+                        id="wizard-hotel-price-input"
+                        min="0"
+                        step="5"
+                        value={formData.accommodation_price_per_day ?? 120}
+                        onChange={e => setFormData(prev => ({ ...prev, accommodation_price_per_day: Number(e.target.value) || 0 }))}
+                        className="w-full text-xs font-bold font-mono bg-slate-50 border border-slate-300 rounded-xl pl-7 pr-3 py-2.5 text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-600 focus:bg-white transition-all shadow-2xs"
+                      />
+                    </div>
+                    <span className="text-[11px] text-slate-400 mt-1 block">
+                      Base nightly rate multiplied by the number of nights selected by delegates.
+                    </span>
+                  </div>
+                </div>
+
+                {/* Live Preview Pill */}
+                <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-3 flex items-center justify-between text-xs">
+                  <div className="flex items-center space-x-2 text-slate-600">
+                    <span className="font-semibold text-slate-800">Delegate Portal Preview:</span>
+                    <span className="text-slate-900 font-medium">{formData.hotel_name || 'Official Partner 4-Star Congress Hotel'}</span>
+                  </div>
+                  <div className="font-mono font-bold text-teal-800 bg-white border border-teal-200 px-2.5 py-1 rounded-lg">
+                    ${formData.accommodation_price_per_day || 120} USD / night
+                  </div>
+                </div>
+              </div>
+
+              {/* Congress Venue & Location Management (Section 14) */}
+              <div className="bg-white border border-teal-200/90 rounded-2xl p-5 shadow-xs space-y-5">
+                <div className="flex items-center space-x-3 border-b border-slate-100 pb-3">
+                  <div className="w-9 h-9 rounded-xl bg-teal-50 border border-teal-200 text-teal-800 flex items-center justify-center shrink-0">
+                    <MapPin className="w-5 h-5 text-teal-700" />
+                  </div>
+                  <div className="flex-1">
+                    <h4 className="text-sm font-bold text-slate-900 font-display flex items-center space-x-2">
+                      <span>Congress Venue & Location Management</span>
+                      <span className="text-[10px] uppercase font-mono font-bold bg-teal-100/70 text-teal-900 px-2 py-0.5 rounded-full">
+                        Section 14
+                      </span>
+                    </h4>
+                    <p className="text-xs text-slate-500">
+                      Manage the congress venue name, photo, physical address, Google Maps URL, and optional description displayed to attendees.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 block mb-1">
+                      Venue Name <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      id="wizard-venue-name-input"
+                      value={formData.venue || ''}
+                      onChange={e => setFormData(prev => ({ ...prev, venue: e.target.value }))}
+                      placeholder="e.g. Paris Convention Centre & Pullman Congress Hall"
+                      className="w-full text-xs font-semibold bg-slate-50 border border-slate-300 rounded-xl px-3 py-2.5 text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-600 focus:bg-white transition-all shadow-2xs"
+                    />
+                    <span className="text-[11px] text-slate-400 mt-1 block">
+                      Primary exhibition and congress venue title.
+                    </span>
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 block mb-1">
+                      Venue Physical Address <span className="text-red-500">*</span>
+                    </label>
+                    <div className="relative">
+                      <MapPin className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
+                      <input
+                        type="text"
+                        id="wizard-venue-address-input"
+                        value={formData.venue_address || ''}
+                        onChange={e => setFormData(prev => ({ ...prev, venue_address: e.target.value }))}
+                        placeholder="e.g. 2 Place de la Porte Maillot, 75017 Paris, France"
+                        className="w-full text-xs font-semibold bg-slate-50 border border-slate-300 rounded-xl pl-9 pr-3 py-2.5 text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-600 focus:bg-white transition-all shadow-2xs"
+                      />
+                    </div>
+                    <span className="text-[11px] text-slate-400 mt-1 block">
+                      Full street address with postal code and country for attendee navigation.
+                    </span>
+                  </div>
+                </div>
+
+                {/* Venue Photo & Google Maps URL */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <MediaUploadInput
+                      label="Venue Photo / Exterior Image"
+                      value={formData.venue_photo || ''}
+                      onChange={url => setFormData(prev => ({ ...prev, venue_photo: url }))}
+                      placeholder="https://... or upload venue photo"
+                      helperText="High-resolution photo of the convention center or main auditorium."
+                      category="conference"
+                    />
+                  </div>
+
+                  <div className="space-y-4">
+                    <div>
+                      <label className="text-xs font-bold text-slate-700 block mb-1">
+                        Google Maps URL
+                      </label>
+                      <div className="relative">
+                        <LinkIcon className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
+                        <input
+                          type="url"
+                          id="wizard-venue-maps-url-input"
+                          value={formData.venue_maps_url || ''}
+                          onChange={e => setFormData(prev => ({ ...prev, venue_maps_url: e.target.value }))}
+                          placeholder="e.g. https://maps.google.com/?q=Paris+Convention+Centre"
+                          className="w-full text-xs font-semibold bg-slate-50 border border-slate-300 rounded-xl pl-9 pr-3 py-2.5 text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-600 focus:bg-white transition-all shadow-2xs"
+                        />
+                      </div>
+                      <span className="text-[11px] text-slate-400 mt-1 block">
+                        Direct link or share URL to Google Maps for mobile directions.
+                      </span>
+                    </div>
+
+                    <div>
+                      <label className="text-xs font-bold text-slate-700 block mb-1">
+                        Venue Description (Optional)
+                      </label>
+                      <textarea
+                        id="wizard-venue-description-input"
+                        rows={3}
+                        value={formData.venue_description || ''}
+                        onChange={e => setFormData(prev => ({ ...prev, venue_description: e.target.value }))}
+                        placeholder="Brief summary of venue amenities, halls, transit access, and facilities..."
+                        className="w-full text-xs font-semibold bg-slate-50 border border-slate-300 rounded-xl p-3 text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-600 focus:bg-white transition-all shadow-2xs"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Venue Live Preview Pill */}
+                <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                  <div className="flex items-center space-x-3">
+                    {formData.venue_photo ? (
+                      <img
+                        src={formData.venue_photo}
+                        alt="Venue Preview"
+                        className="w-12 h-10 object-cover rounded-lg border border-slate-300 shrink-0"
+                      />
+                    ) : (
+                      <div className="w-12 h-10 bg-slate-200 rounded-lg flex items-center justify-center shrink-0 text-slate-400">
+                        <ImageIcon className="w-5 h-5" />
+                      </div>
+                    )}
+                    <div>
+                      <div className="font-bold text-slate-900">{formData.venue || 'Convention Center Name'}</div>
+                      <div className="text-slate-500 text-[11px] truncate max-w-md">{formData.venue_address || `${formData.city}, ${formData.country}`}</div>
+                    </div>
+                  </div>
+                  {formData.venue_maps_url && (
+                    <a
+                      href={formData.venue_maps_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center space-x-1.5 px-3 py-1.5 bg-white border border-teal-200 text-teal-800 font-bold rounded-lg hover:bg-teal-50 transition-colors shrink-0"
+                    >
+                      <span>Test Map Link</span>
+                      <ExternalLink className="w-3.5 h-3.5" />
+                    </a>
+                  )}
+                </div>
+              </div>
+
+              {/* Contact Congress Secretariat & Official Support (Section 14) */}
+              <div className="bg-white border border-teal-200/90 rounded-2xl p-5 shadow-xs space-y-5">
+                <div className="flex items-center space-x-3 border-b border-slate-100 pb-3">
+                  <div className="w-9 h-9 rounded-xl bg-teal-50 border border-teal-200 text-teal-800 flex items-center justify-center shrink-0">
+                    <Headphones className="w-5 h-5 text-teal-700" />
+                  </div>
+                  <div className="flex-1">
+                    <h4 className="text-sm font-bold text-slate-900 font-display flex items-center space-x-2">
+                      <span>Contact Congress Secretariat & Official Support</span>
+                      <span className="text-[10px] uppercase font-mono font-bold bg-teal-100/70 text-teal-900 px-2 py-0.5 rounded-full">
+                        Section 14
+                      </span>
+                    </h4>
+                    <p className="text-xs text-slate-500">
+                      Manage public secretariat headers, organizing body information, event location & dates, official contact channels, and response turnaround for this conference.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Section Title & Description */}
+                <div className="space-y-3">
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 block mb-1">
+                      Section Title
+                    </label>
+                    <input
+                      type="text"
+                      id="wizard-secretariat-title-input"
+                      value={formData.secretariat_section_title ?? ''}
+                      onChange={e => setFormData(prev => ({ ...prev, secretariat_section_title: e.target.value }))}
+                      placeholder="Contact Congress Secretariat"
+                      className="w-full text-xs font-semibold bg-slate-50 border border-slate-300 rounded-xl px-3 py-2.5 text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-600 focus:bg-white transition-all shadow-2xs"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 block mb-1">
+                      Section Description
+                    </label>
+                    <textarea
+                      rows={2}
+                      id="wizard-secretariat-desc-input"
+                      value={formData.secretariat_section_description ?? ''}
+                      onChange={e => setFormData(prev => ({ ...prev, secretariat_section_description: e.target.value }))}
+                      placeholder="Have questions regarding registration, abstract acceptance, visa invitation letters, or exhibition opportunities? Submit your inquiry directly to the organizing committee."
+                      className="w-full text-xs font-medium bg-slate-50 border border-slate-300 rounded-xl p-3 text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-600 focus:bg-white transition-all shadow-2xs resize-none"
+                    />
+                  </div>
+                </div>
+
+                {/* Secretariat Card Details */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 block mb-1">
+                      Conference Association Title
+                    </label>
+                    <input
+                      type="text"
+                      id="wizard-secretariat-assoc-input"
+                      value={formData.secretariat_association_title ?? ''}
+                      onChange={e => setFormData(prev => ({ ...prev, secretariat_association_title: e.target.value }))}
+                      placeholder="e.g. Conference Association or SCINS Media Congress Secretariat"
+                      className="w-full text-xs font-semibold bg-slate-50 border border-slate-300 rounded-xl px-3 py-2.5 text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-600 focus:bg-white transition-all shadow-2xs"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 block mb-1">
+                      Conference Display Name
+                    </label>
+                    <input
+                      type="text"
+                      id="wizard-secretariat-confname-input"
+                      value={formData.secretariat_conference_name ?? ''}
+                      onChange={e => setFormData(prev => ({ ...prev, secretariat_conference_name: e.target.value }))}
+                      placeholder={formData.title || 'Conference Name (leave blank to use congress title)'}
+                      className="w-full text-xs font-semibold bg-slate-50 border border-slate-300 rounded-xl px-3 py-2.5 text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-600 focus:bg-white transition-all shadow-2xs"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 block mb-1">
+                      Conference Date
+                    </label>
+                    <div className="relative">
+                      <Calendar className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
+                      <input
+                        type="text"
+                        id="wizard-secretariat-dates-input"
+                        value={formData.secretariat_dates ?? ''}
+                        onChange={e => setFormData(prev => ({ ...prev, secretariat_dates: e.target.value }))}
+                        placeholder={formData.start_date && formData.end_date ? `${formData.start_date} – ${formData.end_date}` : 'e.g. September 14–16, 2026'}
+                        className="w-full text-xs font-semibold bg-slate-50 border border-slate-300 rounded-xl pl-9 pr-3 py-2.5 text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-600 focus:bg-white transition-all shadow-2xs"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 block mb-1">
+                      Conference Location (City, Country)
+                    </label>
+                    <div className="relative">
+                      <MapPin className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
+                      <input
+                        type="text"
+                        id="wizard-secretariat-location-input"
+                        value={formData.secretariat_location ?? ''}
+                        onChange={e => setFormData(prev => ({ ...prev, secretariat_location: e.target.value }))}
+                        placeholder={formData.city && formData.country ? `${formData.city}, ${formData.country}` : 'e.g. Boston, United States'}
+                        className="w-full text-xs font-semibold bg-slate-50 border border-slate-300 rounded-xl pl-9 pr-3 py-2.5 text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-600 focus:bg-white transition-all shadow-2xs"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 block mb-1">
+                      Official Support Email <span className="text-red-500">*</span>
+                    </label>
+                    <div className="relative">
+                      <Mail className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
+                      <input
+                        type="email"
+                        id="wizard-support-email-input"
+                        value={formData.support_email ?? ''}
+                        onChange={e => setFormData(prev => ({ ...prev, support_email: e.target.value }))}
+                        placeholder="e.g. scinsmedia@gmail.com"
+                        className="w-full text-xs font-semibold bg-slate-50 border border-slate-300 rounded-xl pl-9 pr-3 py-2.5 text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-600 focus:bg-white transition-all shadow-2xs"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 block mb-1">
+                      Support Phone Number <span className="text-red-500">*</span>
+                    </label>
+                    <div className="relative">
+                      <Phone className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
+                      <input
+                        type="text"
+                        id="wizard-support-phone-input"
+                        value={formData.support_phone ?? ''}
+                        onChange={e => setFormData(prev => ({ ...prev, support_phone: e.target.value }))}
+                        placeholder="e.g. +1 (415) 800-3490"
+                        className="w-full text-xs font-semibold bg-slate-50 border border-slate-300 rounded-xl pl-9 pr-3 py-2.5 text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-600 focus:bg-white transition-all shadow-2xs"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 block mb-1">
+                      Support Contact Label
+                    </label>
+                    <input
+                      type="text"
+                      id="wizard-support-label-input"
+                      value={formData.support_label ?? ''}
+                      onChange={e => setFormData(prev => ({ ...prev, support_label: e.target.value }))}
+                      placeholder="e.g. Secretariat Desk or Toll Free Desk"
+                      className="w-full text-xs font-semibold bg-slate-50 border border-slate-300 rounded-xl px-3 py-2.5 text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-600 focus:bg-white transition-all shadow-2xs"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 block mb-1">
+                      Response Turnaround Message
+                    </label>
+                    <input
+                      type="text"
+                      id="wizard-support-turnaround-input"
+                      value={formData.support_turnaround ?? ''}
+                      onChange={e => setFormData(prev => ({ ...prev, support_turnaround: e.target.value }))}
+                      placeholder="e.g. Typical response turnaround is within 24 hours on business days."
+                      className="w-full text-xs font-semibold bg-slate-50 border border-slate-300 rounded-xl px-3 py-2.5 text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-600 focus:bg-white transition-all shadow-2xs"
+                    />
+                  </div>
+                </div>
+
+                {/* Live Public Page Preview Card */}
+                <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-3">
+                  <div className="flex items-center justify-between border-b border-slate-200/80 pb-2">
+                    <div className="text-xs font-bold text-slate-800 flex items-center space-x-1.5">
+                      <Eye className="w-3.5 h-3.5 text-teal-600" />
+                      <span>Public Conference Page Preview (Contact Congress Secretariat)</span>
+                    </div>
+                    <span className="text-[10px] font-mono text-teal-800 bg-teal-50 border border-teal-200 px-2 py-0.5 rounded-full font-semibold">
+                      Live Dynamic Sync
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-start pt-1">
+                    {/* Left Column: Context Preview */}
+                    <div className="md:col-span-7 bg-white border border-slate-200/90 rounded-xl p-4 space-y-2 shadow-2xs">
+                      <div className="text-[11px] font-bold uppercase tracking-wider text-teal-700">
+                        {formData.secretariat_association_title || 'Conference Association'}
+                      </div>
+                      <div className="font-bold text-slate-900 text-sm leading-snug">
+                        {formData.secretariat_conference_name || formData.title || 'Conference Name'}
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 text-xs text-slate-600">
+                        <div className="flex items-center space-x-1.5 truncate">
+                          <Calendar className="w-3.5 h-3.5 text-teal-600 shrink-0" />
+                          <span className="truncate">{formData.secretariat_dates || (formData.start_date && formData.end_date ? `${formData.start_date} – ${formData.end_date}` : formData.start_date || 'Dates TBD')}</span>
+                        </div>
+                        <div className="flex items-center space-x-1.5 truncate">
+                          <MapPin className="w-3.5 h-3.5 text-teal-600 shrink-0" />
+                          <span className="truncate">{formData.secretariat_location || (formData.city && formData.country ? `${formData.city}, ${formData.country}` : formData.city || formData.country || 'Location TBD')}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Right Column: Direct Support Channel Preview */}
+                    <div className="md:col-span-5 p-4 rounded-xl bg-[#0A2540] text-white shadow-xs space-y-2.5 text-xs">
+                      <div className="text-[10px] font-bold uppercase tracking-wider text-teal-300">
+                        Official Support
+                      </div>
+                      <div className="space-y-1.5 text-xs">
+                        <div className="flex items-center space-x-2 text-slate-200">
+                          <Mail className="w-3.5 h-3.5 text-teal-400 shrink-0" />
+                          <a
+                            href={`mailto:${formData.support_email || 'scinsmedia@gmail.com'}`}
+                            className="hover:text-teal-300 transition-colors truncate"
+                          >
+                            {formData.support_email || 'scinsmedia@gmail.com'}
+                          </a>
+                        </div>
+                        <div className="flex items-center space-x-2 text-slate-200">
+                          <Phone className="w-3.5 h-3.5 text-teal-400 shrink-0" />
+                          <a
+                            href={`tel:${(formData.support_phone || '+1 (415) 800-3490').replace(/[^+\d]/g, '')}`}
+                            className="hover:text-teal-300 transition-colors truncate"
+                          >
+                            {formData.support_phone || '+1 (415) 800-3490'}
+                            {formData.support_label ? ` (${formData.support_label})` : (formData.support_phone && formData.support_phone.includes('(') ? '' : ' (Secretariat Desk)')}
+                          </a>
+                        </div>
+                      </div>
+                      <p className="text-[10px] text-slate-400 pt-1 border-t border-white/10 leading-relaxed">
+                        {formData.support_turnaround || 'Typical response turnaround is within 24 hours on business days.'}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
               {/* Live Manifest Overview */}
               <div className="bg-slate-50 border border-slate-200 p-4 rounded-2xl space-y-2 text-xs">
                 <div className="font-bold text-slate-900 flex items-center justify-between">
@@ -4191,7 +4711,7 @@ export const CongressWizard: React.FC<CongressWizardProps> = ({
                   {formData.city}, {formData.country} • {formData.start_date} to {formData.end_date} • {formData.mode.toUpperCase()}
                 </div>
                 <div className="text-slate-500 text-[11px]">
-                  {formData.sessions.length} Scientific Sessions • {formData.speakers.length} Keynote Speakers • {formData.committee.length} Committee Members • {formData.categories.length} Pricing Packages
+                  {formData.sessions.length} Scientific Sessions • {formData.speakers.length} Keynote Speakers • {formData.committee.length} Committee Members • {formData.categories.length} Pricing Packages • 🏨 {formData.hotel_name || 'Official Partner Hotel'} (${formData.accommodation_price_per_day || 120}/night) • ✉️ {formData.support_email || 'scinsmedia@gmail.com'}
                 </div>
               </div>
 
