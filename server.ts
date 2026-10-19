@@ -577,9 +577,41 @@ export function invalidatePublicCache(): void {
 function formatDateStr(val: any): string {
   if (!val) return '';
   if (val instanceof Date) {
+    if (isNaN(val.getTime())) return '';
     return val.toISOString().split('T')[0];
   }
-  return String(val).split('T')[0];
+  const str = String(val).trim();
+  if (!str || str === 'null' || str === 'undefined' || str === 'Invalid Date') {
+    return '';
+  }
+  if (str.includes('T')) {
+    const part = str.split('T')[0].trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(part)) return part;
+  }
+  if (str.includes(' ')) {
+    const part = str.split(' ')[0].trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(part)) return part;
+  }
+  if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
+    return str;
+  }
+  const parsed = new Date(str);
+  if (!isNaN(parsed.getTime())) {
+    try {
+      return parsed.toISOString().split('T')[0];
+    } catch (_) {
+      return '';
+    }
+  }
+  return '';
+}
+
+function formatDateSql(val: any, fallback: string | null = null): string | null {
+  const formatted = formatDateStr(val);
+  if (formatted && /^\d{4}-\d{2}-\d{2}$/.test(formatted)) {
+    return formatted;
+  }
+  return fallback;
 }
 
 function parseConferenceDate(dateStr?: string): number {
@@ -810,7 +842,7 @@ async function seedInitialConferencesToMysql() {
             [
               conf.id, conf.title, conf.short_title, conf.slug, conf.conference_code, conf.theme, conf.tagline || '', conf.description, conf.detailed_about || '',
               conf.about_heading || '', JSON.stringify(conf.about_highlights || []), JSON.stringify(conf.gallery_images || []), conf.domain, conf.city, conf.country, conf.venue, conf.venue_address || '', conf.timezone,
-              formatDateStr(conf.start_date), formatDateStr(conf.end_date), formatDateStr(conf.abstract_deadline), formatDateStr(conf.early_bird_deadline), formatDateStr(conf.registration_deadline), conf.mode, conf.status,
+              formatDateSql(conf.start_date, '2026-09-01'), formatDateSql(conf.end_date, '2026-09-03'), formatDateSql(conf.abstract_deadline, '2026-07-31'), formatDateSql(conf.early_bird_deadline, '2026-06-30'), formatDateSql(conf.registration_deadline, '2026-08-15'), conf.mode, conf.status,
               conf.hero_image, conf.logo_url || '', conf.flyer_url || '', conf.sample_abstract_url || '', conf.featured_badge || '', conf.display_order || 1,
               conf.welcome_heading || '', conf.welcome_message || '', conf.welcome_speaker_name || '', conf.welcome_speaker_role || '', conf.welcome_speaker_title || '', conf.welcome_speaker_image || '', conf.welcome_footer_text || '',
               conf.exhibitor_heading || '', conf.exhibitor_message || '', conf.exhibitor_speaker_name || '', conf.exhibitor_speaker_role || '', conf.exhibitor_speaker_title || '', conf.exhibitor_image || '', conf.exhibitor_footer_text || '',
@@ -871,7 +903,7 @@ async function seedInitialConferencesToMysql() {
           ON DUPLICATE KEY UPDATE name = VALUES(name)`,
           [
             c.id, c.conference_id, c.name, c.price, c.currency || 'USD', c.early_bird_price || c.price,
-            formatDateStr(c.deadline), JSON.stringify(c.benefits || []), Boolean(c.is_popular), c.display_order || idx + 1,
+            formatDateSql(c.deadline, null), JSON.stringify(c.benefits || []), Boolean(c.is_popular), c.display_order || idx + 1,
             c.payment_gateway_link || '', c.is_active !== false
           ]
         ).catch(() => {});
@@ -1041,7 +1073,7 @@ async function seedInitialConferencesToMysql() {
           `INSERT INTO publications (id, conference_id, title, authors, journal, research_domain, publication_date, abstract_summary, pdf_url, citations, indexed_in)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
            ON DUPLICATE KEY UPDATE title = VALUES(title)`,
-          [p.id, p.conference_id || 1, p.title, p.authors, p.journal, p.research_domain, p.publication_date, p.abstract_summary, p.pdf_url || '', p.citations || 0, p.indexed_in || '']
+          [p.id, p.conference_id || 1, p.title, p.authors, p.journal, p.research_domain, formatDateSql(p.publication_date, '2026-01-01'), p.abstract_summary, p.pdf_url || '', p.citations || 0, p.indexed_in || '']
         ).catch(() => {});
       }
     }
@@ -2205,7 +2237,8 @@ async function initMysqlPool() {
         enableKeepAlive: true,
         keepAliveInitialDelay: 10000,
         queueLimit: 0,
-        connectTimeout: 15000
+        connectTimeout: 15000,
+        dateStrings: true
       };
 
       if (config.socketPath) {
@@ -3706,7 +3739,7 @@ const adminLoginRateLimiter = rateLimit({
         [
           confData.title, confData.short_title, confData.slug, confData.conference_code, confData.theme, confData.tagline, confData.description, confData.detailed_about,
           confData.about_heading, JSON.stringify(confData.about_highlights), JSON.stringify(confData.gallery_images), confData.domain, confData.city, confData.country, confData.venue, confData.venue_address, confData.venue_photo, confData.venue_maps_url, confData.venue_description, confData.timezone,
-          confData.start_date, confData.end_date, confData.abstract_deadline, confData.early_bird_deadline, confData.registration_deadline, confData.mode, confData.status,
+          formatDateSql(confData.start_date, '2026-09-01'), formatDateSql(confData.end_date, '2026-09-03'), formatDateSql(confData.abstract_deadline, '2026-07-31'), formatDateSql(confData.early_bird_deadline, '2026-06-30'), formatDateSql(confData.registration_deadline, '2026-08-15'), confData.mode, confData.status,
           confData.hero_image, confData.logo_url, confData.flyer_url, confData.sample_abstract_url, confData.featured_badge, confData.display_order,
           confData.welcome_heading, confData.welcome_message, confData.welcome_speaker_name, confData.welcome_speaker_role, confData.welcome_speaker_title, confData.welcome_speaker_image, confData.welcome_footer_text,
           confData.exhibitor_heading, confData.exhibitor_message, confData.exhibitor_speaker_name, confData.exhibitor_speaker_role, confData.exhibitor_speaker_title, confData.exhibitor_image, confData.exhibitor_footer_text,
@@ -3796,7 +3829,7 @@ const adminLoginRateLimiter = rateLimit({
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
               assignedId, sIdx + 1, ses.session_code || `SES-${sIdx + 1}`, ses.title || 'Session Track',
-              ses.track || 'General', ses.category || 'General', ses.description || '', ses.session_date || confData.start_date,
+              ses.track || 'General', ses.category || 'General', ses.description || '', formatDateSql(ses.session_date, formatDateSql(confData.start_date, '2026-09-01')),
               ses.start_time || '09:00:00', ses.end_time || '10:30:00', ses.room || 'Hall A',
               ses.session_type || 'Oral Presentation', Number(ses.display_order || sIdx + 1)
             ]
@@ -3814,7 +3847,7 @@ const adminLoginRateLimiter = rateLimit({
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
               assignedId, cat.name || 'Delegate Pass', Number(cat.price || cat.standard_fee || 799), cat.currency || 'USD',
-              Number(cat.early_bird_price || cat.early_bird_fee || 699), cat.deadline || confData.early_bird_deadline,
+              Number(cat.early_bird_price || cat.early_bird_fee || 699), formatDateSql(cat.deadline || confData.early_bird_deadline, null),
               JSON.stringify(cat.benefits || []), Boolean(cat.is_popular), Number(cat.display_order || cIdx + 1),
               cat.payment_gateway_link || '', cat.is_active !== false
             ]
@@ -3832,7 +3865,7 @@ const adminLoginRateLimiter = rateLimit({
               room, track, speaker_name, speaker_affiliation, item_type, display_order
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
-              assignedId, Number(sch.day_number || 1), sch.schedule_date || confData.start_date,
+              assignedId, Number(sch.day_number || 1), formatDateSql(sch.schedule_date, formatDateSql(confData.start_date, '2026-09-01')),
               sch.start_time || '09:00', sch.end_time || '10:00', sch.title || 'Schedule Item',
               sch.description || '', sch.room || '', sch.track || '', sch.speaker_name || '',
               sch.speaker_affiliation || '', sch.item_type || 'session', Number(sch.display_order || scIdx + 1)
@@ -3999,7 +4032,7 @@ const adminLoginRateLimiter = rateLimit({
               [
                 id, inMem.title, inMem.short_title || inMem.title, inMem.slug, inMem.conference_code || `CONF-${id}`, inMem.theme || '', inMem.tagline || '', inMem.description || '', inMem.detailed_about || '',
                 inMem.about_heading || '', JSON.stringify(inMem.about_highlights || []), JSON.stringify(inMem.gallery_images || []), inMem.domain || 'General', inMem.city || '', inMem.country || '', inMem.venue || '', inMem.venue_address || '', inMem.timezone || 'UTC',
-                formatDateStr(inMem.start_date), formatDateStr(inMem.end_date), formatDateStr(inMem.abstract_deadline), formatDateStr(inMem.early_bird_deadline), formatDateStr(inMem.registration_deadline), inMem.mode || 'hybrid', inMem.status || 'published',
+                formatDateSql(inMem.start_date, '2026-09-01'), formatDateSql(inMem.end_date, '2026-09-03'), formatDateSql(inMem.abstract_deadline, '2026-07-31'), formatDateSql(inMem.early_bird_deadline, '2026-06-30'), formatDateSql(inMem.registration_deadline, '2026-08-15'), inMem.mode || 'hybrid', inMem.status || 'published',
                 inMem.hero_image || '', inMem.logo_url || '', inMem.flyer_url || '', inMem.sample_abstract_url || '', inMem.featured_badge || '', inMem.display_order || 1,
                 inMem.welcome_heading || '', inMem.welcome_message || '', inMem.welcome_speaker_name || '', inMem.welcome_speaker_role || '', inMem.welcome_speaker_title || '', inMem.welcome_speaker_image || '', inMem.welcome_footer_text || '',
                 inMem.exhibitor_heading || '', inMem.exhibitor_message || '', inMem.exhibitor_speaker_name || '', inMem.exhibitor_speaker_role || '', inMem.exhibitor_speaker_title || '', inMem.exhibitor_image || '', inMem.exhibitor_footer_text || '',
@@ -4044,7 +4077,7 @@ const adminLoginRateLimiter = rateLimit({
         [
           updatedConf.title, updatedConf.short_title, updatedConf.slug, updatedConf.conference_code, updatedConf.theme, updatedConf.tagline, updatedConf.description, updatedConf.detailed_about,
           updatedConf.about_heading, JSON.stringify(updatedConf.about_highlights || []), JSON.stringify(updatedConf.gallery_images || []), updatedConf.domain, updatedConf.city, updatedConf.country, updatedConf.venue, updatedConf.venue_address, updatedConf.venue_photo || '', updatedConf.venue_maps_url || '', updatedConf.venue_description || '', updatedConf.timezone,
-          formatDateStr(updatedConf.start_date), formatDateStr(updatedConf.end_date), formatDateStr(updatedConf.abstract_deadline), formatDateStr(updatedConf.early_bird_deadline), formatDateStr(updatedConf.registration_deadline), updatedConf.mode, updatedConf.status,
+          formatDateSql(updatedConf.start_date, '2026-09-01'), formatDateSql(updatedConf.end_date, '2026-09-03'), formatDateSql(updatedConf.abstract_deadline, '2026-07-31'), formatDateSql(updatedConf.early_bird_deadline, '2026-06-30'), formatDateSql(updatedConf.registration_deadline, '2026-08-15'), updatedConf.mode, updatedConf.status,
           updatedConf.hero_image, updatedConf.logo_url, updatedConf.flyer_url, updatedConf.sample_abstract_url, updatedConf.featured_badge, updatedConf.display_order,
           updatedConf.welcome_heading, updatedConf.welcome_message, updatedConf.welcome_speaker_name, updatedConf.welcome_speaker_role, updatedConf.welcome_speaker_title, updatedConf.welcome_speaker_image, updatedConf.welcome_footer_text,
           updatedConf.exhibitor_heading, updatedConf.exhibitor_message, updatedConf.exhibitor_speaker_name, updatedConf.exhibitor_speaker_role, updatedConf.exhibitor_speaker_title, updatedConf.exhibitor_image, updatedConf.exhibitor_footer_text,
@@ -4147,7 +4180,7 @@ const adminLoginRateLimiter = rateLimit({
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
               id, sIdx + 1, ses.session_code || `SES-${sIdx + 1}`, ses.title || 'Session Track',
-              ses.track || 'General', ses.category || 'General', ses.description || '', ses.session_date || updatedConf.start_date,
+              ses.track || 'General', ses.category || 'General', ses.description || '', formatDateSql(ses.session_date, formatDateSql(updatedConf.start_date, '2026-09-01')),
               ses.start_time || '09:00:00', ses.end_time || '10:30:00', ses.room || 'Hall A',
               ses.session_type || 'Oral Presentation', Number(ses.display_order || sIdx + 1)
             ]
@@ -4166,7 +4199,7 @@ const adminLoginRateLimiter = rateLimit({
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
               id, cat.name || 'Delegate Pass', Number(cat.price || cat.standard_fee || 799), cat.currency || 'USD',
-              Number(cat.early_bird_price || cat.early_bird_fee || 699), cat.deadline || updatedConf.early_bird_deadline,
+              Number(cat.early_bird_price || cat.early_bird_fee || 699), formatDateSql(cat.deadline || updatedConf.early_bird_deadline, null),
               JSON.stringify(cat.benefits || []), Boolean(cat.is_popular), Number(cat.display_order || cIdx + 1),
               cat.payment_gateway_link || '', cat.is_active !== false
             ]
@@ -4185,7 +4218,7 @@ const adminLoginRateLimiter = rateLimit({
               room, track, speaker_name, speaker_affiliation, item_type, display_order
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
-              id, Number(sch.day_number || 1), sch.schedule_date || updatedConf.start_date,
+              id, Number(sch.day_number || 1), formatDateSql(sch.schedule_date, formatDateSql(updatedConf.start_date, '2026-09-01')),
               sch.start_time || '09:00', sch.end_time || '10:00', sch.title || 'Schedule Item',
               sch.description || '', sch.room || '', sch.track || '', sch.speaker_name || '',
               sch.speaker_affiliation || '', sch.item_type || 'session', Number(sch.display_order || scIdx + 1)
@@ -4449,7 +4482,7 @@ const adminLoginRateLimiter = rateLimit({
           [
             newTitle, newShortTitle, newSlug, newCode, original.theme, original.tagline, original.description, original.detailed_about,
             original.about_heading, JSON.stringify(original.about_highlights || []), JSON.stringify(original.gallery_images || []), original.domain, original.city, original.country, original.venue, original.venue_address, original.timezone,
-            formatDateStr(original.start_date), formatDateStr(original.end_date), formatDateStr(original.abstract_deadline), formatDateStr(original.early_bird_deadline), formatDateStr(original.registration_deadline), original.mode, 'draft',
+            formatDateSql(original.start_date, '2026-09-01'), formatDateSql(original.end_date, '2026-09-03'), formatDateSql(original.abstract_deadline, '2026-07-31'), formatDateSql(original.early_bird_deadline, '2026-06-30'), formatDateSql(original.registration_deadline, '2026-08-15'), original.mode, 'draft',
             original.hero_image, original.logo_url, original.flyer_url, original.sample_abstract_url, original.featured_badge, (original.display_order || 0) + 1,
             original.welcome_heading, original.welcome_message, original.welcome_speaker_name, original.welcome_speaker_role, original.welcome_speaker_title, original.welcome_speaker_image, original.welcome_footer_text,
             original.exhibitor_heading, original.exhibitor_message, original.exhibitor_speaker_name, original.exhibitor_speaker_role, original.exhibitor_speaker_title, original.exhibitor_image, original.exhibitor_footer_text,
@@ -5032,7 +5065,7 @@ const adminLoginRateLimiter = rateLimit({
             req.body.session_code || `BIO-SES-${String(newId).padStart(2, '0')}`,
             req.body.title || 'New Scientific Session', req.body.track || 'General Track',
             req.body.category || 'Oral Presentations', req.body.description || '',
-            formatDateStr(req.body.session_date || '2026-06-22'),
+            formatDateSql(req.body.session_date, '2026-06-22'),
             req.body.start_time ? String(req.body.start_time).substring(0, 5) : '10:00',
             req.body.end_time ? String(req.body.end_time).substring(0, 5) : '11:30',
             req.body.room || 'Auditorium Pasteur', req.body.session_type || 'Oral Presentation',
@@ -5093,7 +5126,7 @@ const adminLoginRateLimiter = rateLimit({
           WHERE id = ?`,
           [
             req.body.title, req.body.track, req.body.category, req.body.description,
-            req.body.session_date ? formatDateStr(req.body.session_date) : null,
+            req.body.session_date ? formatDateSql(req.body.session_date, '2026-06-22') : null,
             req.body.start_time, req.body.end_time, req.body.room,
             req.body.session_type, req.body.display_order, id
           ]
@@ -5352,7 +5385,7 @@ const adminLoginRateLimiter = rateLimit({
           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
             Number(req.body.conference_id) || 1, Number(req.body.day_number) || 1,
-            formatDateStr(req.body.schedule_date || '2026-06-22'),
+            formatDateSql(req.body.schedule_date, '2026-06-22'),
             req.body.start_time || '09:00', req.body.end_time || '10:00',
             req.body.title || 'Scientific Session', req.body.description || '',
             req.body.room || 'Auditorium Hall A', req.body.track || 'General Track',
@@ -5409,7 +5442,7 @@ const adminLoginRateLimiter = rateLimit({
             display_order = COALESCE(?, display_order)
           WHERE id = ?`,
           [
-            req.body.day_number, req.body.schedule_date ? formatDateStr(req.body.schedule_date) : null,
+            req.body.day_number, req.body.schedule_date ? formatDateSql(req.body.schedule_date, '2026-06-22') : null,
             req.body.start_time, req.body.end_time, req.body.title, req.body.description,
             req.body.room, req.body.track, req.body.speaker_name, req.body.speaker_affiliation,
             req.body.item_type, req.body.display_order, id
@@ -5467,7 +5500,7 @@ const adminLoginRateLimiter = rateLimit({
       price: Number(req.body.price || req.body.standard_fee) || 799,
       early_bird_price: Number(req.body.early_bird_price || req.body.early_bird_fee) || 649,
       currency: req.body.currency || 'USD',
-      deadline: formatDateStr(req.body.deadline),
+      deadline: formatDateSql(req.body.deadline, null),
       benefits: Array.isArray(req.body.benefits) ? req.body.benefits : ['Full conference access'],
       is_popular: Boolean(req.body.is_popular),
       display_order: Number(req.body.display_order) || newId,
@@ -5482,7 +5515,7 @@ const adminLoginRateLimiter = rateLimit({
           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
             catData.conference_id, catData.name, catData.price, catData.currency,
-            catData.early_bird_price, catData.deadline || null, JSON.stringify(catData.benefits),
+            catData.early_bird_price, formatDateSql(catData.deadline, null), JSON.stringify(catData.benefits),
             catData.is_popular, catData.display_order, catData.payment_gateway_link, catData.is_active
           ]
         );
@@ -5524,7 +5557,7 @@ const adminLoginRateLimiter = rateLimit({
           WHERE id = ?`,
           [
             req.body.name, req.body.price, req.body.currency, req.body.early_bird_price || req.body.early_bird_fee,
-            req.body.deadline ? formatDateStr(req.body.deadline) : null,
+            req.body.deadline ? formatDateSql(req.body.deadline, null) : null,
             req.body.benefits ? JSON.stringify(req.body.benefits) : null,
             req.body.is_popular, req.body.display_order, req.body.payment_gateway_link, req.body.is_active, id
           ]

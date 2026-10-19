@@ -3230,9 +3230,40 @@ function invalidatePublicCache() {
 function formatDateStr(val) {
   if (!val) return "";
   if (val instanceof Date) {
+    if (isNaN(val.getTime())) return "";
     return val.toISOString().split("T")[0];
   }
-  return String(val).split("T")[0];
+  const str = String(val).trim();
+  if (!str || str === "null" || str === "undefined" || str === "Invalid Date") {
+    return "";
+  }
+  if (str.includes("T")) {
+    const part = str.split("T")[0].trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(part)) return part;
+  }
+  if (str.includes(" ")) {
+    const part = str.split(" ")[0].trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(part)) return part;
+  }
+  if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
+    return str;
+  }
+  const parsed = new Date(str);
+  if (!isNaN(parsed.getTime())) {
+    try {
+      return parsed.toISOString().split("T")[0];
+    } catch (_) {
+      return "";
+    }
+  }
+  return "";
+}
+function formatDateSql(val, fallback = null) {
+  const formatted = formatDateStr(val);
+  if (formatted && /^\d{4}-\d{2}-\d{2}$/.test(formatted)) {
+    return formatted;
+  }
+  return fallback;
 }
 function parseConferenceDate(dateStr) {
   if (!dateStr || typeof dateStr !== "string") return Infinity;
@@ -3445,11 +3476,11 @@ async function seedInitialConferencesToMysql() {
               conf.venue,
               conf.venue_address || "",
               conf.timezone,
-              formatDateStr(conf.start_date),
-              formatDateStr(conf.end_date),
-              formatDateStr(conf.abstract_deadline),
-              formatDateStr(conf.early_bird_deadline),
-              formatDateStr(conf.registration_deadline),
+              formatDateSql(conf.start_date, "2026-09-01"),
+              formatDateSql(conf.end_date, "2026-09-03"),
+              formatDateSql(conf.abstract_deadline, "2026-07-31"),
+              formatDateSql(conf.early_bird_deadline, "2026-06-30"),
+              formatDateSql(conf.registration_deadline, "2026-08-15"),
               conf.mode,
               conf.status,
               conf.hero_image,
@@ -3566,7 +3597,7 @@ async function seedInitialConferencesToMysql() {
             c.price,
             c.currency || "USD",
             c.early_bird_price || c.price,
-            formatDateStr(c.deadline),
+            formatDateSql(c.deadline, null),
             JSON.stringify(c.benefits || []),
             Boolean(c.is_popular),
             c.display_order || idx + 1,
@@ -3782,7 +3813,7 @@ async function seedInitialConferencesToMysql() {
           `INSERT INTO publications (id, conference_id, title, authors, journal, research_domain, publication_date, abstract_summary, pdf_url, citations, indexed_in)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
            ON DUPLICATE KEY UPDATE title = VALUES(title)`,
-          [p.id, p.conference_id || 1, p.title, p.authors, p.journal, p.research_domain, p.publication_date, p.abstract_summary, p.pdf_url || "", p.citations || 0, p.indexed_in || ""]
+          [p.id, p.conference_id || 1, p.title, p.authors, p.journal, p.research_domain, formatDateSql(p.publication_date, "2026-01-01"), p.abstract_summary, p.pdf_url || "", p.citations || 0, p.indexed_in || ""]
         ).catch(() => {
         });
       }
@@ -4881,7 +4912,8 @@ async function initMysqlPool() {
         enableKeepAlive: true,
         keepAliveInitialDelay: 1e4,
         queueLimit: 0,
-        connectTimeout: 15e3
+        connectTimeout: 15e3,
+        dateStrings: true
       };
       if (config.socketPath) {
         poolOpts.socketPath = config.socketPath;
@@ -6225,11 +6257,11 @@ async function startServer() {
             confData.venue_maps_url,
             confData.venue_description,
             confData.timezone,
-            confData.start_date,
-            confData.end_date,
-            confData.abstract_deadline,
-            confData.early_bird_deadline,
-            confData.registration_deadline,
+            formatDateSql(confData.start_date, "2026-09-01"),
+            formatDateSql(confData.end_date, "2026-09-03"),
+            formatDateSql(confData.abstract_deadline, "2026-07-31"),
+            formatDateSql(confData.early_bird_deadline, "2026-06-30"),
+            formatDateSql(confData.registration_deadline, "2026-08-15"),
             confData.mode,
             confData.status,
             confData.hero_image,
@@ -6399,7 +6431,7 @@ async function startServer() {
                 ses.track || "General",
                 ses.category || "General",
                 ses.description || "",
-                ses.session_date || confData.start_date,
+                formatDateSql(ses.session_date, formatDateSql(confData.start_date, "2026-09-01")),
                 ses.start_time || "09:00:00",
                 ses.end_time || "10:30:00",
                 ses.room || "Hall A",
@@ -6422,7 +6454,7 @@ async function startServer() {
                 Number(cat.price || cat.standard_fee || 799),
                 cat.currency || "USD",
                 Number(cat.early_bird_price || cat.early_bird_fee || 699),
-                cat.deadline || confData.early_bird_deadline,
+                formatDateSql(cat.deadline || confData.early_bird_deadline, null),
                 JSON.stringify(cat.benefits || []),
                 Boolean(cat.is_popular),
                 Number(cat.display_order || cIdx + 1),
@@ -6443,7 +6475,7 @@ async function startServer() {
               [
                 assignedId,
                 Number(sch.day_number || 1),
-                sch.schedule_date || confData.start_date,
+                formatDateSql(sch.schedule_date, formatDateSql(confData.start_date, "2026-09-01")),
                 sch.start_time || "09:00",
                 sch.end_time || "10:00",
                 sch.title || "Schedule Item",
@@ -6615,11 +6647,11 @@ async function startServer() {
                 inMem.venue || "",
                 inMem.venue_address || "",
                 inMem.timezone || "UTC",
-                formatDateStr(inMem.start_date),
-                formatDateStr(inMem.end_date),
-                formatDateStr(inMem.abstract_deadline),
-                formatDateStr(inMem.early_bird_deadline),
-                formatDateStr(inMem.registration_deadline),
+                formatDateSql(inMem.start_date, "2026-09-01"),
+                formatDateSql(inMem.end_date, "2026-09-03"),
+                formatDateSql(inMem.abstract_deadline, "2026-07-31"),
+                formatDateSql(inMem.early_bird_deadline, "2026-06-30"),
+                formatDateSql(inMem.registration_deadline, "2026-08-15"),
                 inMem.mode || "hybrid",
                 inMem.status || "published",
                 inMem.hero_image || "",
@@ -6715,11 +6747,11 @@ async function startServer() {
             updatedConf.venue_maps_url || "",
             updatedConf.venue_description || "",
             updatedConf.timezone,
-            formatDateStr(updatedConf.start_date),
-            formatDateStr(updatedConf.end_date),
-            formatDateStr(updatedConf.abstract_deadline),
-            formatDateStr(updatedConf.early_bird_deadline),
-            formatDateStr(updatedConf.registration_deadline),
+            formatDateSql(updatedConf.start_date, "2026-09-01"),
+            formatDateSql(updatedConf.end_date, "2026-09-03"),
+            formatDateSql(updatedConf.abstract_deadline, "2026-07-31"),
+            formatDateSql(updatedConf.early_bird_deadline, "2026-06-30"),
+            formatDateSql(updatedConf.registration_deadline, "2026-08-15"),
             updatedConf.mode,
             updatedConf.status,
             updatedConf.hero_image,
@@ -6911,7 +6943,7 @@ async function startServer() {
                 ses.track || "General",
                 ses.category || "General",
                 ses.description || "",
-                ses.session_date || updatedConf.start_date,
+                formatDateSql(ses.session_date, formatDateSql(updatedConf.start_date, "2026-09-01")),
                 ses.start_time || "09:00:00",
                 ses.end_time || "10:30:00",
                 ses.room || "Hall A",
@@ -6935,7 +6967,7 @@ async function startServer() {
                 Number(cat.price || cat.standard_fee || 799),
                 cat.currency || "USD",
                 Number(cat.early_bird_price || cat.early_bird_fee || 699),
-                cat.deadline || updatedConf.early_bird_deadline,
+                formatDateSql(cat.deadline || updatedConf.early_bird_deadline, null),
                 JSON.stringify(cat.benefits || []),
                 Boolean(cat.is_popular),
                 Number(cat.display_order || cIdx + 1),
@@ -6957,7 +6989,7 @@ async function startServer() {
               [
                 id,
                 Number(sch.day_number || 1),
-                sch.schedule_date || updatedConf.start_date,
+                formatDateSql(sch.schedule_date, formatDateSql(updatedConf.start_date, "2026-09-01")),
                 sch.start_time || "09:00",
                 sch.end_time || "10:00",
                 sch.title || "Schedule Item",
@@ -7226,11 +7258,11 @@ async function startServer() {
             original.venue,
             original.venue_address,
             original.timezone,
-            formatDateStr(original.start_date),
-            formatDateStr(original.end_date),
-            formatDateStr(original.abstract_deadline),
-            formatDateStr(original.early_bird_deadline),
-            formatDateStr(original.registration_deadline),
+            formatDateSql(original.start_date, "2026-09-01"),
+            formatDateSql(original.end_date, "2026-09-03"),
+            formatDateSql(original.abstract_deadline, "2026-07-31"),
+            formatDateSql(original.early_bird_deadline, "2026-06-30"),
+            formatDateSql(original.registration_deadline, "2026-08-15"),
             original.mode,
             "draft",
             original.hero_image,
@@ -7854,7 +7886,7 @@ async function startServer() {
             req.body.track || "General Track",
             req.body.category || "Oral Presentations",
             req.body.description || "",
-            formatDateStr(req.body.session_date || "2026-06-22"),
+            formatDateSql(req.body.session_date, "2026-06-22"),
             req.body.start_time ? String(req.body.start_time).substring(0, 5) : "10:00",
             req.body.end_time ? String(req.body.end_time).substring(0, 5) : "11:30",
             req.body.room || "Auditorium Pasteur",
@@ -7918,7 +7950,7 @@ async function startServer() {
             req.body.track,
             req.body.category,
             req.body.description,
-            req.body.session_date ? formatDateStr(req.body.session_date) : null,
+            req.body.session_date ? formatDateSql(req.body.session_date, "2026-06-22") : null,
             req.body.start_time,
             req.body.end_time,
             req.body.room,
@@ -8168,7 +8200,7 @@ async function startServer() {
           [
             Number(req.body.conference_id) || 1,
             Number(req.body.day_number) || 1,
-            formatDateStr(req.body.schedule_date || "2026-06-22"),
+            formatDateSql(req.body.schedule_date, "2026-06-22"),
             req.body.start_time || "09:00",
             req.body.end_time || "10:00",
             req.body.title || "Scientific Session",
@@ -8230,7 +8262,7 @@ async function startServer() {
           WHERE id = ?`,
           [
             req.body.day_number,
-            req.body.schedule_date ? formatDateStr(req.body.schedule_date) : null,
+            req.body.schedule_date ? formatDateSql(req.body.schedule_date, "2026-06-22") : null,
             req.body.start_time,
             req.body.end_time,
             req.body.title,
@@ -8292,7 +8324,7 @@ async function startServer() {
       price: Number(req.body.price || req.body.standard_fee) || 799,
       early_bird_price: Number(req.body.early_bird_price || req.body.early_bird_fee) || 649,
       currency: req.body.currency || "USD",
-      deadline: formatDateStr(req.body.deadline),
+      deadline: formatDateSql(req.body.deadline, null),
       benefits: Array.isArray(req.body.benefits) ? req.body.benefits : ["Full conference access"],
       is_popular: Boolean(req.body.is_popular),
       display_order: Number(req.body.display_order) || newId,
@@ -8311,7 +8343,7 @@ async function startServer() {
             catData.price,
             catData.currency,
             catData.early_bird_price,
-            catData.deadline || null,
+            formatDateSql(catData.deadline, null),
             JSON.stringify(catData.benefits),
             catData.is_popular,
             catData.display_order,
@@ -8359,7 +8391,7 @@ async function startServer() {
             req.body.price,
             req.body.currency,
             req.body.early_bird_price || req.body.early_bird_fee,
-            req.body.deadline ? formatDateStr(req.body.deadline) : null,
+            req.body.deadline ? formatDateSql(req.body.deadline, null) : null,
             req.body.benefits ? JSON.stringify(req.body.benefits) : null,
             req.body.is_popular,
             req.body.display_order,

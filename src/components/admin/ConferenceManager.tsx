@@ -30,7 +30,7 @@ import {
   Users,
   CreditCard
 } from 'lucide-react';
-import { parseConferenceDate } from '../../utils/dateUtils';
+import { parseConferenceDate, toDateInputValue } from '../../utils/dateUtils';
 import { Conference, ConferenceMode, ConferenceStatus, CommitteeMember, Sponsor, MediaPartner, ScheduleItem, RegistrationCategory } from '../../types';
 import { COMMITTEE_MEMBERS, SPONSORS, MEDIA_PARTNERS, SCHEDULE_ITEMS, REGISTRATION_CATEGORIES } from '../../data/initialData';
 import { api } from '../../services/api';
@@ -299,11 +299,22 @@ export const ConferenceManager: React.FC<ConferenceManagerProps> = ({
 
     const fullConfData: Conference = {
       ...conf,
+      start_date: toDateInputValue(conf.start_date),
+      end_date: toDateInputValue(conf.end_date),
+      abstract_deadline: toDateInputValue(conf.abstract_deadline),
+      early_bird_deadline: toDateInputValue(conf.early_bird_deadline),
+      registration_deadline: toDateInputValue(conf.registration_deadline),
       committee: confCommittee.map(m => ({ ...m })),
       sponsors: confSponsors.map(s => ({ ...s })),
       media_partners: confMediaPartners.map(m => ({ ...m })),
-      schedule: confSchedule.map(s => ({ ...s })),
-      categories: confCategories.map(c => ({ ...c })),
+      schedule: confSchedule.map(s => ({
+        ...s,
+        schedule_date: toDateInputValue(s.schedule_date || conf.start_date)
+      })),
+      categories: confCategories.map(c => ({
+        ...c,
+        deadline: toDateInputValue(c.deadline || conf.early_bird_deadline)
+      })),
       about_highlights: (conf.about_highlights && conf.about_highlights.length === 4)
         ? conf.about_highlights
         : [
@@ -612,6 +623,29 @@ export const ConferenceManager: React.FC<ConferenceManagerProps> = ({
 
       const payload: Partial<Conference> = {
         ...editingConference,
+        start_date: toDateInputValue(editingConference.start_date),
+        end_date: toDateInputValue(editingConference.end_date),
+        abstract_deadline: toDateInputValue(editingConference.abstract_deadline),
+        early_bird_deadline: toDateInputValue(editingConference.early_bird_deadline),
+        registration_deadline: toDateInputValue(editingConference.registration_deadline),
+        categories: Array.isArray(editingConference.categories)
+          ? editingConference.categories.map(cat => ({
+              ...cat,
+              deadline: toDateInputValue(cat.deadline || editingConference.early_bird_deadline) || undefined
+            }))
+          : editingConference.categories,
+        sessions: Array.isArray(editingConference.sessions)
+          ? editingConference.sessions.map(ses => ({
+              ...ses,
+              session_date: toDateInputValue(ses.session_date || editingConference.start_date) || undefined
+            }))
+          : editingConference.sessions,
+        schedule: Array.isArray(editingConference.schedule)
+          ? editingConference.schedule.map(sch => ({
+              ...sch,
+              schedule_date: toDateInputValue(sch.schedule_date || editingConference.start_date) || undefined
+            }))
+          : editingConference.schedule,
         featured_badge: badgeValue,
         short_title: badgeValue,
         slug,

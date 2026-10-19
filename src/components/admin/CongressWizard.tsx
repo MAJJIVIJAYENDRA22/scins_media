@@ -69,6 +69,7 @@ import { SpeakerEditModal } from './SpeakerEditModal';
 import { PublicCardPreviewModal } from './PublicCardPreviewModal';
 import { DeleteConfirmModal } from './DeleteConfirmModal';
 import { api } from '../../services/api';
+import { toDateInputValue } from '../../utils/dateUtils';
 import {
   COMMITTEE_MEMBERS,
   SPONSORS,
@@ -303,8 +304,8 @@ const buildInitialFormData = (conf?: Conference | null) => {
       theme: conf.theme || '',
       tagline: conf.tagline || '',
       domain: conf.domain || 'Biotechnology',
-      start_date: conf.start_date || '',
-      end_date: conf.end_date || '',
+      start_date: toDateInputValue(conf.start_date),
+      end_date: toDateInputValue(conf.end_date),
       city: conf.city || '',
       country: conf.country || '',
       venue: conf.venue || '',
@@ -313,9 +314,9 @@ const buildInitialFormData = (conf?: Conference | null) => {
       venue_maps_url: conf.venue_maps_url || '',
       venue_description: conf.venue_description || '',
       timezone: conf.timezone || 'UTC',
-      abstract_deadline: conf.abstract_deadline || '',
-      early_bird_deadline: conf.early_bird_deadline || '',
-      registration_deadline: conf.registration_deadline || '',
+      abstract_deadline: toDateInputValue(conf.abstract_deadline),
+      early_bird_deadline: toDateInputValue(conf.early_bird_deadline),
+      registration_deadline: toDateInputValue(conf.registration_deadline),
       accept_late_breaking: conf.accept_late_breaking ?? true,
       cme_credits_eligible: conf.cme_credits_eligible ?? true,
       mode: (conf.mode || 'hybrid') as ConferenceMode,
@@ -1392,25 +1393,31 @@ export const CongressWizard: React.FC<CongressWizardProps> = ({
       const safeSlug = formData.slug?.trim() || safeTitle.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
       const safeCode = formData.conference_code?.trim() || `SCINS-CONF-${year}-${Math.floor(100 + Math.random() * 900)}`;
 
-      // Safe categories
-      const safeCategories = (formData.categories && formData.categories.length > 0)
+      // Safe categories with normalized deadlines
+      const safeCategories = (formData.categories && formData.categories.length > 0
         ? formData.categories
-        : REGISTRATION_CATEGORIES;
+        : REGISTRATION_CATEGORIES).map(cat => ({
+          ...cat,
+          deadline: toDateInputValue(cat.deadline || formData.early_bird_deadline) || undefined
+        }));
 
       // Safe committee
       const safeCommittee = (formData.committee && formData.committee.length > 0)
         ? formData.committee
         : COMMITTEE_MEMBERS;
 
-      // Safe sessions: persist only the tracks the admin actually created
-      const safeSessions = (formData.sessions && formData.sessions.length > 0)
+      // Safe sessions: persist only the tracks the admin actually created with normalized dates
+      const safeSessions = (formData.sessions && formData.sessions.length > 0
         ? formData.sessions
-        : [];
+        : []).map(ses => ({
+          ...ses,
+          session_date: toDateInputValue(ses.session_date || formData.start_date) || undefined
+        }));
 
       // Safe sponsors
-      const safeSponsors = (formData.sponsors && formData.sponsors.length > 0)
+      const safeSponsors = (formData.sponsors && formData.sponsors.length > 0
         ? formData.sponsors
-        : SPONSORS;
+        : SPONSORS);
 
       // Assemble conference record with 100% frontend alignment
       const conferencePayload: any = {
@@ -1449,11 +1456,11 @@ export const CongressWizard: React.FC<CongressWizardProps> = ({
         venue_maps_url: formData.venue_maps_url || '',
         venue_description: formData.venue_description || '',
         timezone: formData.timezone || 'Europe/Paris (UTC+2)',
-        start_date: formData.start_date || `${year + 1}-06-15`,
-        end_date: formData.end_date || `${year + 1}-06-17`,
-        abstract_deadline: formData.abstract_deadline || `${year + 1}-04-01`,
-        early_bird_deadline: formData.early_bird_deadline || `${year + 1}-03-15`,
-        registration_deadline: formData.registration_deadline || `${year + 1}-05-20`,
+        start_date: toDateInputValue(formData.start_date || `${year + 1}-06-15`),
+        end_date: toDateInputValue(formData.end_date || `${year + 1}-06-17`),
+        abstract_deadline: toDateInputValue(formData.abstract_deadline || `${year + 1}-04-01`),
+        early_bird_deadline: toDateInputValue(formData.early_bird_deadline || `${year + 1}-03-15`),
+        registration_deadline: toDateInputValue(formData.registration_deadline || `${year + 1}-05-20`),
         mode: formData.mode || 'hybrid',
         status: formData.status || 'published',
         hero_image: formData.hero_image || 'https://images.unsplash.com/photo-1532094349884-543bc11b234d?auto=format&fit=crop&w=1600&q=80',
@@ -1528,7 +1535,10 @@ export const CongressWizard: React.FC<CongressWizardProps> = ({
         categories: safeCategories,
         sponsors: safeSponsors,
         media_partners: formData.media_partners || [],
-        schedule: formData.schedule || []
+        schedule: (formData.schedule || []).map(sch => ({
+          ...sch,
+          schedule_date: toDateInputValue(sch.schedule_date || formData.start_date) || undefined
+        }))
       };
 
       let savedData: Conference;

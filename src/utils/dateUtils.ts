@@ -187,3 +187,34 @@ export function sortConferencesByDate<T extends { start_date?: string; end_date?
     return 0;
   });
 }
+
+/**
+ * Normalizes any date value (string or Date or ISO string) to strict YYYY-MM-DD
+ * for HTML5 date inputs and API payloads.
+ */
+export function toDateInputValue(val?: any): string {
+  if (!val) return '';
+  if (val instanceof Date) {
+    if (isNaN(val.getTime())) return '';
+    return val.toISOString().split('T')[0];
+  }
+  const str = String(val).trim();
+  if (!str || str === 'null' || str === 'undefined' || str === 'Invalid Date') return '';
+  if (str.includes('T')) {
+    const part = str.split('T')[0].trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(part)) return part;
+  }
+  if (str.includes(' ')) {
+    const part = str.split(' ')[0].trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(part)) return part;
+  }
+  if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return str;
+  const d = new Date(str);
+  if (!isNaN(d.getTime())) {
+    try {
+      return d.toISOString().split('T')[0];
+    } catch (_) {}
+  }
+  return '';
+}
+
