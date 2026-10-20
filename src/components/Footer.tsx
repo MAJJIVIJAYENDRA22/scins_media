@@ -5,9 +5,7 @@ import {
   CreditCard,
   Building,
   MapPin,
-  Mail,
-  Shield,
-  Lock
+  Mail
 } from 'lucide-react';
 import { api } from '../services/api';
 import { INITIAL_ORGANIZATION_INFO, OrganizationLocationInfo } from '../data/initialData';
@@ -230,18 +228,6 @@ export const Footer: React.FC<FooterProps> = ({
                   {orgInfo.secretariat_email || 'scinsmedia@gmail.com'}
                 </a>
               </div>
-              <div className="pt-2">
-                <button
-                  type="button"
-                  id="footer-admin-portal-link"
-                  onClick={() => handleLink('/admin')}
-                  className="inline-flex items-center space-x-1.5 text-slate-300 hover:text-teal-300 transition-colors text-xs font-semibold bg-slate-800/90 hover:bg-slate-700/80 px-3 py-1.5 rounded-lg border border-slate-700/70 hover:border-teal-500/40 cursor-pointer shadow-xs"
-                  title="SCINS Media Administrator Portal"
-                >
-                  <Lock className="w-3 h-3 text-teal-400" />
-                  <span>Admin Portal</span>
-                </button>
-              </div>
             </div>
           </div>
         </div>
@@ -276,17 +262,6 @@ export const Footer: React.FC<FooterProps> = ({
               className="hover:text-slate-200 transition-colors cursor-pointer"
             >
               Contact Support
-            </button>
-            <span>•</span>
-            <button
-              type="button"
-              id="footer-bottom-admin-login"
-              onClick={() => handleLink('/admin')}
-              className="hover:text-teal-300 text-slate-300 font-semibold transition-colors cursor-pointer inline-flex items-center space-x-1"
-              title="Administrator Sign In"
-            >
-              <Shield className="w-3 h-3 text-teal-400" />
-              <span>Admin Login</span>
             </button>
           </div>
         </div>
