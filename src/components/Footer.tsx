@@ -77,17 +77,14 @@ export const Footer: React.FC<FooterProps> = ({
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-8 lg:gap-10 pb-12 border-b border-slate-800/80 items-start">
           {/* Col 1: Brand & Scientific Mission (5 cols) */}
           <div className="lg:col-span-4 space-y-4">
-            <div className="flex items-center space-x-2.5">
-              <div className="w-8 h-8 rounded-lg bg-teal-500/20 border border-teal-400/40 flex items-center justify-center text-teal-400 font-bold text-base font-display">
-                S
-              </div>
+            <div className="flex items-center">
               <span className="text-lg font-bold text-white tracking-wide font-display">
                 SCINS MEDIA
               </span>
             </div>
 
             <p className="text-xs text-slate-300 leading-relaxed">
-              SCINS Media bridges international academic researchers, clinical investigators, and industrial pioneers to accelerate breakthrough discoveries, Elsevier Scopus-indexed publications, and cross-border innovation.
+              SCINS MEDIA connects researchers, healthcare professionals, and industry experts through international conferences, scientific collaboration, and research publication opportunities, fostering knowledge exchange, interdisciplinary innovation, and global academic advancement.
             </p>
 
             <div className="pt-2">
