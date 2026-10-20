@@ -98,6 +98,15 @@ export interface Conference {
   secretariat_conference_name?: string;
   secretariat_dates?: string;
   secretariat_location?: string;
+  tier1_name?: string;
+  tier1_start_date?: string;
+  tier1_end_date?: string;
+  tier2_name?: string;
+  tier2_start_date?: string;
+  tier2_end_date?: string;
+  tier3_name?: string;
+  tier3_start_date?: string;
+  tier3_end_date?: string;
   created_at?: string;
   updated_at?: string;
   settings?: ConferenceSettings;
@@ -273,6 +282,12 @@ export interface RegistrationCategory {
   is_active?: boolean;
   display_order?: number;
   payment_gateway_link?: string;
+  tier1_start_date?: string;
+  tier1_end_date?: string;
+  tier2_start_date?: string;
+  tier2_end_date?: string;
+  tier3_start_date?: string;
+  tier3_end_date?: string;
   max_quantity?: number;
   available_slots?: number;
 }
@@ -298,7 +313,9 @@ export interface Registration {
   designation: string;
   research_area?: string;
   attendance_mode: 'In-Person' | 'Virtual' | 'Hybrid';
-  selected_categories?: Array<{ id: number; name: string; price: number; quantity?: number; subtotal?: number; currency?: string }>;
+  tier_applied?: string;
+  tier_name?: string;
+  selected_categories?: Array<{ id: number; name: string; price: number; quantity?: number; subtotal?: number; tier?: string; tier_name?: string; currency?: string }>;
   selected_category_ids?: number[];
   accommodation_required: boolean;
   accommodation_days?: number;
@@ -339,7 +356,7 @@ export interface AbstractSubmission {
   abstract_text: string;
   keywords: string;
   research_domain: string;
-  presentation_preference: 'Oral' | 'Poster' | 'Keynote' | 'Virtual';
+  presentation_preference: 'Oral' | 'Poster' | 'Keynote' | string;
   primary_author_name: string;
   primary_author_email: string;
   primary_author_phone?: string;

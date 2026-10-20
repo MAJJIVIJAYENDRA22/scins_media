@@ -2811,6 +2811,121 @@ ${startxref}
   return Buffer.from(pdf, "utf8");
 }
 
+// src/utils/pricingTiers.ts
+function toIsoDate(d) {
+  if (!d) return "";
+  if (typeof d === "string") {
+    const trimmed = d.trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
+    const parsed = new Date(trimmed);
+    if (!isNaN(parsed.getTime())) return parsed.toISOString().split("T")[0];
+    return trimmed.split("T")[0] || "";
+  }
+  return d.toISOString().split("T")[0];
+}
+function getTierSchedules(conf, categories, targetDateStr) {
+  const today = targetDateStr || (/* @__PURE__ */ new Date()).toISOString().split("T")[0];
+  const firstCat = categories && categories.length > 0 ? categories[0] : null;
+  const t1Name = conf?.tier1_name || firstCat?.tier1_label || "Early Bird Price";
+  const t1Start = toIsoDate(conf?.tier1_start_date || firstCat?.tier1_start_date);
+  const t1End = toIsoDate(conf?.tier1_end_date || conf?.early_bird_deadline || firstCat?.tier1_end_date);
+  const t2Name = conf?.tier2_name || firstCat?.tier2_label || "First Call Price";
+  let t2Start = toIsoDate(conf?.tier2_start_date || firstCat?.tier2_start_date);
+  if (!t2Start && t1End) {
+    try {
+      const nextDay = new Date(t1End);
+      nextDay.setDate(nextDay.getDate() + 1);
+      t2Start = nextDay.toISOString().split("T")[0];
+    } catch {
+      t2Start = "";
+    }
+  }
+  const t2End = toIsoDate(conf?.tier2_end_date || firstCat?.tier2_end_date);
+  const t3Name = conf?.tier3_name || firstCat?.tier3_label || "Final Call Registration";
+  let t3Start = toIsoDate(conf?.tier3_start_date || firstCat?.tier3_start_date);
+  if (!t3Start && t2End) {
+    try {
+      const nextDay = new Date(t2End);
+      nextDay.setDate(nextDay.getDate() + 1);
+      t3Start = nextDay.toISOString().split("T")[0];
+    } catch {
+      t3Start = "";
+    }
+  }
+  const t3End = toIsoDate(conf?.tier3_end_date || conf?.registration_deadline || conf?.start_date || firstCat?.tier3_end_date);
+  let t1Status = "active";
+  if (t1End && today > t1End) {
+    t1Status = "expired";
+  } else if (t1Start && today < t1Start) {
+    t1Status = "scheduled";
+  } else {
+    t1Status = "active";
+  }
+  let t2Status = "scheduled";
+  if (t2End && today > t2End) {
+    t2Status = "expired";
+  } else if (t2Start && today < t2Start) {
+    t2Status = "scheduled";
+  } else if (t1Status === "active") {
+    t2Status = "scheduled";
+  } else if (t1Status === "expired") {
+    t2Status = "active";
+  } else {
+    t2Status = "active";
+  }
+  let t3Status = "scheduled";
+  if (t3End && today > t3End) {
+    t3Status = "expired";
+  } else if (t1Status === "active" || t2Status === "active") {
+    t3Status = "scheduled";
+  } else {
+    t3Status = "active";
+  }
+  let activeTier = "tier3";
+  if (t1Status === "active") {
+    activeTier = "tier1";
+  } else if (t2Status === "active") {
+    activeTier = "tier2";
+  } else {
+    activeTier = "tier3";
+  }
+  const activeTierName = activeTier === "tier1" ? t1Name : activeTier === "tier2" ? t2Name : t3Name;
+  return {
+    today,
+    activeTier,
+    activeTierName,
+    tier1: {
+      key: "tier1",
+      name: t1Name,
+      startDate: t1Start,
+      endDate: t1End,
+      status: t1Status
+    },
+    tier2: {
+      key: "tier2",
+      name: t2Name,
+      startDate: t2Start,
+      endDate: t2End,
+      status: t2Status
+    },
+    tier3: {
+      key: "tier3",
+      name: t3Name,
+      startDate: t3Start,
+      endDate: t3End,
+      status: t3Status
+    }
+  };
+}
+function getCategoryTierPrice(cat, tier) {
+  const stdPrice = Number(cat.tier3_price ?? cat.price ?? cat.standard_fee ?? cat.industry_price ?? 799);
+  const earlyPrice = Number(cat.tier1_price ?? cat.early_bird_price ?? cat.early_bird_fee ?? cat.academic_price ?? (stdPrice > 100 ? stdPrice - 100 : stdPrice));
+  const midPrice = Number(cat.tier2_price ?? Math.round((earlyPrice + stdPrice) / 2));
+  if (tier === "tier1") return earlyPrice;
+  if (tier === "tier2") return midPrice;
+  return stdPrice;
+}
+
 // server.ts
 var candidateEnvPaths = [
   import_path.default.resolve(process.cwd(), ".env"),
@@ -2924,6 +3039,15 @@ function normalizeCategoryData(c, confId, idx) {
     tier1_price: earlyPrice,
     tier2_price: midPrice,
     tier3_price: standardPrice,
+    tier1_label: c.tier1_label || "Early Bird Price",
+    tier2_label: c.tier2_label || "First Call Price",
+    tier3_label: c.tier3_label || "Final Call Registration",
+    tier1_start_date: c.tier1_start_date || "",
+    tier1_end_date: c.tier1_end_date || "",
+    tier2_start_date: c.tier2_start_date || "",
+    tier2_end_date: c.tier2_end_date || "",
+    tier3_start_date: c.tier3_start_date || "",
+    tier3_end_date: c.tier3_end_date || "",
     payment_gateway_link: c.payment_gateway_link || "",
     is_active: c.is_active !== void 0 ? Boolean(c.is_active) : true,
     display_order: Number(c.display_order ?? idx + 1),
@@ -3374,12 +3498,41 @@ async function ensureConferenceColumns(poolOrConn) {
     { name: "secretariat_location", type: "VARCHAR(255) NULL" },
     { name: "venue_photo", type: "TEXT NULL" },
     { name: "venue_maps_url", type: "TEXT NULL" },
-    { name: "venue_description", type: "TEXT NULL" }
+    { name: "venue_description", type: "TEXT NULL" },
+    { name: "tier1_name", type: "VARCHAR(100) NULL" },
+    { name: "tier1_start_date", type: "VARCHAR(50) NULL" },
+    { name: "tier1_end_date", type: "VARCHAR(50) NULL" },
+    { name: "tier2_name", type: "VARCHAR(100) NULL" },
+    { name: "tier2_start_date", type: "VARCHAR(50) NULL" },
+    { name: "tier2_end_date", type: "VARCHAR(50) NULL" },
+    { name: "tier3_name", type: "VARCHAR(100) NULL" },
+    { name: "tier3_start_date", type: "VARCHAR(50) NULL" },
+    { name: "tier3_end_date", type: "VARCHAR(50) NULL" }
   ];
   for (const col of cols) {
     try {
       await executor.query(`ALTER TABLE conferences ADD COLUMN ${col.name} ${col.type}`);
     } catch (e) {
+    }
+  }
+  const catCols = [
+    { name: "tier1_price", type: "DECIMAL(10, 2) NULL" },
+    { name: "tier2_price", type: "DECIMAL(10, 2) NULL" },
+    { name: "tier3_price", type: "DECIMAL(10, 2) NULL" },
+    { name: "tier1_label", type: "VARCHAR(100) NULL" },
+    { name: "tier2_label", type: "VARCHAR(100) NULL" },
+    { name: "tier3_label", type: "VARCHAR(100) NULL" },
+    { name: "tier1_start_date", type: "VARCHAR(50) NULL" },
+    { name: "tier1_end_date", type: "VARCHAR(50) NULL" },
+    { name: "tier2_start_date", type: "VARCHAR(50) NULL" },
+    { name: "tier2_end_date", type: "VARCHAR(50) NULL" },
+    { name: "tier3_start_date", type: "VARCHAR(50) NULL" },
+    { name: "tier3_end_date", type: "VARCHAR(50) NULL" }
+  ];
+  for (const col of catCols) {
+    try {
+      await executor.query(`ALTER TABLE registration_categories ADD COLUMN ${col.name} ${col.type}`);
+    } catch (_) {
     }
   }
   const mediaAlters = [
@@ -4408,6 +4561,15 @@ async function loadDatabaseFromMysql() {
         secretariat_conference_name: r.secretariat_conference_name || "",
         secretariat_dates: r.secretariat_dates || "",
         secretariat_location: r.secretariat_location || "",
+        tier1_name: r.tier1_name || "",
+        tier1_start_date: formatDateStr(r.tier1_start_date),
+        tier1_end_date: formatDateStr(r.tier1_end_date),
+        tier2_name: r.tier2_name || "",
+        tier2_start_date: formatDateStr(r.tier2_start_date),
+        tier2_end_date: formatDateStr(r.tier2_end_date),
+        tier3_name: r.tier3_name || "",
+        tier3_start_date: formatDateStr(r.tier3_start_date),
+        tier3_end_date: formatDateStr(r.tier3_end_date),
         created_at: r.created_at ? new Date(r.created_at).toISOString() : (/* @__PURE__ */ new Date()).toISOString()
       }));
       try {
@@ -4515,7 +4677,19 @@ async function loadDatabaseFromMysql() {
             is_popular: Boolean(c.is_popular),
             display_order: Number(c.display_order || 1),
             payment_gateway_link: c.payment_gateway_link || "",
-            is_active: Boolean(c.is_active)
+            is_active: Boolean(c.is_active),
+            tier1_price: Number(c.tier1_price ?? c.early_bird_price ?? c.price ?? 0),
+            tier2_price: Number(c.tier2_price ?? Math.round(((Number(c.early_bird_price) || 0) + (Number(c.price) || 0)) / 2)),
+            tier3_price: Number(c.tier3_price ?? c.price ?? 0),
+            tier1_label: c.tier1_label || "Early Bird Price",
+            tier2_label: c.tier2_label || "First Call Price",
+            tier3_label: c.tier3_label || "Final Call Registration",
+            tier1_start_date: formatDateStr(c.tier1_start_date),
+            tier1_end_date: formatDateStr(c.tier1_end_date),
+            tier2_start_date: formatDateStr(c.tier2_start_date),
+            tier2_end_date: formatDateStr(c.tier2_end_date),
+            tier3_start_date: formatDateStr(c.tier3_start_date),
+            tier3_end_date: formatDateStr(c.tier3_end_date)
           }));
         }
       } catch (err) {
@@ -8590,61 +8764,69 @@ async function startServer() {
       const confCategories = db.categories.filter((c) => c.conference_id === targetConf.id);
       const fallbackCategories = REGISTRATION_CATEGORIES.filter((c) => c.conference_id === targetConf.id);
       const availableCategories = confCategories.length > 0 ? confCategories : fallbackCategories.length > 0 ? fallbackCategories : REGISTRATION_CATEGORIES;
+      const tierSchedule = getTierSchedules(targetConf, availableCategories);
+      const activeTierKey = tierSchedule.activeTier;
+      const activeTierName = tierSchedule.activeTierName;
+      const currency = (body.currency || "EUR").toUpperCase();
+      const CURRENCY_RATES = { EUR: 1, USD: 1.08, GBP: 0.85 };
+      const curRate = CURRENCY_RATES[currency] || 1;
       let selectedCategoriesList = [];
       if (Array.isArray(body.selected_categories) && body.selected_categories.length > 0) {
         selectedCategoriesList = body.selected_categories.map((item) => {
           const match = availableCategories.find((c) => c.id === Number(item.id)) || availableCategories.find((c) => c.name === item.name);
-          const adminPrice = match ? Number(match.price ?? match.standard_fee ?? match.tier3_price ?? match.industry_price ?? match.early_bird_fee ?? match.early_bird_price ?? 499) : Number(item.price || 499);
+          const serverBasePrice = match ? getCategoryTierPrice(match, activeTierKey) : Number(item.price || 499);
           const quantity = Math.max(1, Number(item.quantity) || 1);
-          const unitPrice = Number(item.price) || adminPrice;
-          const subtotal = item.subtotal !== void 0 ? Number(item.subtotal) : unitPrice * quantity;
+          const unitPrice = Math.round(serverBasePrice * curRate);
+          const subtotal = unitPrice * quantity;
           return {
             id: match ? match.id : Number(item.id || 1),
             name: match ? match.name : item.name || "Delegate Pass",
             price: unitPrice,
             quantity,
             subtotal,
-            currency: body.currency || "USD"
+            tier: activeTierKey,
+            tier_name: activeTierName,
+            currency
           };
         });
       } else if (Array.isArray(body.selected_category_ids) && body.selected_category_ids.length > 0) {
         selectedCategoriesList = body.selected_category_ids.map((cid) => {
           const match = availableCategories.find((c) => c.id === Number(cid)) || availableCategories[0];
-          const adminPrice = match ? Number(match.price ?? match.standard_fee ?? match.tier3_price ?? match.industry_price ?? match.early_bird_fee ?? match.early_bird_price ?? 499) : 499;
+          const serverBasePrice = match ? getCategoryTierPrice(match, activeTierKey) : 499;
+          const unitPrice = Math.round(serverBasePrice * curRate);
           return {
             id: match ? match.id : Number(cid),
             name: match ? match.name : "Delegate Pass",
-            price: adminPrice,
+            price: unitPrice,
             quantity: 1,
-            subtotal: adminPrice,
-            currency: body.currency || "USD"
+            subtotal: unitPrice,
+            tier: activeTierKey,
+            tier_name: activeTierName,
+            currency
           };
         });
       } else {
         const catId = Number(body.category_id) || availableCategories[0]?.id || 1;
         const match = availableCategories.find((c) => c.id === catId) || availableCategories[0];
-        const adminPrice = match ? Number(match.price ?? match.standard_fee ?? match.tier3_price ?? match.industry_price ?? match.early_bird_fee ?? match.early_bird_price ?? 499) : 499;
+        const serverBasePrice = match ? getCategoryTierPrice(match, activeTierKey) : 499;
+        const unitPrice = Math.round(serverBasePrice * curRate);
         selectedCategoriesList = [{
           id: match ? match.id : catId,
           name: match ? match.name : body.category_name || "Delegate Pass",
-          price: adminPrice,
+          price: unitPrice,
           quantity: 1,
-          subtotal: adminPrice,
-          currency: body.currency || "USD"
+          subtotal: unitPrice,
+          tier: activeTierKey,
+          tier_name: activeTierName,
+          currency
         }];
       }
       const accommodationRequired = Boolean(body.accommodation_required);
       const accommodationDays = accommodationRequired ? Math.max(1, Number(body.accommodation_days) || 1) : 0;
       const adminAccommodationRate = Number(targetConf.accommodation_price_per_day) || 120;
-      const accommodationTotal = accommodationRequired ? accommodationDays * adminAccommodationRate : 0;
-      const passesBaseTotal = selectedCategoriesList.reduce((sum, item) => sum + Number(item.subtotal || 0), 0);
-      const grandBaseTotal = passesBaseTotal + accommodationTotal;
-      const currency = (body.currency || "USD").toUpperCase();
-      const CURRENCY_RATES = { EUR: 1, USD: 1.08, GBP: 0.85 };
-      const curRate = CURRENCY_RATES[currency] || 1;
-      const expectedGrandTotal = Math.round(grandBaseTotal * curRate);
-      const submittedAmount = Number(body.amount);
-      const finalAmount = submittedAmount > 0 ? submittedAmount : expectedGrandTotal;
+      const accommodationTotal = accommodationRequired ? accommodationDays * Math.round(adminAccommodationRate * curRate) : 0;
+      const passesTotal = selectedCategoriesList.reduce((sum, item) => sum + Number(item.subtotal || 0), 0);
+      const finalAmount = passesTotal + accommodationTotal;
       const primaryCatId = selectedCategoriesList[0]?.id || 1;
       const combinedCategoryName = selectedCategoriesList.map((c) => `${c.quantity > 1 ? `${c.quantity}x ` : ""}${c.name}`).join(" + ") || "Delegate Pass";
       const regId = `SCINS-REG-${(/* @__PURE__ */ new Date()).getFullYear()}-${Math.floor(1e4 + Math.random() * 9e4)}`;
@@ -9273,12 +9455,18 @@ async function startServer() {
       const confCats = dbCategories.length > 0 ? dbCategories : Array.isArray(targetConf.categories) && targetConf.categories.length > 0 ? targetConf.categories : REGISTRATION_CATEGORIES.filter((c) => c.conference_id === targetConf.id);
       const availableCategories = confCats.length > 0 ? confCats : REGISTRATION_CATEGORIES;
       const verifiedCurrency = (reg?.currency || currency || targetConf.currency || "USD").toLowerCase();
+      const CURRENCY_RATES = { eur: 1, usd: 1.08, gbp: 0.85 };
+      const curRate = CURRENCY_RATES[verifiedCurrency] || 1;
+      const tierSchedule = getTierSchedules(targetConf, availableCategories);
+      const activeTierKey = tierSchedule.activeTier;
+      const activeTierName = tierSchedule.activeTierName;
       let verifiedLineItems = [];
       let verifiedPassesTotal = 0;
       if (reg && Array.isArray(reg.selected_categories) && reg.selected_categories.length > 0) {
         for (const item of reg.selected_categories) {
           const matched = availableCategories.find((c) => c.id === Number(item.id)) || availableCategories.find((c) => c.name.toLowerCase() === item.name.toLowerCase()) || availableCategories[0];
-          const verifiedUnitPrice = matched ? Number(matched.price ?? matched.standard_fee ?? matched.tier3_price ?? matched.early_bird_fee ?? matched.early_bird_price ?? 499) : Number(item.price || 499);
+          const serverBasePrice = matched ? getCategoryTierPrice(matched, activeTierKey) : Number(item.price || 499);
+          const verifiedUnitPrice = Math.round(serverBasePrice * curRate);
           const qty = Math.max(1, Number(item.quantity) || 1);
           const lineSubtotal = verifiedUnitPrice * qty;
           verifiedPassesTotal += lineSubtotal;
@@ -9287,8 +9475,8 @@ async function startServer() {
               currency: verifiedCurrency,
               unit_amount: Math.round(verifiedUnitPrice * 100),
               product_data: {
-                name: `${targetConf.short_title || targetConf.title}: ${matched ? matched.name : item.name}`,
-                description: `Delegate Pass [Order Ref: ${reg.registration_id}]`
+                name: `${targetConf.short_title || targetConf.title}: ${matched ? matched.name : item.name} (${activeTierName})`,
+                description: `Delegate Pass [Tier: ${activeTierName}] [Order Ref: ${reg.registration_id}]`
               }
             },
             quantity: qty
@@ -9298,15 +9486,16 @@ async function startServer() {
         const matched = availableCategories.find(
           (c) => category_name && c.name.toLowerCase() === category_name.toLowerCase() || c.id === Number(reg?.category_id || 1)
         ) || availableCategories[0];
-        const verifiedUnitPrice = matched ? Number(matched.price ?? matched.standard_fee ?? matched.tier3_price ?? matched.early_bird_fee ?? matched.early_bird_price ?? 499) : parseFloat(amount) || 499;
+        const serverBasePrice = matched ? getCategoryTierPrice(matched, activeTierKey) : parseFloat(amount) || 499;
+        const verifiedUnitPrice = Math.round(serverBasePrice * curRate);
         verifiedPassesTotal = verifiedUnitPrice;
         verifiedLineItems.push({
           price_data: {
             currency: verifiedCurrency,
             unit_amount: Math.round(verifiedUnitPrice * 100),
             product_data: {
-              name: `${targetConf.short_title || targetConf.title}: ${matched.name}`,
-              description: `Delegate Pass Order [Ref: ${reg ? reg.registration_id : "PENDING"}]`
+              name: `${targetConf.short_title || targetConf.title}: ${matched.name} (${activeTierName})`,
+              description: `Delegate Pass Order [Tier: ${activeTierName}] [Ref: ${reg ? reg.registration_id : "PENDING"}]`
             }
           },
           quantity: 1

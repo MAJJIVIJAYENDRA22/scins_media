@@ -70,6 +70,7 @@ import { PublicCardPreviewModal } from './PublicCardPreviewModal';
 import { DeleteConfirmModal } from './DeleteConfirmModal';
 import { api } from '../../services/api';
 import { toDateInputValue } from '../../utils/dateUtils';
+import { getTierSchedules, validateTierDates } from '../../utils/pricingTiers';
 import {
   COMMITTEE_MEMBERS,
   SPONSORS,
@@ -317,6 +318,15 @@ const buildInitialFormData = (conf?: Conference | null) => {
       abstract_deadline: toDateInputValue(conf.abstract_deadline),
       early_bird_deadline: toDateInputValue(conf.early_bird_deadline),
       registration_deadline: toDateInputValue(conf.registration_deadline),
+      tier1_name: (conf as any).tier1_name || 'Early Bird Price',
+      tier1_start_date: toDateInputValue((conf as any).tier1_start_date),
+      tier1_end_date: toDateInputValue((conf as any).tier1_end_date || conf.early_bird_deadline),
+      tier2_name: (conf as any).tier2_name || 'First Call Price',
+      tier2_start_date: toDateInputValue((conf as any).tier2_start_date),
+      tier2_end_date: toDateInputValue((conf as any).tier2_end_date),
+      tier3_name: (conf as any).tier3_name || 'Final Call Registration',
+      tier3_start_date: toDateInputValue((conf as any).tier3_start_date),
+      tier3_end_date: toDateInputValue((conf as any).tier3_end_date || conf.registration_deadline),
       accept_late_breaking: conf.accept_late_breaking ?? true,
       cme_credits_eligible: conf.cme_credits_eligible ?? true,
       mode: (conf.mode || 'hybrid') as ConferenceMode,
@@ -380,10 +390,10 @@ const buildInitialFormData = (conf?: Conference | null) => {
         ? conf.categories.map((c, idx) => {
             const std = Number(c.price ?? c.standard_fee ?? c.industry_price ?? c.tier3_price ?? 799);
             const early = Number(c.early_bird_price ?? c.early_bird_fee ?? c.academic_price ?? c.tier1_price ?? 649);
+            const mid = Number(c.tier2_price ?? Math.round((early + std) / 2));
             const acad = Number(c.academic_price ?? early);
             const ind = Number(c.industry_price ?? std);
             const stud = Number(c.student_price ?? Math.round(acad * 0.7));
-            const mid = Number(c.tier2_price ?? Math.round((early + std) / 2));
             return {
               ...c,
               id: c.id || (idx + 1),
@@ -395,12 +405,15 @@ const buildInitialFormData = (conf?: Conference | null) => {
               early_bird_price: early,
               early_bird_fee: early,
               tier1_price: early,
+              tier2_price: mid,
               academic_price: acad,
               student_price: stud,
-              tier2_price: mid,
+              tier1_label: c.tier1_label || 'Early Bird Price',
+              tier2_label: c.tier2_label || 'First Call Price',
+              tier3_label: c.tier3_label || 'Final Call Registration',
               is_active: c.is_active !== undefined ? Boolean(c.is_active) : true,
               display_order: Number(c.display_order ?? (idx + 1)),
-              payment_gateway_link: c.payment_gateway_link || `https://buy.stripe.com/scins_c${conf.id || 1}_p${c.id || (idx + 1)}_${(c.name || 'pass').toLowerCase().replace(/[^a-z0-9]+/g, '_')}`
+              payment_gateway_link: c.payment_gateway_link || ''
             };
           })
         : (REGISTRATION_CATEGORIES.filter(c => c.conference_id === conf.id).length > 0
@@ -486,6 +499,15 @@ const buildInitialFormData = (conf?: Conference | null) => {
     abstract_deadline: '2026-07-15',
     early_bird_deadline: '2026-06-30',
     registration_deadline: '2026-09-01',
+    tier1_name: 'Early Bird Price',
+    tier1_start_date: '2026-03-01',
+    tier1_end_date: '2026-06-30',
+    tier2_name: 'First Call Price',
+    tier2_start_date: '2026-07-01',
+    tier2_end_date: '2026-08-15',
+    tier3_name: 'Final Call Registration',
+    tier3_start_date: '2026-08-16',
+    tier3_end_date: '2026-09-01',
     accept_late_breaking: true,
     cme_credits_eligible: true,
     mode: 'hybrid' as ConferenceMode,
@@ -1121,27 +1143,33 @@ export const CongressWizard: React.FC<CongressWizardProps> = ({
       const updated = [...(prev.categories || [])];
       if (!updated[idx]) return prev;
       let patch: any = { [field]: value };
-      if (field === 'price' || field === 'standard_fee') {
+      if (field === 'price' || field === 'standard_fee' || field === 'tier3_price') {
         const num = Number(value);
-        const early = Number(updated[idx].early_bird_price ?? updated[idx].early_bird_fee ?? 0);
+        const early = Number(updated[idx].tier1_price ?? updated[idx].early_bird_price ?? updated[idx].early_bird_fee ?? 0);
         patch = {
           ...patch,
           price: num,
           standard_fee: num,
           tier3_price: num,
           industry_price: num,
-          tier2_price: Math.round((early + num) / 2)
+          tier2_price: updated[idx].tier2_price ?? Math.round((early + num) / 2)
         };
-      } else if (field === 'early_bird_price' || field === 'early_bird_fee') {
+      } else if (field === 'early_bird_price' || field === 'early_bird_fee' || field === 'tier1_price') {
         const num = Number(value);
-        const std = Number(updated[idx].price ?? updated[idx].standard_fee ?? 0);
+        const std = Number(updated[idx].tier3_price ?? updated[idx].price ?? updated[idx].standard_fee ?? 0);
         patch = {
           ...patch,
           early_bird_price: num,
           early_bird_fee: num,
           tier1_price: num,
           academic_price: num,
-          tier2_price: Math.round((num + std) / 2)
+          tier2_price: updated[idx].tier2_price ?? Math.round((num + std) / 2)
+        };
+      } else if (field === 'tier2_price') {
+        const num = Number(value);
+        patch = {
+          ...patch,
+          tier2_price: num
         };
       }
       updated[idx] = { ...updated[idx], ...patch };
@@ -1157,10 +1185,18 @@ export const CongressWizard: React.FC<CongressWizardProps> = ({
       code: `PASS-${nextId}`,
       name: 'Industry & Corporate Delegate',
       price: 999,
+      standard_fee: 999,
+      tier3_price: 999,
       early_bird_price: 849,
+      early_bird_fee: 849,
+      tier1_price: 849,
+      tier2_price: 924,
+      tier1_label: formData.tier1_name || 'Early Bird Price',
+      tier2_label: formData.tier2_name || 'First Call Price',
+      tier3_label: formData.tier3_name || 'Final Call Registration',
       currency: 'USD',
       description: 'Standard attendee pass with full access to scientific sessions and exhibition.',
-      payment_gateway_link: `https://buy.stripe.com/scins_pkg_${nextId}_${Date.now().toString(36)}`,
+      payment_gateway_link: '',
       is_active: true,
       display_order: (formData.categories || []).length + 1,
       benefits: [
@@ -1271,10 +1307,18 @@ export const CongressWizard: React.FC<CongressWizardProps> = ({
         formData.categories.length >= 1 &&
         formData.categories.every(c =>
           Boolean(c.name && c.name.trim().length > 0) &&
-          Number(c.price || c.standard_fee) > 0 &&
-          Boolean(c.payment_gateway_link && isValidUrl(c.payment_gateway_link))
+          Number(c.price || c.standard_fee || c.tier3_price) > 0 &&
+          (!c.payment_gateway_link || isValidUrl(c.payment_gateway_link))
         ) &&
-        getDuplicateGatewayLinks(formData.categories).size === 0
+        getDuplicateGatewayLinks(formData.categories).size === 0 &&
+        validateTierDates(
+          formData.tier1_start_date || '',
+          formData.tier1_end_date || formData.early_bird_deadline || '',
+          formData.tier2_start_date || '',
+          formData.tier2_end_date || '',
+          formData.tier3_start_date || '',
+          formData.tier3_end_date || formData.registration_deadline || ''
+        ).isValid
       ),
       13: formData.indexing_partners.length >= 1,
       14: true
@@ -1284,6 +1328,46 @@ export const CongressWizard: React.FC<CongressWizardProps> = ({
 
   // Overall form validity
   const isFormValid = Object.values(stepValidation).every(Boolean);
+
+  // Live Promotional Pricing Tier Schedules & Dynamic Status
+  const liveTierSchedules = useMemo(() => {
+    return getTierSchedules(formData, formData.categories);
+  }, [
+    formData.tier1_name,
+    formData.tier1_start_date,
+    formData.tier1_end_date,
+    formData.early_bird_deadline,
+    formData.tier2_name,
+    formData.tier2_start_date,
+    formData.tier2_end_date,
+    formData.tier3_name,
+    formData.tier3_start_date,
+    formData.tier3_end_date,
+    formData.registration_deadline,
+    formData.start_date,
+    formData.categories
+  ]);
+
+  // Live Date Validation for Step 12 Schedule
+  const tierValidation = useMemo(() => {
+    return validateTierDates(
+      formData.tier1_start_date || '',
+      formData.tier1_end_date || formData.early_bird_deadline || '',
+      formData.tier2_start_date || '',
+      formData.tier2_end_date || '',
+      formData.tier3_start_date || '',
+      formData.tier3_end_date || formData.registration_deadline || ''
+    );
+  }, [
+    formData.tier1_start_date,
+    formData.tier1_end_date,
+    formData.early_bird_deadline,
+    formData.tier2_start_date,
+    formData.tier2_end_date,
+    formData.tier3_start_date,
+    formData.tier3_end_date,
+    formData.registration_deadline
+  ]);
 
   // 1-Click Auto-Fill Full Conference Template for Rapid Provisioning
   const handleAutoFillCompleteTemplate = () => {
@@ -1369,9 +1453,9 @@ export const CongressWizard: React.FC<CongressWizardProps> = ({
   const handleFinalPublish = async () => {
     setIsSubmitting(true);
     try {
-      // Mandatory Step 12 Validation: Every package MUST have its own valid payment gateway link
+      // Step 12 Validation: Check package names and prices (Payment Gateway Link is optional)
       const cats = formData.categories || [];
-      const invalidCats = cats.filter(c => !c.name?.trim() || Number(c.price || c.standard_fee) <= 0 || !c.payment_gateway_link || !isValidUrl(c.payment_gateway_link));
+      const invalidCats = cats.filter(c => !c.name?.trim() || Number(c.price || c.standard_fee) <= 0 || (c.payment_gateway_link && !isValidUrl(c.payment_gateway_link)));
       const dupeLinks = getDuplicateGatewayLinks(cats);
       if (cats.length === 0 || invalidCats.length > 0 || dupeLinks.size > 0) {
         setIsSubmitting(false);
@@ -1379,9 +1463,9 @@ export const CongressWizard: React.FC<CongressWizardProps> = ({
         if (cats.length === 0) {
           alert('Step 12 Error: Please configure at least one registration package.');
         } else if (invalidCats.length > 0) {
-          alert(`Step 12 Error: Every package MUST have a valid Payment Gateway Link (HTTP/HTTPS URL), Name, and Price. Found ${invalidCats.length} incomplete package(s).`);
+          alert(`Step 12 Error: Please ensure every package has a valid Name and Price (and valid URL if payment link is provided). Found ${invalidCats.length} incomplete package(s).`);
         } else {
-          alert('Step 12 Error: Duplicate payment gateway link detected. Every package MUST have its own unique payment link. Do NOT use one common or global payment link for all packages.');
+          alert('Step 12 Error: Duplicate payment gateway link detected. When configured, every package must have its own unique payment link.');
         }
         return;
       }
@@ -1393,13 +1477,34 @@ export const CongressWizard: React.FC<CongressWizardProps> = ({
       const safeSlug = formData.slug?.trim() || safeTitle.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
       const safeCode = formData.conference_code?.trim() || `SCINS-CONF-${year}-${Math.floor(100 + Math.random() * 900)}`;
 
-      // Safe categories with normalized deadlines
+      // Safe categories with normalized deadlines and 3-tier rates
       const safeCategories = (formData.categories && formData.categories.length > 0
         ? formData.categories
-        : REGISTRATION_CATEGORIES).map(cat => ({
-          ...cat,
-          deadline: toDateInputValue(cat.deadline || formData.early_bird_deadline) || undefined
-        }));
+        : REGISTRATION_CATEGORIES).map(cat => {
+          const t1 = Number(cat.tier1_price ?? cat.early_bird_price ?? cat.price ?? 649);
+          const t3 = Number(cat.tier3_price ?? cat.price ?? cat.standard_fee ?? 799);
+          const t2 = Number(cat.tier2_price ?? Math.round((t1 + t3) / 2));
+          return {
+            ...cat,
+            price: t3,
+            standard_fee: t3,
+            tier3_price: t3,
+            early_bird_price: t1,
+            early_bird_fee: t1,
+            tier1_price: t1,
+            tier2_price: t2,
+            tier1_label: formData.tier1_name || 'Early Bird Price',
+            tier2_label: formData.tier2_name || 'First Call Price',
+            tier3_label: formData.tier3_name || 'Final Call Registration',
+            tier1_start_date: toDateInputValue(formData.tier1_start_date) || undefined,
+            tier1_end_date: toDateInputValue(formData.tier1_end_date || formData.early_bird_deadline) || undefined,
+            tier2_start_date: toDateInputValue(formData.tier2_start_date) || undefined,
+            tier2_end_date: toDateInputValue(formData.tier2_end_date) || undefined,
+            tier3_start_date: toDateInputValue(formData.tier3_start_date) || undefined,
+            tier3_end_date: toDateInputValue(formData.tier3_end_date || formData.registration_deadline) || undefined,
+            deadline: toDateInputValue(cat.deadline || formData.tier1_end_date || formData.early_bird_deadline) || undefined
+          };
+        });
 
       // Safe committee
       const safeCommittee = (formData.committee && formData.committee.length > 0)
@@ -1459,8 +1564,17 @@ export const CongressWizard: React.FC<CongressWizardProps> = ({
         start_date: toDateInputValue(formData.start_date || `${year + 1}-06-15`),
         end_date: toDateInputValue(formData.end_date || `${year + 1}-06-17`),
         abstract_deadline: toDateInputValue(formData.abstract_deadline || `${year + 1}-04-01`),
-        early_bird_deadline: toDateInputValue(formData.early_bird_deadline || `${year + 1}-03-15`),
-        registration_deadline: toDateInputValue(formData.registration_deadline || `${year + 1}-05-20`),
+        early_bird_deadline: toDateInputValue(formData.early_bird_deadline || formData.tier1_end_date || `${year + 1}-03-15`),
+        registration_deadline: toDateInputValue(formData.registration_deadline || formData.tier3_end_date || `${year + 1}-05-20`),
+        tier1_name: formData.tier1_name || 'Early Bird Price',
+        tier1_start_date: toDateInputValue(formData.tier1_start_date) || undefined,
+        tier1_end_date: toDateInputValue(formData.tier1_end_date || formData.early_bird_deadline) || undefined,
+        tier2_name: formData.tier2_name || 'First Call Price',
+        tier2_start_date: toDateInputValue(formData.tier2_start_date) || undefined,
+        tier2_end_date: toDateInputValue(formData.tier2_end_date) || undefined,
+        tier3_name: formData.tier3_name || 'Final Call Registration',
+        tier3_start_date: toDateInputValue(formData.tier3_start_date) || undefined,
+        tier3_end_date: toDateInputValue(formData.tier3_end_date || formData.registration_deadline) || undefined,
         mode: formData.mode || 'hybrid',
         status: formData.status || 'published',
         hero_image: formData.hero_image || 'https://images.unsplash.com/photo-1532094349884-543bc11b234d?auto=format&fit=crop&w=1600&q=80',
@@ -3627,7 +3741,7 @@ export const CongressWizard: React.FC<CongressWizardProps> = ({
               {(() => {
                 const dupeLinks = getDuplicateGatewayLinks(formData.categories || []);
                 const invalidCats = (formData.categories || []).filter(
-                  c => !c.name?.trim() || Number(c.price || c.standard_fee) <= 0 || !c.payment_gateway_link || !isValidUrl(c.payment_gateway_link)
+                  c => !c.name?.trim() || Number(c.price || c.standard_fee) <= 0 || (c.payment_gateway_link && !isValidUrl(c.payment_gateway_link))
                 );
                 const hasIssues = invalidCats.length > 0 || dupeLinks.size > 0;
                 if (!hasIssues) {
@@ -3636,7 +3750,7 @@ export const CongressWizard: React.FC<CongressWizardProps> = ({
                       <div className="flex items-center space-x-2">
                         <CheckCircle2 className="w-4 h-4 text-teal-700 flex-shrink-0" />
                         <span className="font-medium">
-                          All <strong>{(formData.categories || []).length}</strong> registration packages have valid, dedicated payment gateway links.
+                          All <strong>{(formData.categories || []).length}</strong> registration packages are valid and configured.
                         </span>
                       </div>
                       <span className="text-[10px] font-bold uppercase tracking-wider bg-teal-200/80 text-teal-900 px-2 py-0.5 rounded-full">
@@ -3649,17 +3763,17 @@ export const CongressWizard: React.FC<CongressWizardProps> = ({
                   <div className="p-3.5 bg-rose-50 border border-rose-200 rounded-2xl space-y-1 text-xs text-rose-900">
                     <div className="flex items-center space-x-2 font-bold text-rose-800">
                       <AlertCircle className="w-4 h-4 text-rose-600 flex-shrink-0" />
-                      <span>Payment Gateway Configuration Required</span>
+                      <span>Registration Package Configuration Notice</span>
                     </div>
                     <ul className="list-disc list-inside text-[11px] text-rose-700 space-y-0.5 pl-1">
                       {invalidCats.length > 0 && (
                         <li>
-                          <strong>{invalidCats.length} package(s)</strong> require a valid Payment Gateway Link (HTTP/HTTPS URL), name, or price before saving.
+                          <strong>{invalidCats.length} package(s)</strong> require a valid name, price, or valid URL format (if payment link is provided).
                         </li>
                       )}
                       {dupeLinks.size > 0 && (
                         <li>
-                          Duplicate payment link detected: Every package <strong>MUST have its own distinct payment link</strong>. Do not use one common/global payment link across packages.
+                          Duplicate payment link detected: When payment links are configured, every package should have its own distinct payment link.
                         </li>
                       )}
                     </ul>
@@ -3688,6 +3802,237 @@ export const CongressWizard: React.FC<CongressWizardProps> = ({
                 </div>
               </div>
 
+              {/* Registration Pricing & Early Bird Schedule Section */}
+              <div className="bg-white border-2 border-teal-600/30 rounded-2xl p-5 shadow-xs space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-slate-100 gap-2">
+                  <div className="flex items-center space-x-3">
+                    <div className="w-10 h-10 rounded-xl bg-teal-50 border border-teal-200 text-teal-800 flex items-center justify-center shrink-0">
+                      <Calendar className="w-5 h-5 text-teal-700" />
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-bold text-slate-900 font-display flex items-center space-x-2">
+                        <span>Registration Pricing & Early Bird Schedule</span>
+                        <span className="text-[10px] uppercase font-mono font-bold bg-teal-100 text-teal-900 px-2 py-0.5 rounded-full">
+                          Automated Tier Switching
+                        </span>
+                      </h4>
+                      <p className="text-xs text-slate-500">
+                        Configure promotional calendar windows. Pricing tiers switch automatically by date, and Final Call Registration activates upon promotional expiration.
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Live Active Tier Banner */}
+                  <div className="flex items-center space-x-2 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-xl self-start sm:self-auto shadow-2xs">
+                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
+                    <span className="text-xs font-semibold text-slate-600">Currently Active:</span>
+                    <span className="text-xs font-bold text-teal-900 font-mono">
+                      {liveTierSchedules.activeTierName}
+                    </span>
+                  </div>
+                </div>
+
+                {/* 3 Tier Configuration Cards Grid */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {/* Tier 1: Early Bird Price */}
+                  <div className={`p-4 rounded-xl border transition-all space-y-3 ${
+                    liveTierSchedules.tier1.status === 'active'
+                      ? 'bg-emerald-50/40 border-emerald-300 ring-1 ring-emerald-300/60'
+                      : liveTierSchedules.tier1.status === 'expired'
+                      ? 'bg-slate-50/60 border-slate-200 opacity-80'
+                      : 'bg-white border-slate-200'
+                  }`}>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-slate-900 flex items-center space-x-1.5">
+                        <Tag className="w-3.5 h-3.5 text-teal-700" />
+                        <span>Early Bird Price</span>
+                      </span>
+                      {liveTierSchedules.tier1.status === 'active' ? (
+                        <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center space-x-1">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-ping" />
+                          <span>Active</span>
+                        </span>
+                      ) : liveTierSchedules.tier1.status === 'expired' ? (
+                        <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-slate-200 text-slate-600 border border-slate-300">
+                          Expired
+                        </span>
+                      ) : (
+                        <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-300">
+                          Scheduled
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-slate-500 leading-tight">
+                      First discounted promotional rate for early registrations.
+                    </p>
+
+                    <div className="space-y-2 pt-1">
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-600 uppercase mb-1">
+                          Start Date
+                        </label>
+                        <input
+                          type="date"
+                          value={formData.tier1_start_date || ''}
+                          onChange={e => setFormData(prev => ({ ...prev, tier1_start_date: e.target.value }))}
+                          className="w-full text-xs font-semibold bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-slate-900 focus:outline-none focus:border-teal-700"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-600 uppercase mb-1">
+                          End Date (Early Bird Cutoff)
+                        </label>
+                        <input
+                          type="date"
+                          value={formData.tier1_end_date || formData.early_bird_deadline || ''}
+                          onChange={e => setFormData(prev => ({
+                            ...prev,
+                            tier1_end_date: e.target.value,
+                            early_bird_deadline: e.target.value
+                          }))}
+                          className="w-full text-xs font-semibold bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-slate-900 focus:outline-none focus:border-teal-700"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Tier 2: First Call Price */}
+                  <div className={`p-4 rounded-xl border transition-all space-y-3 ${
+                    liveTierSchedules.tier2.status === 'active'
+                      ? 'bg-emerald-50/40 border-emerald-300 ring-1 ring-emerald-300/60'
+                      : liveTierSchedules.tier2.status === 'expired'
+                      ? 'bg-slate-50/60 border-slate-200 opacity-80'
+                      : 'bg-white border-slate-200'
+                  }`}>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-slate-900 flex items-center space-x-1.5">
+                        <Tag className="w-3.5 h-3.5 text-teal-700" />
+                        <span>First Call Price</span>
+                      </span>
+                      {liveTierSchedules.tier2.status === 'active' ? (
+                        <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center space-x-1">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-ping" />
+                          <span>Active</span>
+                        </span>
+                      ) : liveTierSchedules.tier2.status === 'expired' ? (
+                        <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-slate-200 text-slate-600 border border-slate-300">
+                          Expired
+                        </span>
+                      ) : (
+                        <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-300">
+                          Scheduled
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-slate-500 leading-tight">
+                      Mid-stage promotional pricing period between Early Bird and Final Call.
+                    </p>
+
+                    <div className="space-y-2 pt-1">
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-600 uppercase mb-1">
+                          Start Date
+                        </label>
+                        <input
+                          type="date"
+                          value={formData.tier2_start_date || ''}
+                          onChange={e => setFormData(prev => ({ ...prev, tier2_start_date: e.target.value }))}
+                          className="w-full text-xs font-semibold bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-slate-900 focus:outline-none focus:border-teal-700"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-600 uppercase mb-1">
+                          End Date (First Call Cutoff)
+                        </label>
+                        <input
+                          type="date"
+                          value={formData.tier2_end_date || ''}
+                          onChange={e => setFormData(prev => ({ ...prev, tier2_end_date: e.target.value }))}
+                          className="w-full text-xs font-semibold bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-slate-900 focus:outline-none focus:border-teal-700"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Tier 3: Final Call Registration */}
+                  <div className={`p-4 rounded-xl border transition-all space-y-3 ${
+                    liveTierSchedules.tier3.status === 'active'
+                      ? 'bg-emerald-50/40 border-emerald-300 ring-1 ring-emerald-300/60'
+                      : liveTierSchedules.tier3.status === 'expired'
+                      ? 'bg-slate-50/60 border-slate-200 opacity-80'
+                      : 'bg-white border-slate-200'
+                  }`}>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-slate-900 flex items-center space-x-1.5">
+                        <Tag className="w-3.5 h-3.5 text-teal-700" />
+                        <span>Final Call Registration</span>
+                      </span>
+                      {liveTierSchedules.tier3.status === 'active' ? (
+                        <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center space-x-1">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-ping" />
+                          <span>Active</span>
+                        </span>
+                      ) : liveTierSchedules.tier3.status === 'expired' ? (
+                        <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-slate-200 text-slate-600 border border-slate-300">
+                          Expired
+                        </span>
+                      ) : (
+                        <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-300">
+                          Scheduled
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-slate-500 leading-tight">
+                      Standard registration tier. Activates automatically after promotional periods end.
+                    </p>
+
+                    <div className="space-y-2 pt-1">
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-600 uppercase mb-1">
+                          Start Date (Optional)
+                        </label>
+                        <input
+                          type="date"
+                          value={formData.tier3_start_date || ''}
+                          onChange={e => setFormData(prev => ({ ...prev, tier3_start_date: e.target.value }))}
+                          className="w-full text-xs font-semibold bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-slate-900 focus:outline-none focus:border-teal-700"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-600 uppercase mb-1">
+                          End Date (Registration Cutoff)
+                        </label>
+                        <input
+                          type="date"
+                          value={formData.tier3_end_date || formData.registration_deadline || ''}
+                          onChange={e => setFormData(prev => ({
+                            ...prev,
+                            tier3_end_date: e.target.value,
+                            registration_deadline: e.target.value
+                          }))}
+                          className="w-full text-xs font-semibold bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-slate-900 focus:outline-none focus:border-teal-700"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Validation Warnings if dates overlap or are inverted */}
+                {!tierValidation.isValid && (
+                  <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl space-y-1 text-xs text-rose-800 animate-in fade-in">
+                    <div className="flex items-center space-x-1.5 font-bold">
+                      <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                      <span>Pricing Schedule Date Validation Notice:</span>
+                    </div>
+                    <ul className="list-disc list-inside text-[11px] pl-1 space-y-0.5">
+                      {tierValidation.errors.map((err, i) => (
+                        <li key={i}>{err}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+
               {/* Pricing Cards Grid */}
               <div className="space-y-4 max-h-[460px] overflow-y-auto pr-1">
                 {(formData.categories || []).map((cat, cIdx) => {
@@ -3696,7 +4041,7 @@ export const CongressWizard: React.FC<CongressWizardProps> = ({
                   const isLinkEmpty = rawLink.length === 0;
                   const isLinkValidUrl = !isLinkEmpty && isValidUrl(rawLink);
                   const isLinkDupe = !isLinkEmpty && dupeLinks.has(rawLink.toLowerCase());
-                  const hasLinkError = isLinkEmpty || !isLinkValidUrl || isLinkDupe;
+                  const hasLinkError = (!isLinkEmpty && !isLinkValidUrl) || isLinkDupe;
 
                   return (
                     <div
@@ -3788,18 +4133,21 @@ export const CongressWizard: React.FC<CongressWizardProps> = ({
                         </div>
                       </div>
 
-                      {/* Pricing and Currency Row */}
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      {/* Pricing and Currency Row (3-Tier Pricing Configuration) */}
+                      <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 bg-slate-50/70 p-3 rounded-xl border border-slate-200/80">
                         <div>
-                          <label className="block text-[10px] font-bold text-slate-600 mb-0.5">
-                            Early Bird Rate
+                          <label className="block text-[10px] font-bold text-slate-700 mb-0.5 flex items-center justify-between">
+                            <span>Early Bird Price</span>
+                            {liveTierSchedules.activeTier === 'tier1' && (
+                              <span className="text-[9px] text-emerald-700 font-extrabold uppercase">● Active</span>
+                            )}
                           </label>
                           <div className="relative">
                             <input
                               type="number"
                               min="0"
-                              value={cat.early_bird_price ?? cat.early_bird_fee ?? 0}
-                              onChange={e => handleUpdateCategory(cIdx, 'early_bird_price', Number(e.target.value))}
+                              value={cat.tier1_price ?? cat.early_bird_price ?? 0}
+                              onChange={e => handleUpdateCategory(cIdx, 'tier1_price', Number(e.target.value))}
                               className="w-full bg-white border border-slate-300 rounded-xl px-3 py-1.5 text-xs text-teal-900 font-bold focus:outline-none focus:border-teal-700"
                               placeholder="649"
                               required
@@ -3808,15 +4156,38 @@ export const CongressWizard: React.FC<CongressWizardProps> = ({
                         </div>
 
                         <div>
-                          <label className="block text-[10px] font-bold text-slate-600 mb-0.5">
-                            Standard / Regular Rate (Price) *
+                          <label className="block text-[10px] font-bold text-slate-700 mb-0.5 flex items-center justify-between">
+                            <span>First Call Price</span>
+                            {liveTierSchedules.activeTier === 'tier2' && (
+                              <span className="text-[9px] text-emerald-700 font-extrabold uppercase">● Active</span>
+                            )}
+                          </label>
+                          <div className="relative">
+                            <input
+                              type="number"
+                              min="0"
+                              value={cat.tier2_price ?? Math.round(((cat.tier1_price ?? cat.early_bird_price ?? 0) + (cat.tier3_price ?? cat.price ?? 0)) / 2)}
+                              onChange={e => handleUpdateCategory(cIdx, 'tier2_price', Number(e.target.value))}
+                              className="w-full bg-white border border-slate-300 rounded-xl px-3 py-1.5 text-xs text-teal-900 font-bold focus:outline-none focus:border-teal-700"
+                              placeholder="724"
+                              required
+                            />
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-700 mb-0.5 flex items-center justify-between">
+                            <span>Final Call Registration *</span>
+                            {liveTierSchedules.activeTier === 'tier3' && (
+                              <span className="text-[9px] text-emerald-700 font-extrabold uppercase">● Active</span>
+                            )}
                           </label>
                           <div className="relative">
                             <input
                               type="number"
                               min="1"
-                              value={cat.price ?? cat.standard_fee ?? 0}
-                              onChange={e => handleUpdateCategory(cIdx, 'price', Number(e.target.value))}
+                              value={cat.tier3_price ?? cat.price ?? 0}
+                              onChange={e => handleUpdateCategory(cIdx, 'tier3_price', Number(e.target.value))}
                               className="w-full bg-white border border-slate-300 rounded-xl px-3 py-1.5 text-xs text-slate-900 font-bold focus:outline-none focus:border-teal-700"
                               placeholder="799"
                               required
@@ -3825,7 +4196,7 @@ export const CongressWizard: React.FC<CongressWizardProps> = ({
                         </div>
 
                         <div>
-                          <label className="block text-[10px] font-bold text-slate-600 mb-0.5">
+                          <label className="block text-[10px] font-bold text-slate-700 mb-0.5">
                             Currency
                           </label>
                           <select
@@ -3846,14 +4217,14 @@ export const CongressWizard: React.FC<CongressWizardProps> = ({
                         </div>
                       </div>
 
-                      {/* MANDATORY PAYMENT GATEWAY LINK FIELD */}
+                      {/* OPTIONAL PAYMENT GATEWAY LINK FIELD */}
                       <div className="p-3 bg-slate-50 rounded-xl border border-slate-200/80 space-y-1.5">
                         <div className="flex items-center justify-between">
                           <label className="flex items-center space-x-1.5 text-xs font-bold text-slate-900">
                             <CreditCard className="w-3.5 h-3.5 text-teal-800" />
                             <span>Payment Gateway Link</span>
-                            <span className="text-[9px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-rose-100 text-rose-700 border border-rose-200">
-                              REQUIRED
+                            <span className="text-[9px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 border border-slate-200">
+                              OPTIONAL
                             </span>
                           </label>
                           <span className="text-[10px] text-slate-400">
@@ -3868,13 +4239,12 @@ export const CongressWizard: React.FC<CongressWizardProps> = ({
                               type="url"
                               value={cat.payment_gateway_link || ''}
                               onChange={e => handleUpdateCategory(cIdx, 'payment_gateway_link', e.target.value)}
-                              placeholder="https://buy.stripe.com/..."
+                              placeholder="https://buy.stripe.com/... (optional)"
                               className={`w-full pl-8.5 pr-3 py-1.5 text-xs rounded-xl font-mono transition-colors focus:outline-none ${
                                 hasLinkError
                                   ? 'bg-rose-50/50 border-2 border-rose-400 text-rose-900 focus:border-rose-600'
                                   : 'bg-white border border-slate-300 text-slate-900 focus:border-teal-700'
                               }`}
-                              required
                             />
                           </div>
 
@@ -3893,12 +4263,6 @@ export const CongressWizard: React.FC<CongressWizardProps> = ({
                         </div>
 
                         {/* Validation Error / Success Feedback */}
-                        {isLinkEmpty && (
-                          <p className="text-[11px] font-semibold text-rose-600 flex items-center pt-0.5">
-                            <AlertCircle className="w-3.5 h-3.5 mr-1 shrink-0" />
-                            Payment gateway link is required for this package before publishing.
-                          </p>
-                        )}
                         {!isLinkEmpty && !isLinkValidUrl && (
                           <p className="text-[11px] font-semibold text-rose-600 flex items-center pt-0.5">
                             <AlertCircle className="w-3.5 h-3.5 mr-1 shrink-0" />
@@ -3908,13 +4272,13 @@ export const CongressWizard: React.FC<CongressWizardProps> = ({
                         {!isLinkEmpty && isLinkValidUrl && isLinkDupe && (
                           <p className="text-[11px] font-semibold text-amber-700 flex items-center pt-0.5">
                             <AlertCircle className="w-3.5 h-3.5 mr-1 shrink-0" />
-                            Duplicate link detected: Every package must have its own unique payment gateway link. Do NOT use one common link.
+                            Duplicate link detected: When configured, every package should have its own unique payment link.
                           </p>
                         )}
                         {!isLinkEmpty && isLinkValidUrl && !isLinkDupe && (
                           <p className="text-[11px] font-medium text-emerald-700 flex items-center pt-0.5">
                             <Check className="w-3.5 h-3.5 mr-1 text-emerald-600 shrink-0" />
-                            Valid dedicated payment gateway URL configured.
+                            Dedicated payment gateway URL configured.
                           </p>
                         )}
                       </div>
@@ -4255,76 +4619,7 @@ export const CongressWizard: React.FC<CongressWizardProps> = ({
                 })}
               </div>
 
-              {/* Official Hotel Accommodation Configuration (Section 14) */}
-              <div className="bg-white border border-teal-200/90 rounded-2xl p-5 shadow-xs space-y-4">
-                <div className="flex items-center space-x-3 border-b border-slate-100 pb-3">
-                  <div className="w-9 h-9 rounded-xl bg-teal-50 border border-teal-200 text-teal-800 flex items-center justify-center shrink-0">
-                    <Hotel className="w-5 h-5 text-teal-700" />
-                  </div>
-                  <div className="flex-1">
-                    <h4 className="text-sm font-bold text-slate-900 font-display flex items-center space-x-2">
-                      <span>Official Hotel Accommodation</span>
-                      <span className="text-[10px] uppercase font-mono font-bold bg-teal-100/70 text-teal-900 px-2 py-0.5 rounded-full">
-                        Section 14
-                      </span>
-                    </h4>
-                    <p className="text-xs text-slate-500">
-                      Configure the official partner hotel and nightly room rate for this conference. Fetched dynamically by the registration and payment gateway.
-                    </p>
-                  </div>
-                </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="text-xs font-bold text-slate-700 block mb-1">
-                      Official Partner Hotel Name <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      id="wizard-hotel-name-input"
-                      value={formData.hotel_name || ''}
-                      onChange={e => setFormData(prev => ({ ...prev, hotel_name: e.target.value }))}
-                      placeholder="e.g. Grand Hyatt Boston / Official 4-Star Congress Hotel"
-                      className="w-full text-xs font-semibold bg-slate-50 border border-slate-300 rounded-xl px-3 py-2.5 text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-600 focus:bg-white transition-all shadow-2xs"
-                    />
-                    <span className="text-[11px] text-slate-400 mt-1 block">
-                      Displayed to delegates in the registration portal and invoice breakdown.
-                    </span>
-                  </div>
-
-                  <div>
-                    <label className="text-xs font-bold text-slate-700 block mb-1">
-                      Nightly Price per Room (USD / base rate) <span className="text-red-500">*</span>
-                    </label>
-                    <div className="relative">
-                      <span className="absolute left-3 top-2.5 text-xs font-bold text-slate-400">$</span>
-                      <input
-                        type="number"
-                        id="wizard-hotel-price-input"
-                        min="0"
-                        step="5"
-                        value={formData.accommodation_price_per_day ?? 120}
-                        onChange={e => setFormData(prev => ({ ...prev, accommodation_price_per_day: Number(e.target.value) || 0 }))}
-                        className="w-full text-xs font-bold font-mono bg-slate-50 border border-slate-300 rounded-xl pl-7 pr-3 py-2.5 text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-600 focus:bg-white transition-all shadow-2xs"
-                      />
-                    </div>
-                    <span className="text-[11px] text-slate-400 mt-1 block">
-                      Base nightly rate multiplied by the number of nights selected by delegates.
-                    </span>
-                  </div>
-                </div>
-
-                {/* Live Preview Pill */}
-                <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-3 flex items-center justify-between text-xs">
-                  <div className="flex items-center space-x-2 text-slate-600">
-                    <span className="font-semibold text-slate-800">Delegate Portal Preview:</span>
-                    <span className="text-slate-900 font-medium">{formData.hotel_name || 'Official Partner 4-Star Congress Hotel'}</span>
-                  </div>
-                  <div className="font-mono font-bold text-teal-800 bg-white border border-teal-200 px-2.5 py-1 rounded-lg">
-                    ${formData.accommodation_price_per_day || 120} USD / night
-                  </div>
-                </div>
-              </div>
 
               {/* Congress Venue & Location Management (Section 14) */}
               <div className="bg-white border border-teal-200/90 rounded-2xl p-5 shadow-xs space-y-5">
@@ -4721,7 +5016,7 @@ export const CongressWizard: React.FC<CongressWizardProps> = ({
                   {formData.city}, {formData.country} • {formData.start_date} to {formData.end_date} • {formData.mode.toUpperCase()}
                 </div>
                 <div className="text-slate-500 text-[11px]">
-                  {formData.sessions.length} Scientific Sessions • {formData.speakers.length} Keynote Speakers • {formData.committee.length} Committee Members • {formData.categories.length} Pricing Packages • 🏨 {formData.hotel_name || 'Official Partner Hotel'} (${formData.accommodation_price_per_day || 120}/night) • ✉️ {formData.support_email || 'scinsmedia@gmail.com'}
+                  {formData.sessions.length} Scientific Sessions • {formData.speakers.length} Keynote Speakers • {formData.committee.length} Committee Members • {formData.categories.length} Pricing Packages • 🏨 Accommodation (${formData.accommodation_price_per_day || 120}/night) • ✉️ {formData.support_email || 'scinsmedia@gmail.com'}
                 </div>
               </div>
 
@@ -4770,12 +5065,12 @@ export const CongressWizard: React.FC<CongressWizardProps> = ({
                   type="button"
                   onClick={() => {
                     if (currentStep === 12 && !stepValidation[12]) {
-                      const invalidCats = (formData.categories || []).filter(c => !c.name?.trim() || Number(c.price || c.standard_fee) <= 0 || !c.payment_gateway_link || !isValidUrl(c.payment_gateway_link));
+                      const invalidCats = (formData.categories || []).filter(c => !c.name?.trim() || Number(c.price || c.standard_fee) <= 0 || (c.payment_gateway_link && !isValidUrl(c.payment_gateway_link)));
                       const dupes = getDuplicateGatewayLinks(formData.categories || []);
                       if (invalidCats.length > 0) {
-                        alert(`Please complete Step 12: Every package requires a valid Payment Gateway Link (HTTP/HTTPS URL). ${invalidCats.length} package(s) have missing or invalid links.`);
+                        alert(`Please complete Step 12: Every package requires a valid Name and Price (and valid URL if payment link is provided).`);
                       } else if (dupes.size > 0) {
-                        alert('Step 12: Duplicate payment gateway link detected. Every package MUST have its own unique payment link. Do not share one common link across packages.');
+                        alert('Step 12: Duplicate payment gateway link detected. When links are provided, every package must have its own unique payment link.');
                       } else {
                         alert('Please ensure all required package fields in Step 12 are valid before proceeding.');
                       }

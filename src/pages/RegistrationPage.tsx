@@ -25,6 +25,7 @@ import { INITIAL_CONFERENCES, REGISTRATION_CATEGORIES } from '../data/initialDat
 import { api } from '../services/api';
 import { StripePaymentSection } from '../components/StripePaymentSection';
 import { isConferenceCompleted } from '../utils/dateUtils';
+import { getTierSchedules, getCategoryTierPrice } from '../utils/pricingTiers';
 
 interface RegistrationPageProps {
   initialConferenceSlug?: string;
@@ -436,8 +437,8 @@ export const RegistrationPage: React.FC<RegistrationPageProps> = ({
         : REGISTRATION_CATEGORIES.filter(c => Number(c.conference_id) === confId);
 
     return rawCats.map(c => {
-      const stdPrice = Number(c.price ?? c.standard_fee ?? c.industry_price ?? c.tier3_price ?? 799);
-      const earlyPrice = Number(c.early_bird_price ?? c.early_bird_fee ?? c.academic_price ?? c.tier1_price ?? (stdPrice > 100 ? stdPrice - 100 : stdPrice));
+      const stdPrice = Number(c.tier3_price ?? c.price ?? c.standard_fee ?? c.industry_price ?? 799);
+      const earlyPrice = Number(c.tier1_price ?? c.early_bird_price ?? c.early_bird_fee ?? c.academic_price ?? (stdPrice > 100 ? stdPrice - 100 : stdPrice));
       const midPrice = Number(c.tier2_price ?? Math.round((earlyPrice + stdPrice) / 2));
       return {
         ...c,
@@ -448,6 +449,15 @@ export const RegistrationPage: React.FC<RegistrationPageProps> = ({
         early_bird_fee: earlyPrice,
         tier1_price: earlyPrice,
         tier2_price: midPrice,
+        tier1_label: c.tier1_label || activeConference?.tier1_name || 'Early Bird Price',
+        tier2_label: c.tier2_label || activeConference?.tier2_name || 'First Call Price',
+        tier3_label: c.tier3_label || activeConference?.tier3_name || 'Final Call Registration',
+        tier1_start_date: c.tier1_start_date || activeConference?.tier1_start_date || '',
+        tier1_end_date: c.tier1_end_date || activeConference?.tier1_end_date || activeConference?.early_bird_deadline || '',
+        tier2_start_date: c.tier2_start_date || activeConference?.tier2_start_date || '',
+        tier2_end_date: c.tier2_end_date || activeConference?.tier2_end_date || '',
+        tier3_start_date: c.tier3_start_date || activeConference?.tier3_start_date || '',
+        tier3_end_date: c.tier3_end_date || activeConference?.tier3_end_date || activeConference?.registration_deadline || '',
         benefits: (c.benefits && c.benefits.length > 0)
           ? c.benefits
           : [
@@ -458,7 +468,12 @@ export const RegistrationPage: React.FC<RegistrationPageProps> = ({
           ]
       };
     });
-  }, [activeConference?.id, activeConference?.categories, dynamicCategories]);
+  }, [activeConference, dynamicCategories]);
+
+  // Dynamic Registration Pricing & Early Bird Schedules with Automatic Tier Switching
+  const tierSchedules = useMemo(() => {
+    return getTierSchedules(activeConference, categoriesList);
+  }, [activeConference, categoriesList]);
 
   // Ticket quantities for each category (default: 0)
   const [categoryQuantities, setCategoryQuantities] = useState<Record<number, number>>(() => {
@@ -630,10 +645,10 @@ export const RegistrationPage: React.FC<RegistrationPageProps> = ({
   const accommodationRatePerDay = convert(adminAccommodationRate);
   const accommodationTotal = accommodationRequired ? accommodationDays * accommodationRatePerDay : 0;
 
-  // Breakdown items with admin-configured prices, selected quantities, and category subtotals
+  // Breakdown items with admin-configured prices, selected quantities, and category subtotals based on active tier
   const categoryItems = useMemo(() => {
     return selectedCategories.map(cat => {
-      const baseFee = cat.price ?? cat.standard_fee ?? cat.tier3_price ?? cat.industry_price ?? cat.early_bird_fee ?? cat.early_bird_price ?? 499;
+      const baseFee = getCategoryTierPrice(cat, tierSchedules.activeTier);
       const convertedUnitFee = convert(baseFee);
       const qty = categoryQuantities[cat.id] || 0;
       const subtotal = convertedUnitFee * qty;
@@ -643,10 +658,12 @@ export const RegistrationPage: React.FC<RegistrationPageProps> = ({
         basePrice: baseFee,
         price: convertedUnitFee, // unit price
         quantity: qty,
-        subtotal: subtotal
+        subtotal: subtotal,
+        tier: tierSchedules.activeTier,
+        tierName: tierSchedules.activeTierName
       };
     });
-  }, [selectedCategories, categoryQuantities, rate]);
+  }, [selectedCategories, categoryQuantities, rate, tierSchedules]);
 
   const passesSubtotal = categoryItems.reduce((acc, item) => acc + item.subtotal, 0);
   const totalAmount = passesSubtotal + accommodationTotal;
@@ -660,7 +677,15 @@ export const RegistrationPage: React.FC<RegistrationPageProps> = ({
         return next;
       });
     } else {
-      handleIncreaseQuantity(cat);
+      if (!activeAvailability.available) {
+        alert(activeAvailability.reason || 'Registrations are currently closed for this conference.');
+        return;
+      }
+      setCategoryQuantities(prev => ({
+        ...prev,
+        [cat.id]: 1
+      }));
+      setSelectionError(null);
     }
   };
 
@@ -724,12 +749,16 @@ export const RegistrationPage: React.FC<RegistrationPageProps> = ({
         conference_title: activeConference.title,
         category_id: primaryCat?.id || 1,
         category_name: combinedCategoryName,
+        tier_applied: tierSchedules.activeTier,
+        tier_name: tierSchedules.activeTierName,
         selected_categories: categoryItems.map(c => ({
           id: c.id,
           name: c.name,
           price: c.price,
           quantity: c.quantity,
           subtotal: c.subtotal,
+          tier: c.tier,
+          tier_name: c.tierName,
           currency: currency
         })),
         first_name: formData.first_name.trim(),
@@ -956,17 +985,17 @@ export const RegistrationPage: React.FC<RegistrationPageProps> = ({
               </div>
 
               {/* Currency Selector */}
-              <div className="text-center space-y-3 pt-1">
-                <h3 className="text-lg font-extrabold text-slate-800 tracking-tight">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pt-1">
+                <h3 className="text-lg font-extrabold text-slate-800 tracking-tight whitespace-nowrap">
                   CHOOSE YOUR CURRENCY
                 </h3>
-                <div className="flex items-center justify-center gap-3 flex-wrap">
+                <div className="flex items-center justify-center md:justify-end gap-3 flex-wrap sm:flex-nowrap">
                   {(['EUR', 'USD', 'GBP'] as const).map(cur => (
                     <button
                       key={cur}
                       type="button"
                       onClick={() => setCurrency(cur)}
-                      className="flex items-center justify-between gap-6 pl-5 pr-2 py-2 rounded-full text-white text-sm font-semibold cursor-pointer transition-transform hover:scale-[1.02] shadow-xs"
+                      className="flex items-center justify-between gap-6 pl-5 pr-2 py-2 rounded-full text-white text-sm font-semibold cursor-pointer transition-transform hover:scale-[1.02] shadow-xs shrink-0"
                       style={{ background: 'linear-gradient(90deg, #0A2540 0%, #0E7490 100%)', minWidth: '150px' }}
                     >
                       <span>{cur === 'EUR' ? 'EURO' : cur}</span>
@@ -1032,127 +1061,262 @@ export const RegistrationPage: React.FC<RegistrationPageProps> = ({
                     <p className="text-[11px] text-slate-500">Please select another conference or contact the Secretariat for registration inquiries.</p>
                   </div>
                 ) : (
-                  <div className="overflow-x-auto rounded-2xl border border-slate-200 shadow-xs">
-                    <table className="w-full text-xs border-collapse">
-                      <thead>
-                        <tr className="bg-gradient-to-r from-slate-800 to-teal-900 text-white">
-                          <th className="text-left font-bold uppercase tracking-wider px-4 py-3">Category / Pass Tier</th>
-                          <th className="text-center font-bold uppercase tracking-wider px-3 py-3 hidden md:table-cell">
-                            On/Before<br />{categoriesList[0]?.tier1_label || 'Tier 1'}
-                          </th>
-                          <th className="text-center font-bold uppercase tracking-wider px-3 py-3 hidden md:table-cell">
-                            On/Before<br />{categoriesList[0]?.tier2_label || 'Tier 2'}
-                          </th>
-                          <th className="text-center font-bold uppercase tracking-wider px-3 py-3 bg-teal-950/40">
-                            Ticket Price<br />(Standard)
-                          </th>
-                          <th className="text-center font-bold uppercase tracking-wider px-4 py-3 w-36">
-                            Quantity
-                          </th>
-                          <th className="text-right font-bold uppercase tracking-wider px-4 py-3 w-28">
-                            Subtotal
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {categoriesList.map((cat, idx) => {
-                          const qty = categoryQuantities[cat.id] || 0;
-                          const isSelected = qty > 0;
-                          const t1 = convert(cat.tier1_price ?? cat.early_bird_fee ?? cat.price ?? 0);
-                          const t2 = convert(cat.tier2_price ?? cat.standard_fee ?? cat.price ?? 0);
-                          const t3 = convert(cat.tier3_price ?? cat.price ?? 0);
-                          const subtotal = t3 * qty;
-                          const maxLimit = getCategoryLimit(cat);
+                  <div className="space-y-3">
+                    {/* Dynamic Pricing Tier Announcement Banner */}
+                    <div className={`p-3.5 rounded-2xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs ${
+                      tierSchedules.activeTier === 'tier1'
+                        ? 'bg-emerald-50/80 border-emerald-300 text-emerald-950'
+                        : tierSchedules.activeTier === 'tier2'
+                        ? 'bg-teal-50/80 border-teal-300 text-teal-950'
+                        : 'bg-slate-100/90 border-slate-300 text-slate-900'
+                    }`}>
+                      <div className="flex items-center space-x-2.5">
+                        <Sparkles className={`w-4 h-4 shrink-0 ${
+                          tierSchedules.activeTier === 'tier1' ? 'text-emerald-600' : tierSchedules.activeTier === 'tier2' ? 'text-teal-600' : 'text-slate-600'
+                        }`} />
+                        <div>
+                          <span className="font-bold">
+                            {tierSchedules.activeTier === 'tier1' && 'Early Bird Promotional Pricing is Active!'}
+                            {tierSchedules.activeTier === 'tier2' && 'First Call Promotional Pricing is Active!'}
+                            {tierSchedules.activeTier === 'tier3' && 'Final Call Standard Registration is Active!'}
+                          </span>
+                          <span className="text-[11px] block text-slate-600 mt-0.5">
+                            {tierSchedules.activeTier === 'tier1' && (tierSchedules.tier1.endDate ? `Register on or before ${tierSchedules.tier1.endDate} to secure early bird discount rates.` : 'Discounted Early Bird rates automatically applied at checkout.')}
+                            {tierSchedules.activeTier === 'tier2' && (tierSchedules.tier2.endDate ? `Early Bird has closed. First Call promotional pricing applies until ${tierSchedules.tier2.endDate}.` : 'First Call rates automatically applied at checkout.')}
+                            {tierSchedules.activeTier === 'tier3' && 'Promotional pricing periods have ended. Standard delegate registration rates now apply.'}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="flex items-center space-x-1.5 shrink-0 self-start sm:self-auto">
+                        <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-white border border-slate-200 shadow-2xs font-mono text-slate-800">
+                          Active Tier: {tierSchedules.activeTierName}
+                        </span>
+                      </div>
+                    </div>
 
-                          return (
-                            <tr
-                              key={cat.id}
-                              onClick={() => {
-                                if (qty === 0) handleIncreaseQuantity(cat);
-                              }}
-                              className={`border-t border-slate-200 transition-colors ${isSelected
-                                  ? 'bg-teal-50/90 font-semibold'
-                                  : idx % 2 === 0 ? 'bg-white hover:bg-slate-50' : 'bg-slate-50/60 hover:bg-teal-50/40'
-                                }`}
-                            >
-                              <td className="px-4 py-3 align-middle">
-                                <div className="flex items-center space-x-3">
-                                  <input
-                                    type="checkbox"
-                                    aria-label={`Select ${cat.name}`}
-                                    checked={isSelected}
-                                    onChange={e => {
-                                      e.stopPropagation();
-                                      if (isSelected) {
-                                        setCategoryQuantities(prev => {
-                                          const next = { ...prev };
-                                          delete next[cat.id];
-                                          return next;
-                                        });
-                                      } else {
-                                        handleIncreaseQuantity(cat);
-                                      }
-                                    }}
-                                    className="w-4 h-4 text-teal-700 rounded border-slate-300 focus:ring-teal-600 cursor-pointer shrink-0"
-                                  />
-                                  <div>
-                                    <span className="font-bold text-slate-900 block">{cat.name}</span>
-                                    {cat.description && (
-                                      <span className="text-[11px] text-slate-500 font-normal line-clamp-1">{cat.description}</span>
-                                    )}
+                    <div className="overflow-x-auto rounded-2xl border border-slate-200 shadow-xs">
+                      <table className="w-full min-w-[620px] md:min-w-full text-xs border-collapse">
+                        <thead>
+                          <tr className="bg-gradient-to-r from-slate-800 to-teal-900 text-white">
+                            <th className="text-left font-bold uppercase tracking-wider px-4 py-3">Category / Pass Tier</th>
+                            
+                            {/* Early Bird Price Header */}
+                            <th className={`text-center font-bold uppercase tracking-wider px-2 md:px-3 py-3 w-28 md:w-32 hidden md:table-cell transition-all ${
+                              tierSchedules.activeTier === 'tier1' ? 'bg-teal-950/60 ring-2 ring-emerald-400/50' : ''
+                            }`}>
+                              <div className="flex flex-col items-center">
+                                <span className="text-xs">Early Bird Price</span>
+                                {tierSchedules.tier1.endDate && (
+                                  <span className="text-[10px] font-normal opacity-80 lowercase whitespace-nowrap">
+                                    until {tierSchedules.tier1.endDate}
+                                  </span>
+                                )}
+                                <div className="mt-1">
+                                  {tierSchedules.tier1.status === 'active' ? (
+                                    <span className="text-[9px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded-full bg-emerald-400 text-slate-950 font-sans whitespace-nowrap">
+                                      Active Rate
+                                    </span>
+                                  ) : tierSchedules.tier1.status === 'expired' ? (
+                                    <span className="text-[9px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded-full bg-slate-700 text-slate-300 font-sans whitespace-nowrap">
+                                      Expired
+                                    </span>
+                                  ) : (
+                                    <span className="text-[9px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded-full bg-amber-400/20 text-amber-200 border border-amber-300/30 font-sans whitespace-nowrap">
+                                      Scheduled
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            </th>
+
+                            {/* First Call Price Header */}
+                            <th className={`text-center font-bold uppercase tracking-wider px-2 md:px-3 py-3 w-28 md:w-32 hidden md:table-cell transition-all ${
+                              tierSchedules.activeTier === 'tier2' ? 'bg-teal-950/60 ring-2 ring-emerald-400/50' : ''
+                            }`}>
+                              <div className="flex flex-col items-center">
+                                <span className="text-xs">First Call Price</span>
+                                {tierSchedules.tier2.endDate && (
+                                  <span className="text-[10px] font-normal opacity-80 lowercase whitespace-nowrap">
+                                    until {tierSchedules.tier2.endDate}
+                                  </span>
+                                )}
+                                <div className="mt-1">
+                                  {tierSchedules.tier2.status === 'active' ? (
+                                    <span className="text-[9px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded-full bg-emerald-400 text-slate-950 font-sans whitespace-nowrap">
+                                      Active Rate
+                                    </span>
+                                  ) : tierSchedules.tier2.status === 'expired' ? (
+                                    <span className="text-[9px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded-full bg-slate-700 text-slate-300 font-sans whitespace-nowrap">
+                                      Expired
+                                    </span>
+                                  ) : (
+                                    <span className="text-[9px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded-full bg-amber-400/20 text-amber-200 border border-amber-300/30 font-sans whitespace-nowrap">
+                                      Scheduled
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            </th>
+
+                            {/* Final Call Registration Header */}
+                            <th className={`text-center font-bold uppercase tracking-wider px-2 md:px-3 py-3 w-32 md:w-36 transition-all ${
+                              tierSchedules.activeTier === 'tier3' ? 'bg-teal-950/70 ring-2 ring-emerald-400/50' : 'bg-teal-950/30'
+                            }`}>
+                              <div className="flex flex-col items-center">
+                                <span className="text-xs">Final Call Registration</span>
+                                <span className="text-[10px] font-normal opacity-80">Standard</span>
+                                <div className="mt-1">
+                                  {tierSchedules.activeTier === 'tier3' ? (
+                                    <span className="text-[9px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded-full bg-emerald-400 text-slate-950 font-sans whitespace-nowrap">
+                                      Active Rate
+                                    </span>
+                                  ) : tierSchedules.tier3.status === 'expired' ? (
+                                    <span className="text-[9px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded-full bg-slate-700 text-slate-300 font-sans whitespace-nowrap">
+                                      Expired
+                                    </span>
+                                  ) : (
+                                    <span className="text-[9px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded-full bg-slate-700/60 text-slate-300 font-sans whitespace-nowrap">
+                                      Scheduled
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            </th>
+
+                            <th className="text-center font-bold uppercase tracking-wider px-2 py-3 w-28 md:w-30">
+                              Quantity
+                            </th>
+                            <th className="text-right font-bold uppercase tracking-wider px-3 md:px-4 py-3 w-24 md:w-28">
+                              Subtotal
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {categoriesList.map((cat, idx) => {
+                            const qty = categoryQuantities[cat.id] || 0;
+                            const isSelected = qty > 0;
+                            const t1 = convert(getCategoryTierPrice(cat, 'tier1'));
+                            const t2 = convert(getCategoryTierPrice(cat, 'tier2'));
+                            const t3 = convert(getCategoryTierPrice(cat, 'tier3'));
+                            const activeRate = convert(getCategoryTierPrice(cat, tierSchedules.activeTier));
+                            const subtotal = activeRate * qty;
+                            const maxLimit = getCategoryLimit(cat);
+
+                            return (
+                              <tr
+                                key={cat.id}
+                                onClick={() => {
+                                  if (qty === 0) {
+                                    toggleCategorySelection(cat);
+                                  }
+                                }}
+                                className={`border-t border-slate-200 transition-colors ${isSelected
+                                    ? 'bg-teal-50/90 font-semibold'
+                                    : idx % 2 === 0 ? 'bg-white hover:bg-slate-50' : 'bg-slate-50/60 hover:bg-teal-50/40'
+                                  }`}
+                              >
+                                <td className="px-4 py-3 align-middle">
+                                  <label
+                                    className="flex items-center space-x-3 cursor-pointer select-none"
+                                    onClick={e => e.stopPropagation()}
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      aria-label={`Select ${cat.name}`}
+                                      checked={isSelected}
+                                      onChange={() => {
+                                        toggleCategorySelection(cat);
+                                      }}
+                                      className="w-4 h-4 text-teal-700 rounded border-slate-300 focus:ring-teal-600 cursor-pointer shrink-0"
+                                    />
+                                    <div>
+                                      <span className="font-bold text-slate-900 block">{cat.name}</span>
+                                      {cat.description && (
+                                        <span className="text-[11px] text-slate-500 font-normal line-clamp-1">{cat.description}</span>
+                                      )}
+                                    </div>
+                                  </label>
+                                </td>
+
+                                {/* Tier 1 Cell */}
+                                <td className={`px-2 md:px-3 py-3 text-center align-middle hidden md:table-cell ${
+                                  tierSchedules.activeTier === 'tier1' ? 'bg-emerald-50/50 font-bold' : ''
+                                }`}>
+                                  {tierSchedules.activeTier === 'tier1' ? (
+                                    <span className="font-extrabold text-teal-800 text-sm">{sym}{t1}</span>
+                                  ) : tierSchedules.tier1.status === 'expired' ? (
+                                    <span className="text-slate-400 line-through decoration-slate-300">{sym}{t1}</span>
+                                  ) : (
+                                    <span className="text-slate-500">{sym}{t1}</span>
+                                  )}
+                                </td>
+
+                                {/* Tier 2 Cell */}
+                                <td className={`px-2 md:px-3 py-3 text-center align-middle hidden md:table-cell ${
+                                  tierSchedules.activeTier === 'tier2' ? 'bg-emerald-50/50 font-bold' : ''
+                                }`}>
+                                  {tierSchedules.activeTier === 'tier2' ? (
+                                    <span className="font-extrabold text-teal-800 text-sm">{sym}{t2}</span>
+                                  ) : tierSchedules.tier2.status === 'expired' ? (
+                                    <span className="text-slate-400 line-through decoration-slate-300">{sym}{t2}</span>
+                                  ) : (
+                                    <span className="text-slate-500">{sym}{t2}</span>
+                                  )}
+                                </td>
+
+                                {/* Tier 3 Cell */}
+                                <td className={`px-2 md:px-3 py-3 text-center align-middle ${
+                                  tierSchedules.activeTier === 'tier3' ? 'bg-emerald-50/60 font-bold' : 'bg-slate-50/30'
+                                }`}>
+                                  {tierSchedules.activeTier === 'tier3' ? (
+                                    <span className="font-extrabold text-teal-800 text-sm">{sym}{t3}</span>
+                                  ) : (
+                                    <span className="text-slate-500">{sym}{t3}</span>
+                                  )}
+                                </td>
+
+                                <td className="px-2 py-3 text-center align-middle" onClick={e => e.stopPropagation()}>
+                                  <div className="inline-flex items-center bg-white border border-slate-300 rounded-xl shadow-2xs overflow-hidden">
+                                    <button
+                                      type="button"
+                                      aria-label={`Decrease ${cat.name} quantity`}
+                                      disabled={qty === 0}
+                                      onClick={() => handleDecreaseQuantity(cat)}
+                                      className="w-8 h-8 flex items-center justify-center text-slate-600 hover:text-slate-900 hover:bg-slate-100 disabled:opacity-30 disabled:hover:bg-transparent disabled:cursor-not-allowed transition-colors text-base font-bold select-none cursor-pointer"
+                                    >
+                                      −
+                                    </button>
+                                    <input
+                                      type="number"
+                                      min="0"
+                                      max={maxLimit}
+                                      value={qty}
+                                      onChange={e => handleQuantityInputChange(cat, e.target.value)}
+                                      className="w-10 h-8 text-center text-xs font-bold font-mono text-slate-900 bg-transparent border-x border-slate-200 focus:outline-none focus:bg-teal-50/50 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                      aria-label={`${cat.name} quantity`}
+                                    />
+                                    <button
+                                      type="button"
+                                      aria-label={`Increase ${cat.name} quantity`}
+                                      disabled={qty >= maxLimit}
+                                      onClick={() => handleIncreaseQuantity(cat)}
+                                      className="w-8 h-8 flex items-center justify-center text-teal-700 hover:text-teal-900 hover:bg-teal-50 disabled:opacity-30 disabled:hover:bg-transparent disabled:cursor-not-allowed transition-colors text-base font-bold select-none cursor-pointer"
+                                    >
+                                      +
+                                    </button>
                                   </div>
-                                </div>
-                              </td>
-                              <td className="px-3 py-3 text-center align-middle text-slate-400 line-through decoration-slate-300 hidden md:table-cell">
-                                {sym}{t1}
-                              </td>
-                              <td className="px-3 py-3 text-center align-middle text-slate-400 line-through decoration-slate-300 hidden md:table-cell">
-                                {sym}{t2}
-                              </td>
-                              <td className="px-3 py-3 text-center align-middle bg-teal-50/40">
-                                <span className="font-extrabold text-teal-800 text-sm">{sym}{t3}</span>
-                              </td>
-                              <td className="px-4 py-3 text-center align-middle" onClick={e => e.stopPropagation()}>
-                                <div className="inline-flex items-center bg-white border border-slate-300 rounded-xl shadow-2xs overflow-hidden">
-                                  <button
-                                    type="button"
-                                    aria-label={`Decrease ${cat.name} quantity`}
-                                    disabled={qty === 0}
-                                    onClick={() => handleDecreaseQuantity(cat)}
-                                    className="w-8 h-8 flex items-center justify-center text-slate-600 hover:text-slate-900 hover:bg-slate-100 disabled:opacity-30 disabled:hover:bg-transparent disabled:cursor-not-allowed transition-colors text-base font-bold select-none cursor-pointer"
-                                  >
-                                    −
-                                  </button>
-                                  <input
-                                    type="number"
-                                    min="0"
-                                    max={maxLimit}
-                                    value={qty}
-                                    onChange={e => handleQuantityInputChange(cat, e.target.value)}
-                                    className="w-10 h-8 text-center text-xs font-bold font-mono text-slate-900 bg-transparent border-x border-slate-200 focus:outline-none focus:bg-teal-50/50 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                                    aria-label={`${cat.name} quantity`}
-                                  />
-                                  <button
-                                    type="button"
-                                    aria-label={`Increase ${cat.name} quantity`}
-                                    disabled={qty >= maxLimit}
-                                    onClick={() => handleIncreaseQuantity(cat)}
-                                    className="w-8 h-8 flex items-center justify-center text-teal-700 hover:text-teal-900 hover:bg-teal-50 disabled:opacity-30 disabled:hover:bg-transparent disabled:cursor-not-allowed transition-colors text-base font-bold select-none cursor-pointer"
-                                  >
-                                    +
-                                  </button>
-                                </div>
-                              </td>
-                              <td className="px-4 py-3 text-right align-middle">
-                                <span className={`font-mono text-xs font-bold ${isSelected ? 'text-teal-900 font-extrabold text-sm' : 'text-slate-400'}`}>
-                                  {sym}{subtotal}
-                                </span>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
+                                </td>
+                                <td className="px-3 md:px-4 py-3 text-right align-middle">
+                                  <span className={`font-mono text-xs font-bold ${isSelected ? 'text-teal-900 font-extrabold text-sm' : 'text-slate-400'}`}>
+                                    {sym}{subtotal}
+                                  </span>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
                 )}
 
@@ -1193,7 +1357,7 @@ export const RegistrationPage: React.FC<RegistrationPageProps> = ({
                         </span>
                       </label>
                       <p className="text-xs text-slate-500 mt-0.5">
-                        Accommodation charges are calculated automatically based on the nightly rate configured in the admin panel and the number of nights selected.
+                        Accommodation charges are automatically calculated based on the selected accommodation type, nightly rate, and number of nights.
                       </p>
                     </div>
                   </div>
@@ -1201,23 +1365,7 @@ export const RegistrationPage: React.FC<RegistrationPageProps> = ({
 
                 {accommodationRequired && (
                   <div className="pt-4 border-t border-slate-100 space-y-4 animate-in fade-in">
-                    {/* Hotel Selection / Display */}
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                      <div className="md:col-span-3">
-                        <label className="text-xs font-bold text-slate-700 block mb-1">
-                          Official Partner Hotel:
-                        </label>
-                        <div className="relative">
-                          <input
-                            type="text"
-                            value={selectedHotel}
-                            onChange={e => setSelectedHotel(e.target.value)}
-                            placeholder="Official Partner 4-Star Congress Hotel"
-                            className="w-full text-xs font-semibold bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-600 focus:bg-white"
-                          />
-                        </div>
-                      </div>
-
                       {/* Check-in Date */}
                       <div>
                         <label className="text-xs font-bold text-slate-700 block mb-1">
@@ -1338,9 +1486,9 @@ export const RegistrationPage: React.FC<RegistrationPageProps> = ({
                         <div className="flex items-start space-x-2">
                           <Hotel className="w-4 h-4 text-teal-400 shrink-0 mt-0.5" />
                           <div>
-                            <div className="font-semibold text-slate-100">{selectedHotel}</div>
+                            <div className="font-semibold text-slate-100">{accommodationDays} {accommodationDays === 1 ? 'Night' : 'Nights'} Accommodation</div>
                             <div className="text-[11px] text-slate-400">
-                              {checkInDate} to {checkOutDate} • {accommodationDays} {accommodationDays === 1 ? 'Night' : 'Nights'} @ {sym}{accommodationRatePerDay}/night
+                              {checkInDate} to {checkOutDate} • @ {sym}{accommodationRatePerDay}/night
                             </div>
                           </div>
                         </div>
@@ -1464,47 +1612,7 @@ export const RegistrationPage: React.FC<RegistrationPageProps> = ({
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Designation</label>
-                  <select
-                    value={formData.designation}
-                    onChange={e => setFormData({ ...formData, designation: e.target.value })}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs text-slate-900 focus:bg-white focus:outline-none focus:border-teal-600 cursor-pointer"
-                  >
-                    <option value="Professor">Professor</option>
-                    <option value="Associate Professor">Associate Professor</option>
-                    <option value="Assistant Professor">Assistant Professor</option>
-                    <option value="Postdoctoral Fellow">Postdoctoral Fellow</option>
-                    <option value="Ph.D. Candidate">Ph.D. Candidate</option>
-                    <option value="Research Scientist">Research Scientist</option>
-                    <option value="Industry Specialist">Industry Specialist</option>
-                    <option value="Student">Student</option>
-                    <option value="Other">Other</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Department</label>
-                  <input
-                    type="text"
-                    placeholder="e.g. Dept of Physics"
-                    value={formData.department}
-                    onChange={e => setFormData({ ...formData, department: e.target.value })}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs text-slate-900 focus:bg-white focus:outline-none focus:border-teal-600"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Attendance Mode</label>
-                  <select
-                    value={formData.attendance_mode}
-                    onChange={e => setFormData({ ...formData, attendance_mode: e.target.value as 'In-Person' | 'Virtual' })}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs text-slate-900 focus:bg-white focus:outline-none focus:border-teal-600 cursor-pointer"
-                  >
-                    <option value="In-Person">In-Person Attendance</option>
-                    <option value="Virtual">Virtual / Online Attendance</option>
-                  </select>
-                </div>
-              </div>
+
 
               {paymentError && (
                 <div className="p-4 bg-rose-50 border border-rose-200 rounded-2xl flex items-start space-x-3 text-xs text-rose-800 animate-in fade-in">
@@ -1582,7 +1690,7 @@ export const RegistrationPage: React.FC<RegistrationPageProps> = ({
                       ))}
                       {accommodationRequired && accommodationDays > 0 && (
                         <div className="flex items-center justify-between text-xs text-slate-200 pt-1 border-t border-slate-800">
-                          <span>🏨 {selectedHotel} ({accommodationDays} Nights: {checkInDate} to {checkOutDate})</span>
+                          <span>🏨 Accommodation ({accommodationDays} Nights: {checkInDate} to {checkOutDate})</span>
                           <span className="font-mono text-teal-300 font-semibold">+{sym}{accommodationTotal} {currency}</span>
                         </div>
                       )}

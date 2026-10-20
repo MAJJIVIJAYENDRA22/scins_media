@@ -21,6 +21,7 @@ import {
 import confetti from 'canvas-confetti';
 import { Conference } from '../types';
 import { api } from '../services/api';
+import { getTierSchedules, getCategoryTierPrice } from '../utils/pricingTiers';
 
 interface ConferenceRegisterModalProps {
   isOpen: boolean;
@@ -136,8 +137,9 @@ export const ConferenceRegisterModal: React.FC<ConferenceRegisterModalProps> = (
       return;
     }
 
+    const tierSchedules = getTierSchedules(conference, categories);
     const selectedCat = categories.find(c => String(c.id) === String(formData.passCategoryId)) || categories[0];
-    const catPrice = Number(selectedCat?.price || (selectedCat as any)?.standard_fee || 499);
+    const catPrice = getCategoryTierPrice(selectedCat, tierSchedules.activeTier);
 
     const parts = trimmedName.split(' ');
     const firstName = parts[0] || 'Dr./Prof.';

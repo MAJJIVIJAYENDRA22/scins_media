@@ -54,7 +54,7 @@ export const AbstractSubmissionModal: React.FC<AbstractSubmissionModalProps> = (
     institution: '',
     country: 'United States',
     abstractTitle: '',
-    presentation_preference: 'Oral' as 'Oral' | 'Poster' | 'Keynote' | 'Virtual',
+    presentation_preference: 'Oral' as 'Oral' | 'Poster' | 'Keynote',
     file_name: ''
   });
 
@@ -125,7 +125,7 @@ export const AbstractSubmissionModal: React.FC<AbstractSubmissionModalProps> = (
     const trimmedEmail = formData.email.trim();
     const trimmedPhone = formData.phone.trim();
     const trimmedInst = formData.institution.trim();
-    const trimmedTitle = formData.abstractTitle.trim();
+    const finalTitle = formData.abstractTitle?.trim() || (formData.file_name ? formData.file_name.replace(/\.[^/.]+$/, '') : `${trimmedName} - Abstract Submission`);
 
     if (!trimmedName) {
       setErrorMessage('Please enter your Full Name.');
@@ -143,17 +143,13 @@ export const AbstractSubmissionModal: React.FC<AbstractSubmissionModalProps> = (
       setErrorMessage('Please enter your Institution or Organization.');
       return;
     }
-    if (!trimmedTitle) {
-      setErrorMessage('Please enter your Abstract / Presentation Title.');
-      return;
-    }
 
     setSubmitting(true);
     try {
       await api.submitAbstract({
         conference_id: conference.id,
         conference_title: conference.title,
-        title: trimmedTitle,
+        title: finalTitle,
         abstract_text: '',
         keywords: '',
         research_domain: conference.domain || '',
@@ -385,29 +381,13 @@ export const AbstractSubmissionModal: React.FC<AbstractSubmissionModalProps> = (
               </div>
             </div>
 
-            {/* Abstract / Presentation Title */}
-            <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
-                Abstract / Presentation Title <span className="text-rose-500">*</span>
-              </label>
-              <input
-                type="text"
-                required
-                placeholder="e.g. Synthesis and Characterization of Novel Bio-based Nanocomposites"
-                value={formData.abstractTitle}
-                onChange={e => setFormData({ ...formData, abstractTitle: e.target.value })}
-                disabled={submitting}
-                className="w-full bg-slate-50/80 hover:bg-white focus:bg-white border border-slate-200 rounded-2xl px-3.5 py-2.5 text-xs sm:text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-[#0E7490] focus:ring-1 focus:ring-[#0E7490] transition-all"
-              />
-            </div>
-
             {/* Presentation Preference */}
             <div>
               <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
                 Presentation Preference
               </label>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                {(['Oral', 'Poster', 'Keynote', 'Virtual'] as const).map(pref => (
+              <div className="grid grid-cols-3 gap-2">
+                {(['Oral', 'Poster', 'Keynote'] as const).map(pref => (
                   <button
                     key={pref}
                     type="button"

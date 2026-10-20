@@ -147,7 +147,7 @@ export const AbstractSubmissionPage: React.FC<AbstractSubmissionPageProps> = ({
     country_code: '+1',
     institution: '',
     country: 'United States',
-    presentation_preference: 'Oral' as 'Oral' | 'Poster' | 'Keynote' | 'Virtual',
+    presentation_preference: 'Oral' as 'Oral' | 'Poster' | 'Keynote',
     file_name: ''
   });
   const [agreed, setAgreed] = useState(true);
@@ -551,8 +551,8 @@ export const AbstractSubmissionPage: React.FC<AbstractSubmissionPageProps> = ({
                 <label className="block text-xs font-bold text-slate-700 mb-2">
                   Presentation Preference
                 </label>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-                  {(['Oral', 'Poster', 'Keynote', 'Virtual'] as const).map(pref => (
+                <div className="grid grid-cols-3 gap-2.5">
+                  {(['Oral', 'Poster', 'Keynote'] as const).map(pref => (
                     <button
                       key={pref}
                       type="button"
