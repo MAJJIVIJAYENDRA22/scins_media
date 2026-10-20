@@ -773,52 +773,6 @@
           "Official Scopus-indexed congress proceedings volume",
           "Buffet networking luncheons & coffee breaks",
           "Formal Certificate of Participation"
-        ],
-        "deadline": "2026-04-30",
-        "tier1_label": "Early Bird Price",
-        "tier2_label": "First Call Price",
-        "tier3_label": "Final Call Registration",
-        "tier1_end_date": "2026-04-30",
-        "tier3_end_date": "2026-06-10"
-      },
-      {
-        "id": 8,
-        "conference_id": 1,
-        "code": "PASS-8",
-        "name": "Industry & Corporate Delegate",
-        "price": 999,
-        "standard_fee": 999,
-        "tier3_price": 999,
-        "early_bird_price": 849,
-        "early_bird_fee": 849,
-        "tier1_price": 849,
-        "tier2_price": 924,
-        "tier1_label": "Early Bird Price",
-        "tier2_label": "First Call Price",
-        "tier3_label": "Final Call Registration",
-        "currency": "USD",
-        "description": "Standard attendee pass with full access to scientific sessions and exhibition.",
-        "payment_gateway_link": "",
-        "is_active": true,
-        "display_order": 2,
-        "benefits": [
-          "Full access to all 20 scientific breakout tracks & exhibition",
-          "Official Scopus-indexed congress proceedings volume",
-          "Buffet networking luncheons & coffee breaks",
-          "Formal Certificate of Participation"
-        ],
-        "is_popular": false,
-        "tier1_end_date": "2026-04-30",
-        "tier3_end_date": "2026-06-10",
-        "deadline": "2026-04-30",
-        "academic_price": 849,
-        "industry_price": 999,
-        "student_price": 594,
-        "features": [
-          "Full access to all 20 scientific breakout tracks & exhibition",
-          "Official Scopus-indexed congress proceedings volume",
-          "Buffet networking luncheons & coffee breaks",
-          "Formal Certificate of Participation"
         ]
       }
     ],
@@ -1174,12 +1128,7 @@
     "secretariat_association_title": "Conference Association",
     "secretariat_conference_name": "2nd World Congress on Biopolymers & Bioplastics",
     "secretariat_dates": "2026-06-22 – 2026-06-23",
-    "secretariat_location": "Paris, France",
-    "tier1_name": "Early Bird Price",
-    "tier1_end_date": "2026-04-30",
-    "tier2_name": "First Call Price",
-    "tier3_name": "Final Call Registration",
-    "tier3_end_date": "2026-06-10"
+    "secretariat_location": "Paris, France"
   },
   {
     "id": 2,
