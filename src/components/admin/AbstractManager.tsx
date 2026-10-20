@@ -355,10 +355,10 @@ export const AbstractManager: React.FC<AbstractManagerProps> = ({
                     showToast(`Updated sample template for ${conf.short_title || conf.title}`);
                   } catch (_) {}
                 }}
-                accept="pdf"
-                maxSizeMB={10}
+                accept="document"
+                maxSizeMB={25}
                 category={`template_conf_${conf.id}`}
-                placeholder="Upload or replace PDF template..."
+                placeholder="Upload or replace PDF or Word template..."
               />
             </div>
           ))}

@@ -2398,14 +2398,14 @@ export const CongressWizard: React.FC<CongressWizardProps> = ({
                 </div>
 
                 <MediaUploadInput
-                  label="Sample Abstract PDF / DOCX"
+                  label="Sample Abstract Document (PDF, DOCX, DOC)"
                   value={formData.sample_abstract_url}
                   onChange={(url) => setFormData({ ...formData, sample_abstract_url: url })}
-                  accept="pdf"
-                  maxSizeMB={10}
+                  accept="document"
+                  maxSizeMB={25}
                   category={initialConference?.id ? `template_conf_${initialConference.id}` : 'template_conf_new'}
-                  placeholder="Upload conference-specific PDF template..."
-                  helperText="When provided, delegates can preview the expected structure before submitting their own abstract. If empty, delegates will be shown a pending message."
+                  placeholder="Upload conference-specific PDF or Word template..."
+                  helperText="When provided, delegates can preview and download the expected structure before submitting their own abstract. If empty, delegates will be shown a pending message."
                 />
               </div>
             </div>

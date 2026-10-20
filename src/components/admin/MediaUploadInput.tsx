@@ -24,7 +24,7 @@ interface MediaUploadInputProps {
   label?: string;
   value?: string;
   onChange: (url: string) => void;
-  accept?: 'image' | 'pdf' | 'all';
+  accept?: 'image' | 'pdf' | 'document' | 'all';
   maxSizeMB?: number;
   placeholder?: string;
   helperText?: string;
@@ -60,9 +60,11 @@ export const MediaUploadInput: React.FC<MediaUploadInputProps> = ({
   const acceptedMimeTypes =
     accept === 'pdf'
       ? '.pdf,application/pdf'
+      : accept === 'document'
+      ? '.pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document'
       : accept === 'image'
       ? 'image/jpeg,image/png,image/webp,image/svg+xml,image/gif,.jpg,.jpeg,.png,.webp,.svg,.gif'
-      : 'image/*,.pdf,application/pdf';
+      : 'image/*,.pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 
   const processFile = async (file: File) => {
     setUploadError(null);
@@ -70,6 +72,11 @@ export const MediaUploadInput: React.FC<MediaUploadInputProps> = ({
 
     // Format validation
     const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+    const isWord =
+      file.type === 'application/msword' ||
+      file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+      /\.(doc|docx)$/i.test(file.name);
+    const isDocument = isPdf || isWord;
     const isImage = file.type.startsWith('image/') || /\.(jpg|jpeg|png|webp|svg|gif)$/i.test(file.name);
 
     if (accept === 'image' && !isImage) {
@@ -80,8 +87,12 @@ export const MediaUploadInput: React.FC<MediaUploadInputProps> = ({
       setUploadError('Invalid format. Please upload a valid PDF document.');
       return;
     }
-    if (!isImage && !isPdf) {
-      setUploadError('Unsupported format. Please select an image or PDF file.');
+    if (accept === 'document' && !isDocument) {
+      setUploadError('Invalid format. Please upload a valid PDF or Word document (.pdf, .doc, .docx).');
+      return;
+    }
+    if (!isImage && !isDocument) {
+      setUploadError('Unsupported format. Please select an image, PDF, or Word document.');
       return;
     }
 
@@ -99,10 +110,20 @@ export const MediaUploadInput: React.FC<MediaUploadInputProps> = ({
       reader.onload = async (e) => {
         const fileData = e.target?.result as string;
         try {
+          const detectedFileType =
+            file.type ||
+            (isPdf
+              ? 'application/pdf'
+              : file.name.toLowerCase().endsWith('.docx')
+              ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+              : file.name.toLowerCase().endsWith('.doc')
+              ? 'application/msword'
+              : 'image/jpeg');
+
           const response = await api.uploadMedia({
             fileData,
             fileName: file.name,
-            fileType: file.type || (isPdf ? 'application/pdf' : 'image/jpeg'),
+            fileType: detectedFileType,
             category
           });
 
@@ -151,6 +172,12 @@ export const MediaUploadInput: React.FC<MediaUploadInputProps> = ({
   };
 
   const isPdfValue = value?.toLowerCase().includes('.pdf') || value?.startsWith('data:application/pdf');
+  const isWordValue =
+    value?.toLowerCase().includes('.docx') ||
+    value?.toLowerCase().includes('.doc') ||
+    value?.startsWith('data:application/msword') ||
+    value?.startsWith('data:application/vnd.openxmlformats');
+  const isDocValue = isPdfValue || isWordValue;
   const allowUrlMode = !hideUrlInput && showUrlToggle;
 
   return (
@@ -193,7 +220,7 @@ export const MediaUploadInput: React.FC<MediaUploadInputProps> = ({
               type="text"
               value={value}
               onChange={(e) => onChange(e.target.value)}
-              placeholder={placeholder || (accept === 'pdf' ? 'https://.../brochure.pdf' : 'https://.../image.jpg')}
+              placeholder={placeholder || (accept === 'document' ? 'https://.../sample_abstract.docx' : accept === 'pdf' ? 'https://.../brochure.pdf' : 'https://.../image.jpg')}
               className="w-full bg-white border border-slate-300 rounded-xl px-3.5 py-2.5 text-xs text-slate-900 font-mono focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600"
             />
             {value && (
@@ -216,8 +243,8 @@ export const MediaUploadInput: React.FC<MediaUploadInputProps> = ({
           {value ? (
             <div className="p-3 bg-slate-50 border border-slate-200 rounded-2xl flex items-center justify-between gap-3">
               <div className="flex items-center space-x-3 min-w-0">
-                {isPdfValue ? (
-                  <div className="w-14 h-14 rounded-xl bg-red-100 border border-red-200 text-red-700 flex items-center justify-center shrink-0 shadow-xs">
+                {isDocValue ? (
+                  <div className={`w-14 h-14 rounded-xl ${isWordValue ? 'bg-blue-100 border border-blue-200 text-blue-700' : 'bg-red-100 border border-red-200 text-red-700'} flex items-center justify-center shrink-0 shadow-xs`}>
                     <FileText className="w-7 h-7" />
                   </div>
                 ) : (
@@ -235,7 +262,7 @@ export const MediaUploadInput: React.FC<MediaUploadInputProps> = ({
                 <div className="min-w-0">
                   <div className="flex items-center space-x-1.5">
                     <span className="text-[10px] font-bold uppercase tracking-wider text-teal-800 bg-teal-50 px-1.5 py-0.5 rounded border border-teal-200 font-mono">
-                      {isPdfValue ? 'PDF Document' : 'Image Selected'}
+                      {isWordValue ? 'Word Document (.DOCX / .DOC)' : isPdfValue ? 'PDF Document' : 'Image Selected'}
                     </span>
                     <span className="text-slate-400 text-[10px]">Preview Ready</span>
                   </div>
@@ -275,7 +302,7 @@ export const MediaUploadInput: React.FC<MediaUploadInputProps> = ({
                     setUploadError(null);
                   }}
                   className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
-                  title="Remove image"
+                  title="Remove file"
                 >
                   <X className="w-4 h-4" />
                 </button>
@@ -299,7 +326,7 @@ export const MediaUploadInput: React.FC<MediaUploadInputProps> = ({
                   <div className="w-10 h-10 rounded-2xl bg-teal-50 text-teal-800 border border-teal-200 flex items-center justify-center">
                     {isUploading ? (
                       <RefreshCw className="w-5 h-5 animate-spin" />
-                    ) : accept === 'pdf' ? (
+                    ) : accept === 'pdf' || accept === 'document' ? (
                       <FileText className="w-5 h-5" />
                     ) : (
                       <Upload className="w-5 h-5" />
@@ -310,10 +337,12 @@ export const MediaUploadInput: React.FC<MediaUploadInputProps> = ({
                     <div className="text-xs font-bold text-slate-900">
                       {isUploading
                         ? 'Uploading to System CDN...'
-                        : `Click to Browse or Drag & Drop ${accept === 'pdf' ? 'PDF File' : 'Image'}`}
+                        : `Click to Browse or Drag & Drop ${accept === 'document' ? 'PDF or Word Document' : accept === 'pdf' ? 'PDF File' : 'Image'}`}
                     </div>
                     <p className="text-[11px] text-slate-500 mt-0.5">
-                      {accept === 'pdf'
+                      {accept === 'document'
+                        ? `Supports PDF, DOC, DOCX up to ${maxSizeMB}MB`
+                        : accept === 'pdf'
                         ? `Supports PDF document up to ${maxSizeMB}MB`
                         : `Supports JPG, PNG, WEBP, SVG up to ${maxSizeMB}MB`}
                     </p>

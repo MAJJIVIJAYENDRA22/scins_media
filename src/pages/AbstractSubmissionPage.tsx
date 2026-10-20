@@ -325,17 +325,25 @@ export const AbstractSubmissionPage: React.FC<AbstractSubmissionPageProps> = ({
 
             {/* Top-Right Sample Download in Hero */}
             <div className="shrink-0 pt-1">
-              <a
-                href={currentConference.sample_abstract_url || '/uploads/sample_abstract-1791699502920-8841.pdf'}
-                download
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center space-x-2 px-4 py-2.5 bg-teal-50 hover:bg-teal-100 text-[#0E7490] border border-teal-200 rounded-xl text-xs font-bold transition-all shadow-2xs hover:shadow-xs group cursor-pointer"
-                title={`Download Official Sample Abstract Template (.pdf) for ${currentConference.short_title || currentConference.title}`}
-              >
-                <Download className="w-4 h-4 text-[#0E7490] group-hover:-translate-y-0.5 transition-transform" />
-                <span>Download Sample Abstract (.pdf)</span>
-              </a>
+              {(() => {
+                const sampleUrl = currentConference.sample_abstract_url || '/uploads/sample_abstract-1791699502920-8841.pdf';
+                const isDocx = sampleUrl.toLowerCase().includes('.docx');
+                const isDoc = !isDocx && sampleUrl.toLowerCase().includes('.doc');
+                const formatLabel = isDocx ? '.docx' : isDoc ? '.doc' : '.pdf';
+                return (
+                  <a
+                    href={sampleUrl}
+                    download
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center space-x-2 px-4 py-2.5 bg-teal-50 hover:bg-teal-100 text-[#0E7490] border border-teal-200 rounded-xl text-xs font-bold transition-all shadow-2xs hover:shadow-xs group cursor-pointer"
+                    title={`Download Official Sample Abstract Template (${formatLabel}) for ${currentConference.short_title || currentConference.title}`}
+                  >
+                    <Download className="w-4 h-4 text-[#0E7490] group-hover:-translate-y-0.5 transition-transform" />
+                    <span>Download Sample Abstract ({formatLabel})</span>
+                  </a>
+                );
+              })()}
             </div>
           </div>
         </div>
@@ -417,19 +425,27 @@ export const AbstractSubmissionPage: React.FC<AbstractSubmissionPageProps> = ({
                   </p>
                 </div>
 
-                {/* Top-Right Download Sample Abstract Template (.pdf) Button */}
+                {/* Top-Right Download Sample Abstract Template Button */}
                 <div className="shrink-0">
-                  <a
-                    href={currentConference.sample_abstract_url || '/uploads/sample_abstract-1791699502920-8841.pdf'}
-                    download
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center space-x-2 px-3.5 py-2 bg-teal-50 hover:bg-teal-100 text-[#0E7490] border border-teal-200 rounded-xl text-xs font-bold transition-all shadow-2xs hover:shadow-xs group cursor-pointer"
-                    title={`Download Official Sample Abstract Template (.pdf) for ${currentConference.short_title || currentConference.title}`}
-                  >
-                    <Download className="w-3.5 h-3.5 text-[#0E7490] group-hover:-translate-y-0.5 transition-transform" />
-                    <span>Download Sample Abstract Template (.pdf)</span>
-                  </a>
+                  {(() => {
+                    const sampleUrl = currentConference.sample_abstract_url || '/uploads/sample_abstract-1791699502920-8841.pdf';
+                    const isDocx = sampleUrl.toLowerCase().includes('.docx');
+                    const isDoc = !isDocx && sampleUrl.toLowerCase().includes('.doc');
+                    const formatLabel = isDocx ? '.docx' : isDoc ? '.doc' : '.pdf';
+                    return (
+                      <a
+                        href={sampleUrl}
+                        download
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center space-x-2 px-3.5 py-2 bg-teal-50 hover:bg-teal-100 text-[#0E7490] border border-teal-200 rounded-xl text-xs font-bold transition-all shadow-2xs hover:shadow-xs group cursor-pointer"
+                        title={`Download Official Sample Abstract Template (${formatLabel}) for ${currentConference.short_title || currentConference.title}`}
+                      >
+                        <Download className="w-3.5 h-3.5 text-[#0E7490] group-hover:-translate-y-0.5 transition-transform" />
+                        <span>Download Sample Abstract Template ({formatLabel})</span>
+                      </a>
+                    );
+                  })()}
                 </div>
               </div>
 
