@@ -768,7 +768,7 @@ export const CongressWizard: React.FC<CongressWizardProps> = ({
       domain: formData.domain || 'Biotechnology',
       city: formData.city || 'Boston',
       country: formData.country || 'United States',
-      venue: formData.venue || 'Convention Center',
+      venue: formData.venue || '',
       venue_address: formData.venue_address || '',
       venue_photo: formData.venue_photo || '',
       venue_maps_url: formData.venue_maps_url || '',
@@ -1247,7 +1247,7 @@ export const CongressWizard: React.FC<CongressWizardProps> = ({
   const stepValidation = useMemo(() => {
     const checks = {
       1: formData.title.trim().length >= 5 && formData.conference_code.trim().length >= 3,
-      2: Boolean(formData.city && formData.country && formData.venue && formData.start_date && formData.end_date),
+      2: Boolean(formData.city && formData.country && formData.start_date && formData.end_date),
       3: Boolean(formData.abstract_deadline && formData.early_bird_deadline && formData.registration_deadline),
       4: Boolean(formData.mode && formData.status),
       5: Boolean(
@@ -2028,7 +2028,7 @@ export const CongressWizard: React.FC<CongressWizardProps> = ({
               {/* Convention Center & Address */}
               <div>
                 <label className="block text-xs font-bold text-slate-800 mb-1">
-                  Convention Center / Venue Name <span className="text-red-500">*</span>
+                  Convention Center / Venue Name <span className="text-slate-400 font-normal text-[11px]">(Optional)</span>
                 </label>
                 <input
                   type="text"
@@ -4348,7 +4348,7 @@ export const CongressWizard: React.FC<CongressWizardProps> = ({
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <label className="text-xs font-bold text-slate-700 block mb-1">
-                      Venue Name <span className="text-red-500">*</span>
+                      Venue Name <span className="text-slate-400 font-normal text-[11px]">(Optional)</span>
                     </label>
                     <input
                       type="text"

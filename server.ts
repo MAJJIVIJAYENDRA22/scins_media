@@ -3641,7 +3641,7 @@ const adminLoginRateLimiter = rateLimit({
       domain: body.domain || 'Biotechnology',
       city: body.city || 'Paris',
       country: body.country || 'France',
-      venue: body.venue || 'Convention Center',
+      venue: body.venue || '',
       venue_address: body.venue_address || '',
       venue_photo: body.venue_photo || body.venue_image || '',
       venue_maps_url: body.venue_maps_url || body.venue_map_url || '',
