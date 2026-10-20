@@ -10617,6 +10617,105 @@ async function startServer() {
       }
     }
   );
+  const permanentlyRemovedHtml = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex, nofollow, noarchive, nosnippet">
+  <title>410 Gone \u2014 Page Permanently Removed | SCINS MEDIA</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: #0f172a;
+      color: #f8fafc;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+    .card {
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 16px;
+      padding: 40px;
+      max-width: 540px;
+      text-align: center;
+      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.4);
+    }
+    .badge {
+      display: inline-block;
+      padding: 6px 14px;
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      color: #38bdf8;
+      background: rgba(56, 189, 248, 0.12);
+      border-radius: 9999px;
+      margin-bottom: 20px;
+    }
+    h1 {
+      font-size: 26px;
+      font-weight: 800;
+      color: #ffffff;
+      margin-bottom: 12px;
+      line-height: 1.3;
+    }
+    p {
+      color: #94a3b8;
+      font-size: 15px;
+      line-height: 1.6;
+      margin-bottom: 28px;
+    }
+    .btn {
+      display: inline-block;
+      background: #0d9488;
+      color: #ffffff;
+      text-decoration: none;
+      font-weight: 600;
+      padding: 12px 26px;
+      border-radius: 8px;
+      transition: background 0.2s ease;
+      font-size: 14px;
+    }
+    .btn:hover { background: #0f766e; }
+    .secondary-link {
+      display: block;
+      margin-top: 16px;
+      color: #64748b;
+      font-size: 13px;
+      text-decoration: none;
+    }
+    .secondary-link:hover { color: #94a3b8; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="badge">HTTP 410 \u2022 Permanently Removed</div>
+    <h1>This Page Has Been Removed</h1>
+    <p>The category or page you are attempting to access has been permanently deleted and is no longer available on SCINS MEDIA.</p>
+    <a href="/conferences" class="btn">Explore All Conferences</a>
+    <a href="/" class="secondary-link">Return to Homepage</a>
+  </div>
+</body>
+</html>`;
+  const sendGone = (_req, res) => {
+    res.setHeader("X-Robots-Tag", "noindex, nofollow, noarchive, nosnippet");
+    res.setHeader("Cache-Control", "public, max-age=86400");
+    return res.status(410).type("html").send(permanentlyRemovedHtml);
+  };
+  app.get("/category/uncategorized", sendGone);
+  app.get("/category/uncategorized/*", sendGone);
+  app.get("/category", sendGone);
+  app.get("/category/*", sendGone);
+  app.get("/tag/*", sendGone);
+  app.get("/author/*", sendGone);
+  app.get("/wp-content/*", sendGone);
+  app.get("/wp-includes/*", sendGone);
+  app.get("/wp-json/*", sendGone);
   const distPath = import_path.default.join(process.cwd(), "dist");
   const hasDist = import_fs.default.existsSync(import_path.default.join(distPath, "index.html"));
   if (hasDist || process.env.NODE_ENV === "production") {
