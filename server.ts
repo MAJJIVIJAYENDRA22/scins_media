@@ -2703,10 +2703,10 @@ async function startServer() {
       return res.sendFile(robotsPath);
     }
     res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-    res.send("User-agent: *\nAllow: /\nAllow: /conferences\nAllow: /about\nAllow: /contact\nAllow: /terms\nAllow: /uploads/\nDisallow: /admin\nDisallow: /admin/\nDisallow: /api/\nDisallow: /database/\n\nSitemap: https://scinsmedia.com/sitemap.xml\n");
+    res.send("User-agent: *\nAllow: /\nAllow: /conferences\nAllow: /about\nAllow: /contact\nAllow: /terms\nAllow: /uploads/\nDisallow: /api/\nDisallow: /database/\n\nSitemap: https://scinsmedia.com/sitemap.xml\n");
   });
 
-  // Technical SEO: Dynamic XML Sitemap with Live Conference URLs
+  // Technical SEO: Dynamic XML Sitemap with Live Conference URLs (Strictly Public)
   app.get('/sitemap.xml', (_req: Request, res: Response) => {
     const today = new Date().toISOString().split('T')[0];
     const staticPages = [
@@ -2724,7 +2724,7 @@ async function startServer() {
     }
 
     for (const c of db.conferences) {
-      if (c.slug && c.status !== 'draft') {
+      if (c.slug && c.status !== 'draft' && !c.slug.toLowerCase().includes('admin') && !c.slug.toLowerCase().includes('login')) {
         const modDate = c.updated_at || c.created_at;
         const lastmod = modDate ? modDate.split('T')[0].split(' ')[0] : today;
         xml += `  <url>\n    <loc>https://scinsmedia.com/conferences/${encodeURIComponent(c.slug)}</loc>\n    <lastmod>${lastmod}</lastmod>\n    <changefreq>weekly</changefreq>\n    <priority>0.9</priority>\n  </url>\n`;
@@ -8257,6 +8257,15 @@ const adminLoginRateLimiter = rateLimit({
   app.get('/wp-content/*', sendGone);
   app.get('/wp-includes/*', sendGone);
   app.get('/wp-json/*', sendGone);
+
+  // Strict Privacy Shield: Hide administrative and authenticated routes from search crawlers
+  app.use((req: Request, res: Response, next: NextFunction) => {
+    const p = req.path.toLowerCase();
+    if (p === '/admin' || p.startsWith('/admin/') || p === '/login' || p === '/admin-login') {
+      res.setHeader('X-Robots-Tag', 'noindex, nofollow, noarchive, nosnippet, noimageindex');
+    }
+    next();
+  });
 
   // =========================================================================
   // FRONTEND INTEGRATION (Vite Middleware & Production Fallback)

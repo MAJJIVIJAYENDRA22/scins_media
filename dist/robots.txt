@@ -5,8 +5,6 @@ Allow: /about
 Allow: /contact
 Allow: /terms
 Allow: /uploads/
-Disallow: /admin
-Disallow: /admin/
 Disallow: /api/
 Disallow: /database/
 

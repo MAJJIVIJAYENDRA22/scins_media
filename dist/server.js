@@ -5432,7 +5432,7 @@ async function startServer() {
       return res.sendFile(robotsPath);
     }
     res.setHeader("Content-Type", "text/plain; charset=utf-8");
-    res.send("User-agent: *\nAllow: /\nAllow: /conferences\nAllow: /about\nAllow: /contact\nAllow: /terms\nAllow: /uploads/\nDisallow: /admin\nDisallow: /admin/\nDisallow: /api/\nDisallow: /database/\n\nSitemap: https://scinsmedia.com/sitemap.xml\n");
+    res.send("User-agent: *\nAllow: /\nAllow: /conferences\nAllow: /about\nAllow: /contact\nAllow: /terms\nAllow: /uploads/\nDisallow: /api/\nDisallow: /database/\n\nSitemap: https://scinsmedia.com/sitemap.xml\n");
   });
   app.get("/sitemap.xml", (_req, res) => {
     const today = (/* @__PURE__ */ new Date()).toISOString().split("T")[0];
@@ -5454,7 +5454,7 @@ async function startServer() {
 `;
     }
     for (const c of db.conferences) {
-      if (c.slug && c.status !== "draft") {
+      if (c.slug && c.status !== "draft" && !c.slug.toLowerCase().includes("admin") && !c.slug.toLowerCase().includes("login")) {
         const modDate = c.updated_at || c.created_at;
         const lastmod = modDate ? modDate.split("T")[0].split(" ")[0] : today;
         xml += `  <url>
@@ -10905,6 +10905,13 @@ async function startServer() {
   app.get("/wp-content/*", sendGone);
   app.get("/wp-includes/*", sendGone);
   app.get("/wp-json/*", sendGone);
+  app.use((req, res, next) => {
+    const p = req.path.toLowerCase();
+    if (p === "/admin" || p.startsWith("/admin/") || p === "/login" || p === "/admin-login") {
+      res.setHeader("X-Robots-Tag", "noindex, nofollow, noarchive, nosnippet, noimageindex");
+    }
+    next();
+  });
   const distPath = import_path.default.join(process.cwd(), "dist");
   const hasDist = import_fs.default.existsSync(import_path.default.join(distPath, "index.html"));
   if (hasDist || process.env.NODE_ENV === "production") {

@@ -72,7 +72,7 @@ export function updateSeoMetadata(config: SeoConfig): void {
   // 3. Robots Directives (Strict noindex for admin/private pages)
   const metaRobots = getOrCreateMeta('robots');
   if (config.noindex) {
-    metaRobots.setAttribute('content', 'noindex, nofollow, noarchive');
+    metaRobots.setAttribute('content', 'noindex, nofollow, noarchive, nosnippet, noimageindex');
   } else {
     metaRobots.setAttribute('content', 'index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1');
   }
@@ -80,7 +80,7 @@ export function updateSeoMetadata(config: SeoConfig): void {
   // 4. Canonical URL Link Tag
   const rawPath = config.path || (typeof window !== 'undefined' ? window.location.pathname : '/');
   const cleanPath = (rawPath.length > 1 && rawPath.endsWith('/')) ? rawPath.slice(0, -1) : rawPath;
-  const canonical = config.canonicalUrl || `${SITE_DOMAIN}${cleanPath}`;
+  const canonical = config.noindex ? `${SITE_DOMAIN}/` : (config.canonicalUrl || `${SITE_DOMAIN}${cleanPath}`);
   const linkCanonical = getOrCreateLink('canonical');
   linkCanonical.setAttribute('href', canonical);
 
@@ -297,9 +297,9 @@ export function setTermsSeo(): void {
 
 export function setAdminSeo(): void {
   updateSeoMetadata({
-    title: 'Administration Portal | SCINS MEDIA',
-    description: 'Administrative access for authorized conference coordinators and system administrators.',
-    path: '/admin',
+    title: 'SCINS MEDIA | International Scientific Conferences & Research',
+    description: 'International scientific conference organizer and global research dissemination platform.',
+    path: '/',
     noindex: true // Strict noindex for all admin / login paths
   });
 }
